@@ -1,45 +1,45 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import LoginScreen from './src/screens/LoginScreen';
+import ClampDashboardScreen from './src/screens/ClampDashboardScreen';
+import ClampingDetailsScreen from './src/screens/ClampingDetailsScreen';
+import ScanQRScreen from './src/screens/ScanQRScreen';
+import CapturePhotoScreen from './src/screens/CapturePhotoScreen';
+import ClampActivityScreen from './src/screens/ClampActivityScreen';
+import ViolationDetailsScreen from './src/screens/ViolationDetailsScreen';
+import SuccessScreen from './src/screens/SuccessScreen';
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+const Stack = createNativeStackNavigator();
 
+export default function App() {
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
+      <NavigationContainer>
+        <Stack.Navigator
+          initialRouteName="Login"
+          screenOptions={{
+            headerShown: false,
+            animation: 'slide_from_right',
+            animationDuration: 250,
+          }}
+        >
+          <Stack.Screen name="Login" component={LoginScreen} options={{ animation: 'fade' }} />
+          <Stack.Screen name="ClampDashboard" component={ClampDashboardScreen} options={{ animation: 'fade' }} />
+          <Stack.Screen name="ScanQR" component={ScanQRScreen} />
+          <Stack.Screen name="ClampingDetails" component={ClampingDetailsScreen} />
+          <Stack.Screen
+            name="CapturePhoto"
+            component={CapturePhotoScreen}
+            options={{ animation: 'slide_from_bottom' }}
+          />
+          <Stack.Screen name="ClampActivity" component={ClampActivityScreen} />
+          <Stack.Screen name="ViolationDetails" component={ViolationDetailsScreen} />
+          <Stack.Screen name="Success" component={SuccessScreen} options={{ animation: 'fade' }} />
+        </Stack.Navigator>
+      </NavigationContainer>
     </SafeAreaProvider>
   );
 }
-
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
-  return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
-
-export default App;
