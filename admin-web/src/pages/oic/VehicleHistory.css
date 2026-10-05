@@ -1,0 +1,439 @@
+/* ==================================================================
+   VehicleHistory.css (OIC)
+   Standalone stylesheet — redefines the shared sidebar/header/card
+   chrome so this page works regardless of which other OIC CSS files
+   have loaded. Top-level wrapper is `.vehicle-history-page`.
+================================================================== */
+
+/* ==================================================================
+   LAYOUT
+================================================================== */
+.oic-page.vehicle-history-page {
+  display: flex;
+  min-height: 100vh;
+  background: #F8F9FA;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #111827;
+}
+
+.vehicle-history-page .dashboard {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ==================================================================
+   SIDEBAR
+================================================================== */
+.vehicle-history-page .sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: #010A16;
+  color: #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 24px;
+}
+
+.vehicle-history-page .sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.vehicle-history-page .sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #FFFFFF;
+}
+
+.vehicle-history-page .sidebar-brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.vehicle-history-page .sidebar-brand-role {
+  font-size: 11px;
+  color: #FFFFFF;
+  margin: 2px 0 0;
+  line-height: 1.2;
+}
+
+.vehicle-history-page .sidebar-nav {
+  padding-top: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.vehicle-history-page .nav-group {
+  padding: 0 16px;
+  margin-bottom: 18px;
+}
+
+.vehicle-history-page .nav-group-label {
+  margin: 0 0 8px;
+  padding: 0 18px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+}
+
+.vehicle-history-page .nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vehicle-history-page .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 18px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.vehicle-history-page .nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.vehicle-history-page .nav-item-active {
+  background: rgba(59, 130, 246, 0.12);
+  border-left-color: #3B82F6;
+  font-weight: 600;
+}
+
+.vehicle-history-page .nav-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* ==================================================================
+   MAIN + HEADER
+================================================================== */
+.vehicle-history-page .main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vehicle-history-page .main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  background: #F8F9FA;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.vehicle-history-page .main-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+.vehicle-history-page .main-header p {
+  font-size: 14px;
+  color: #6B7280;
+  font-weight: 500;
+  margin: 4px 0 0;
+}
+
+/* ==================================================================
+   AVATAR + DROPDOWN
+================================================================== */
+.vehicle-history-page .avatar-container {
+  position: relative;
+}
+
+.vehicle-history-page .avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  cursor: pointer;
+  border: 2px solid #E5E7EB;
+  background-color: #D1D5DB;
+  transition: opacity 0.2s ease;
+}
+
+.vehicle-history-page .avatar-img:hover {
+  opacity: 0.8;
+}
+
+.vehicle-history-page .profile-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 240px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.vehicle-history-page .dropdown-header {
+  background: #010A16;
+  padding: 16px;
+}
+
+.vehicle-history-page .dropdown-name {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: #FFFFFF;
+}
+
+.vehicle-history-page .dropdown-role {
+  font-size: 13px;
+  font-weight: 500;
+  color: #FFFFFF;
+  margin: 4px 0 0;
+}
+
+.vehicle-history-page .dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #FFFFFF;
+  border: none;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.vehicle-history-page .dropdown-item:hover {
+  background: #F3F4F6;
+}
+
+.vehicle-history-page .dropdown-item + .dropdown-item {
+  border-top: 1px solid #F3F4F6;
+}
+
+.vehicle-history-page .dropdown-item.logout {
+  color: #DC2626;
+}
+
+.vehicle-history-page .dropdown-item.logout:hover {
+  background: #FEF2F2;
+}
+
+.vehicle-history-page .dropdown-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.vehicle-history-page .dropdown-item.logout img {
+  filter: invert(24%) sepia(94%) saturate(1800%) hue-rotate(343deg)
+    brightness(90%) contrast(90%);
+}
+
+/* ==================================================================
+   MAIN CONTENT + CARD
+================================================================== */
+.vehicle-history-page .main-content {
+  flex: 1;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.vehicle-history-page .card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #F3F4F6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  width: 100%;
+}
+
+.vehicle-history-page .card-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.vehicle-history-page .card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+/* ==================================================================
+   LOOKUP CARD (as supplied)
+================================================================== */
+.vehicle-history-page .vehicle-lookup {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.vehicle-history-page .vehicle-lookup-hint {
+  font-size: 13px;
+  color: #64748B;
+  margin: 8px 0 0;
+  line-height: 1.6;
+}
+
+/* ---- Search box (as supplied) ---- */
+.vehicle-history-page .vehicle-search {
+  position: relative;
+  width: 256px;
+}
+
+.vehicle-history-page .vehicle-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94A3B8;
+  pointer-events: none;
+}
+
+.vehicle-history-page .vehicle-search-input {
+  width: 100%;
+  padding: 10px 12px 10px 36px;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  font-size: 13px;
+  font-family: inherit;
+  color: #334155;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.vehicle-history-page .vehicle-search-input:focus {
+  border-color: #94A3B8;
+}
+
+/* ==================================================================
+   TIMELINE GROUPS
+   Only used when a plate has more than one violation — each group gets
+   a small CIN label above its own timeline so the events don't read as
+   one continuous story when they actually belong to separate cases.
+================================================================== */
+.vehicle-history-page .vehicle-timeline-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.vehicle-history-page .vehicle-timeline-group-label {
+  margin: 0 0 12px;
+}
+
+.vehicle-history-page .vehicle-timeline-group + .vehicle-timeline-group {
+  padding-top: 24px;
+  border-top: 1px solid #F1F5F9;
+}
+
+.vehicle-history-page .cin-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ---- Timeline (as supplied) ---- */
+.vehicle-history-page .vehicle-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vehicle-history-page .vehicle-timeline-item {
+  display: flex;
+  gap: 12px;
+}
+
+.vehicle-history-page .vehicle-timeline-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #94A3B8;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+.vehicle-history-page .vehicle-timeline-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0F172A;
+}
+
+.vehicle-history-page .vehicle-timeline-detail {
+  font-size: 12px;
+  color: #64748B;
+}
+
+/* ---- Empty state (as supplied) ---- */
+.vehicle-history-page .vehicle-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 0;
+  text-align: center;
+}
+
+.vehicle-history-page .vehicle-empty-text {
+  font-size: 13px;
+  color: #64748B;
+  margin: 0;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 640px) {
+  .vehicle-history-page .main-content {
+    padding: 16px;
+  }
+
+  .vehicle-history-page .vehicle-search {
+    width: 100%;
+  }
+}

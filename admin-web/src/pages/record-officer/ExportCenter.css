@@ -1,0 +1,255 @@
+/* ==================================================================
+   ExportCenter.css
+   Extends Homepage.css (record-officer) — Export Center styles
+================================================================== */
+
+/* ==================================================================
+   TWO-COLUMN GRID LAYOUT
+================================================================== */
+.record-page .export-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .record-page .export-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==================================================================
+   EXPORT DATA CARD
+================================================================== */
+.record-page .export-card {
+  background: #ffffff;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.record-page .export-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 24px 0;
+}
+
+.record-page .export-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.record-page .export-form-group label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+/* Select Wrapper (for Lucide ChevronDown overlay) */
+.record-page .select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* Custom Select — no native arrow, uses Lucide icon instead */
+.record-page .export-select {
+  width: 100%;
+  padding: 12px 40px 12px 14px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #111827;
+  background-color: #ffffff;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  font-family: inherit;
+}
+
+.record-page .export-select:focus {
+  border-color: #0035A9;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.record-page .export-select.placeholder {
+  color: #111827;
+}
+
+/* Lucide ChevronDown icon positioned absolutely */
+.record-page .select-chevron {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6B7280;
+  pointer-events: none;
+}
+
+/* Date Range — two columns */
+.record-page .date-range-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.record-page .date-input-wrapper {
+  position: relative;
+}
+
+.record-page .date-input {
+  width: 100%;
+  padding: 12px 40px 12px 14px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #111827;
+  background-color: #ffffff;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.record-page .date-input:focus {
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* 🔥 HIDE the native browser calendar icon */
+.record-page .date-input::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+/* Position the Lucide Calendar icon */
+.record-page .date-input-wrapper .calendar-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #374151;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ==================================================================
+   EXPORT BUTTONS
+================================================================== */
+.record-page .export-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.record-page .btn-export-csv {
+  flex: 1;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  background-color: #1D4ED8;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.record-page .btn-export-csv:hover {
+  background-color: #1E40AF;
+}
+
+.record-page .btn-export-excel {
+  flex: 1;
+  padding: 12px 20px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  background-color: #ffffff;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.record-page .btn-export-excel:hover {
+  background-color: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+/* ==================================================================
+   RECENT EXPORTS CARD
+================================================================== */
+.record-page .recent-card {
+  background: #ffffff;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.record-page .recent-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 16px 0;
+}
+
+.record-page .recent-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.record-page .recent-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.record-page .recent-item:last-child {
+  border-bottom: none;
+}
+
+.record-page .recent-filename {
+  font-size: 13px;
+  color: #111827;
+  text-decoration: underline;
+  text-decoration-color: #D1D5DB;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-page .recent-filename:hover {
+  color: #1D4ED8;
+  text-decoration-color: #1D4ED8;
+}
+
+.record-page .recent-time {
+  font-size: 12px;
+  color: #9CA3AF;
+  font-style: italic;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.record-page .recent-empty {
+  font-size: 13px;
+  color: #9CA3AF;
+  font-style: italic;
+  margin: 8px 0;
+}

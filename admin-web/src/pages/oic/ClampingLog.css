@@ -1,0 +1,813 @@
+/* ==================================================================
+   ClampingLog.css
+   Standalone stylesheet for the OIC Clamping Log page. Self-contained
+   (redefines the shared sidebar/header/card chrome), so it works
+   correctly regardless of which other OIC page CSS files have loaded.
+================================================================== */
+
+/* ==================================================================
+   LAYOUT
+================================================================== */
+.oic-page.clamping-page {
+  display: flex;
+  min-height: 100vh;
+  background: #F8F9FA;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #111827;
+}
+
+.clamping-page .dashboard {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ==================================================================
+   SIDEBAR
+================================================================== */
+.clamping-page .sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: #010A16;
+  color: #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 24px;
+}
+
+.clamping-page .sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.clamping-page .sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #FFFFFF;
+}
+
+.clamping-page .sidebar-brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.clamping-page .sidebar-brand-role {
+  font-size: 11px;
+  color: #FFFFFF;
+  margin: 2px 0 0;
+  line-height: 1.2;
+}
+
+.clamping-page .sidebar-nav {
+  padding-top: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.clamping-page .nav-group {
+  padding: 0 16px;
+  margin-bottom: 18px;
+}
+
+.clamping-page .nav-group-label {
+  margin: 0 0 8px;
+  padding: 0 18px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+}
+
+.clamping-page .nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.clamping-page .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 18px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.clamping-page .nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.clamping-page .nav-item-active {
+  background: rgba(59, 130, 246, 0.12);
+  border-left-color: #3B82F6;
+  font-weight: 600;
+}
+
+.clamping-page .nav-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* ==================================================================
+   MAIN + HEADER
+================================================================== */
+.clamping-page .main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.clamping-page .main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  background: #F8F9FA;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.clamping-page .main-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+.clamping-page .main-header p {
+  font-size: 14px;
+  color: #6B7280;
+  font-weight: 500;
+  margin: 4px 0 0;
+}
+
+/* ==================================================================
+   AVATAR + DROPDOWN
+================================================================== */
+.clamping-page .avatar-container {
+  position: relative;
+}
+
+.clamping-page .avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  cursor: pointer;
+  border: 2px solid #E5E7EB;
+  background-color: #D1D5DB;
+  transition: opacity 0.2s ease;
+}
+
+.clamping-page .avatar-img:hover {
+  opacity: 0.8;
+}
+
+.clamping-page .profile-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 240px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.clamping-page .dropdown-header {
+  background: #010A16;
+  padding: 16px;
+}
+
+.clamping-page .dropdown-name {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: #FFFFFF;
+}
+
+.clamping-page .dropdown-role {
+  font-size: 13px;
+  font-weight: 500;
+  color: #FFFFFF;
+  margin: 4px 0 0;
+}
+
+.clamping-page .dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #FFFFFF;
+  border: none;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.clamping-page .dropdown-item:hover {
+  background: #F3F4F6;
+}
+
+.clamping-page .dropdown-item + .dropdown-item {
+  border-top: 1px solid #F3F4F6;
+}
+
+.clamping-page .dropdown-item.logout {
+  color: #DC2626;
+}
+
+.clamping-page .dropdown-item.logout:hover {
+  background: #FEF2F2;
+}
+
+.clamping-page .dropdown-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.clamping-page .dropdown-item.logout img {
+  filter: invert(24%) sepia(94%) saturate(1800%) hue-rotate(343deg)
+    brightness(90%) contrast(90%);
+}
+
+/* ==================================================================
+   CONTENT
+================================================================== */
+.clamping-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.clamping-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  padding: 24px 32px;
+}
+
+.clamping-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.clamping-table-wrap {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.clamping-page .card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #F3F4F6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  width: 100%;
+}
+
+.clamping-page .card-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.clamping-page .card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+/* ==================================================================
+   HEADER ROW — "Sector 3 / Clamping Log" on the left,
+   "Active clamps: N total" on the right (matches Figma)
+================================================================== */
+.log-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.log-header-meta {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  white-space: nowrap;
+  padding-top: 4px;
+}
+
+.log-header-meta strong {
+  color: #111827;
+  font-weight: 700;
+}
+
+/* ==================================================================
+   SEARCH + FILTER TOOLBAR
+   Side-by-side layout: search bar (flex: 1) on the left, filter
+   dropdown (fixed width) on the right.
+================================================================== */
+.clamping-page .clamping-toolbar {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+}
+
+.clamping-page .search-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 13px 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+}
+
+.clamping-page .search-bar-icon {
+  color: #9CA3AF;
+  flex-shrink: 0;
+}
+
+.clamping-page .search-bar-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: #111827;
+  font-family: inherit;
+  min-width: 0;
+}
+
+.clamping-page .search-bar-input::placeholder {
+  color: #9CA3AF;
+}
+
+.clamping-page .filter-select-wrap {
+  position: relative;
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.clamping-page .filter-select {
+  width: 100%;
+  padding: 13px 40px 13px 16px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  box-sizing: border-box;
+}
+
+.clamping-page .filter-select-icon {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  color: #6B7280;
+  pointer-events: none;
+}
+
+/* ==================================================================
+   TABLE
+================================================================== */
+.clamping-page .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.clamping-page .data-table thead {
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.clamping-page .data-table th {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  padding: 12px 8px;
+  white-space: nowrap;
+}
+
+.clamping-page .data-table td {
+  padding: 14px 8px;
+  color: #374151;
+  vertical-align: middle;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.clamping-page .data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.clamping-page .data-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+.clamping-page .cin-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.clamping-page .cell-reference {
+  color: #111827;
+  white-space: nowrap;
+}
+
+.clamping-page .cell-plate {
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.clamping-page .cell-violation,
+.clamping-page .cell-location {
+  color: #374151;
+}
+
+.clamping-page .cell-officer {
+  color: #374151;
+  white-space: nowrap;
+}
+
+.clamping-page .cell-time {
+  color: #374151;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+/* ==================================================================
+   STATUS PILLS
+================================================================== */
+.clamping-page .status-pill {
+  display: inline-block;
+  padding: 5px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.clamping-page .status-clamped {
+  background: #FEE2E2;
+  border-color: #EF4444;
+  color: #991B1B;
+}
+
+.clamping-page .status-removed {
+  background: #DCFCE7;
+  border-color: #22C55E;
+  color: #166534;
+}
+
+/* ---- Subject to Impound button ---- */
+.btn-subject-impound {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #16A34A;
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  opacity: 1;
+  transition: background 0.15s ease;
+}
+
+.btn-subject-impound:hover {
+  background: #15803D;
+}
+
+/* ---- Placeholder for rows with no action ---- */
+.action-placeholder {
+  color: #CBD5E1;
+  font-size: 13px;
+}
+
+/* ---- Empty state ---- */
+.clamping-empty {
+  padding: 32px 0;
+  text-align: center;
+  color: #94A3B8;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.clamping-page .table-loading,
+.clamping-page .table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #6B7280;
+  font-size: 14px;
+}
+
+.clamping-page .table-loading p,
+.clamping-page .table-empty p {
+  margin: 0;
+}
+
+/* ==================================================================
+   PAGINATION
+================================================================== */
+.clamping-page .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 20px 0 0;
+  margin-top: 16px;
+  border-top: 1px solid #F3F4F6;
+}
+
+.clamping-page .pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #FFFFFF;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.clamping-page .pagination-btn:hover:not(:disabled) {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.clamping-page .pagination-btn:disabled {
+  color: #9CA3AF;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.clamping-page .pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.clamping-page .pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  background: #F3F4F6;
+  color: #111827;
+  font-weight: 700;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.clamping-page .pagination-sep {
+  color: #6B7280;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   CONFIRM MODAL
+================================================================== */
+.clamping-page .modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.clamping-page .modal {
+  background: #FFFFFF;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.clamping-page .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #F3F4F6;
+  flex-shrink: 0;
+}
+
+.clamping-page .modal-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.clamping-page .modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: #6B7280;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+
+.clamping-page .modal-close:hover:not(:disabled) {
+  background: #F3F4F6;
+  color: #111827;
+}
+
+.clamping-page .modal-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clamping-page .modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.clamping-page .modal-description {
+  font-size: 14px;
+  color: #334155;
+  margin: 0 0 16px;
+}
+
+.clamping-page .modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid #F3F4F6;
+  background: #FAFAFA;
+  flex-shrink: 0;
+}
+
+/* ---- Info box inside confirm modal ---- */
+.impound-info-box {
+  background: #F8FAFC;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #334155;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
+}
+
+.impound-info-label {
+  font-weight: 600;
+}
+
+.clamping-page .btn-cancel {
+  padding: 10px 20px;
+  background: #FFFFFF;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.15s ease;
+}
+
+.clamping-page .btn-cancel:hover:not(:disabled) {
+  background: #F3F4F6;
+}
+
+.clamping-page .btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clamping-page .btn-confirm {
+  padding: 10px 20px;
+  background: #16A34A;
+  border: 1px solid #16A34A;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.15s ease;
+}
+
+.clamping-page .btn-confirm:hover:not(:disabled) {
+  background: #15803D;
+  border-color: #15803D;
+}
+
+.clamping-page .btn-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 768px) {
+  .clamping-body {
+    padding: 16px;
+  }
+
+  .clamping-page .clamping-toolbar {
+    flex-direction: column;
+  }
+
+  .clamping-page .search-bar-container,
+  .clamping-page .filter-select-wrap {
+    width: 100%;
+  }
+
+  .clamping-page .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

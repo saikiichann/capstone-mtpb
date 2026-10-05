@@ -1,0 +1,148 @@
+/* ==================================================================
+   ActiveImpounding.css
+   Extends Homepage.css — Active Impounding page styles.
+
+   Relies on Homepage.css for the shared layout, the impound table,
+   the status pills, and the update modal.
+================================================================== */
+
+/* ==================================================================
+   METRIC CARDS (3 columns)
+================================================================== */
+.impounding-page .metric-grid-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.impounding-page .metric-grid-three .metric-card {
+  padding: 20px 24px;
+}
+
+.impounding-page .metric-grid-three .metric-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.impounding-page .metric-grid-three .metric-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #000;
+  margin: 8px 0 4px;
+  line-height: 1;
+}
+
+.impounding-page .metric-grid-three .metric-subtitle {
+  font-size: 12px;
+  margin: 4px 0 0;
+  color: #6B7280;
+}
+
+/* ==================================================================
+   ACTIVE OPERATIONS CARD
+   Tall enough that pagination sits at the bottom, like the design.
+================================================================== */
+.impounding-page .active-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 480px;
+}
+
+.impounding-page .active-header {
+  margin-bottom: 20px;
+}
+
+.impounding-page .active-header .card-title {
+  margin: 0;
+}
+
+/* ==================================================================
+   PAGINATION
+   Same rules as ImpoundingLog.css, repeated here so this page does
+   not depend on that file being loaded. Could be moved into
+   Homepage.css later.
+================================================================== */
+.impounding-page .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 24px;
+}
+
+.impounding-page .pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: #FFFFFF;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.impounding-page .pagination-btn:hover:not(:disabled) {
+  background: #F3F4F6;
+}
+
+.impounding-page .pagination-btn:disabled {
+  color: #9CA3AF;
+  cursor: not-allowed;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.impounding-page .pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.impounding-page .pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  background: #FFFFFF;
+  border: 1px solid #D1D5DB;
+  border-radius: 4px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.impounding-page .pagination-sep {
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .impounding-page .metric-grid-three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .impounding-page .metric-grid-three {
+    grid-template-columns: 1fr;
+  }
+
+  .impounding-page .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

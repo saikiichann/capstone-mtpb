@@ -1,0 +1,370 @@
+/* ==================================================================
+   RevenueReports.css (OIC)
+   Standalone stylesheet — top-level wrapper is `.revenue-reports-page`.
+================================================================== */
+
+/* ==================================================================
+   LAYOUT
+================================================================== */
+.oic-page.revenue-reports-page {
+  display: flex;
+  min-height: 100vh;
+  background: #F8F9FA;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #111827;
+}
+
+.revenue-reports-page .dashboard {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ==================================================================
+   SIDEBAR
+================================================================== */
+.revenue-reports-page .sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: #010A16;
+  color: #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 24px;
+}
+
+.revenue-reports-page .sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.revenue-reports-page .sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #FFFFFF;
+}
+
+.revenue-reports-page .sidebar-brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.revenue-reports-page .sidebar-brand-role {
+  font-size: 11px;
+  color: #FFFFFF;
+  margin: 2px 0 0;
+  line-height: 1.2;
+}
+
+.revenue-reports-page .sidebar-nav {
+  padding-top: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.revenue-reports-page .nav-group {
+  padding: 0 16px;
+  margin-bottom: 18px;
+}
+
+.revenue-reports-page .nav-group-label {
+  margin: 0 0 8px;
+  padding: 0 18px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+}
+
+.revenue-reports-page .nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.revenue-reports-page .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 18px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.revenue-reports-page .nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.revenue-reports-page .nav-item-active {
+  background: rgba(59, 130, 246, 0.12);
+  border-left-color: #3B82F6;
+  font-weight: 600;
+}
+
+.revenue-reports-page .nav-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* ==================================================================
+   MAIN + HEADER
+================================================================== */
+.revenue-reports-page .main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.revenue-reports-page .main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  background: #F8F9FA;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.revenue-reports-page .main-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+.revenue-reports-page .main-header p {
+  font-size: 14px;
+  color: #6B7280;
+  font-weight: 500;
+  margin: 4px 0 0;
+}
+
+/* ==================================================================
+   AVATAR + DROPDOWN
+================================================================== */
+.revenue-reports-page .avatar-container {
+  position: relative;
+}
+
+.revenue-reports-page .avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  cursor: pointer;
+  border: 2px solid #E5E7EB;
+  background-color: #D1D5DB;
+  transition: opacity 0.2s ease;
+}
+
+.revenue-reports-page .avatar-img:hover {
+  opacity: 0.8;
+}
+
+.revenue-reports-page .profile-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 240px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.revenue-reports-page .dropdown-header {
+  background: #010A16;
+  padding: 16px;
+}
+
+.revenue-reports-page .dropdown-name {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: #FFFFFF;
+}
+
+.revenue-reports-page .dropdown-role {
+  font-size: 13px;
+  font-weight: 500;
+  color: #FFFFFF;
+  margin: 4px 0 0;
+}
+
+.revenue-reports-page .dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #FFFFFF;
+  border: none;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.revenue-reports-page .dropdown-item:hover {
+  background: #F3F4F6;
+}
+
+.revenue-reports-page .dropdown-item + .dropdown-item {
+  border-top: 1px solid #F3F4F6;
+}
+
+.revenue-reports-page .dropdown-item.logout {
+  color: #DC2626;
+}
+
+.revenue-reports-page .dropdown-item.logout:hover {
+  background: #FEF2F2;
+}
+
+.revenue-reports-page .dropdown-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.revenue-reports-page .dropdown-item.logout img {
+  filter: invert(24%) sepia(94%) saturate(1800%) hue-rotate(343deg)
+    brightness(90%) contrast(90%);
+}
+
+/* ==================================================================
+   MAIN CONTENT + CARD
+================================================================== */
+.revenue-reports-page .main-content {
+  flex: 1;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.revenue-reports-page .card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #F3F4F6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  width: 100%;
+}
+
+.revenue-reports-page .card-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.revenue-reports-page .card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 0 0 16px;
+}
+
+/* ==================================================================
+   METRIC CARDS (3 columns)
+================================================================== */
+.revenue-reports-page .pending-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.revenue-reports-page .metric-card {
+  padding: 20px 24px;
+}
+
+.revenue-reports-page .metric-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.revenue-reports-page .metric-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #000;
+  margin: 8px 0 4px;
+  line-height: 1;
+}
+
+.revenue-reports-page .metric-subtitle {
+  font-size: 12px;
+  color: #6B7280;
+  margin: 4px 0 0;
+}
+
+/* ==================================================================
+   CHART
+================================================================== */
+.revenue-reports-page .chart-container-lg {
+  width: 100%;
+  height: 256px;
+  margin-top: 16px;
+}
+
+.revenue-reports-page .chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 256px;
+  color: #6B7280;
+  font-size: 14px;
+}
+
+.revenue-reports-page .chart-loading p {
+  margin: 0;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .revenue-reports-page .pending-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .revenue-reports-page .pending-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .revenue-reports-page .main-content {
+    padding: 16px;
+  }
+}

@@ -1,0 +1,181 @@
+/* ==================================================================
+   TransactionHistory.css
+   Extends Homepage.css (finance) — Transaction History styles
+================================================================== */
+
+/* ==================================================================
+   TABLE CELLS
+================================================================== */
+.finance-page .cell-reference {
+  color: #111827;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.finance-page .cin-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.finance-page .cell-plate {
+  color: #111827;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.finance-page .cell-amount {
+  color: #111827;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-page .cell-method {
+  color: #374151;
+  white-space: nowrap;
+}
+
+.finance-page .cell-verified-by {
+  color: #374151;
+  white-space: nowrap;
+}
+
+.finance-page .cell-datetime {
+  color: #6B7280;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+/* Label kapag walang naitalang payment method.
+   Mas mabuti ito kaysa blangkong cell — halatang wala talagang naitala,
+   hindi mukhang sirang render. */
+.finance-page .cell-empty {
+  color: #9CA3AF;
+  font-style: italic;
+  font-size: 13px;
+}
+
+/* ==================================================================
+   STATUS PILLS
+   Kailangan ito kasi kasama sa listahan ang Rejected. Kung walang
+   column, magkamukha ang tinanggap at tinanggihang bayad.
+================================================================== */
+.finance-page .status-pill {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.finance-page .status-verified {
+  background: #DCFCE7;
+  color: #166534;
+}
+
+.finance-page .status-rejected {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+/* ==================================================================
+   PAGINATION
+================================================================== */
+.finance-page .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 20px 0 0;
+  margin-top: 16px;
+  border-top: 1px solid #F3F4F6;
+}
+
+.finance-page .pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #FFFFFF;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.finance-page .pagination-btn:hover:not(:disabled) {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.finance-page .pagination-btn:disabled {
+  color: #9CA3AF;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.finance-page .pagination-btn svg {
+  flex-shrink: 0;
+}
+
+.finance-page .pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.finance-page .pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  background: #F3F4F6;
+  color: #111827;
+  font-weight: 700;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.finance-page .pagination-sep {
+  color: #6B7280;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   LOADING / EMPTY
+================================================================== */
+.finance-page .table-loading,
+.finance-page .table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #6B7280;
+  font-size: 14px;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 640px) {
+  .finance-page .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+  }
+}

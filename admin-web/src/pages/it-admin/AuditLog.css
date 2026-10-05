@@ -1,0 +1,340 @@
+/* ==================================================================
+   AuditLog.css
+   Extends ITAdminHomePage.css — Audit log page
+================================================================== */
+
+.it-admin-page .audit-content {
+  flex: 1;
+  padding: 24px 32px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(100vh - 100px);
+}
+
+.it-admin-page .audit-content::-webkit-scrollbar {
+  width: 8px;
+}
+.it-admin-page .audit-content::-webkit-scrollbar-track {
+  background: #F3F4F6;
+}
+.it-admin-page .audit-content::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 4px;
+}
+.it-admin-page .audit-content::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* ==================================================================
+   TOOLBAR (Search + Date)
+================================================================== */
+.it-admin-page .audit-toolbar {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 12px;
+  align-items: center;
+}
+
+.it-admin-page .search-box,
+.it-admin-page .date-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 12px 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.it-admin-page .search-box input,
+.it-admin-page .date-box input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  color: #111827;
+  width: 100%;
+}
+
+.it-admin-page .search-box input::placeholder {
+  color: #9CA3AF;
+  font-style: italic;
+}
+
+.it-admin-page .search-icon,
+.it-admin-page .date-icon {
+  color: #6B7280;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+/* Native date picker reset */
+.it-admin-page .date-box input[type="date"] {
+  font-family: inherit;
+  color: #111827;
+}
+
+.it-admin-page .date-box input[type="date"]::-webkit-calendar-picker-indicator {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* ==================================================================
+   AUDIT TABLE
+================================================================== */
+.it-admin-page .audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.it-admin-page .audit-table thead {
+  background: #FFFFFF;
+}
+
+.it-admin-page .audit-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+  padding: 12px 16px;
+  border-bottom: 1px solid #E5E7EB;
+  white-space: nowrap;
+}
+
+.it-admin-page .audit-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #F3F4F6;
+  color: #374151;
+  vertical-align: middle;
+}
+
+.it-admin-page .audit-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.it-admin-page .audit-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+/* Flagged row (red background) */
+.it-admin-page .audit-table tbody tr.row-flagged {
+  background: #FCA5A5;
+}
+
+.it-admin-page .audit-table tbody tr.row-flagged:hover {
+  background: #F87171;
+}
+
+.it-admin-page .audit-table tbody tr.row-flagged td {
+  color: #7F1D1D;
+}
+
+.it-admin-page .cell-time {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  color: #6B7280;
+  white-space: nowrap;
+}
+
+.it-admin-page .cell-user {
+  font-weight: 500;
+  color: #111827;
+}
+
+.it-admin-page .cell-action {
+  color: #374151;
+  font-weight: 500;
+}
+
+.it-admin-page .cell-record {
+  color: #6B7280;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+}
+
+.it-admin-page .cell-ip {
+  color: #6B7280;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.it-admin-page .cell-action-btn {
+  text-align: right;
+  width: 80px;
+}
+
+.it-admin-page .flagged-icon {
+  color: #B91C1C;
+  vertical-align: middle;
+}
+
+/* ==================================================================
+   ROLE PILLS
+================================================================== */
+.it-admin-page .audit-role-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.it-admin-page .audit-role-pill.role-oic {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.it-admin-page .audit-role-pill.role-admin {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.it-admin-page .audit-role-pill.role-release {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.it-admin-page .audit-role-pill.role-enforcer {
+  background: #F3E8FF;
+  color: #6B21A8;
+}
+
+.it-admin-page .audit-role-pill.role-clamping {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.it-admin-page .audit-role-pill.role-impounding {
+  background: #FEF9C3;
+  color: #854D0E;
+}
+
+.it-admin-page .audit-role-pill.role-it {
+  background: #DCFCE7;
+  color: #166534;
+}
+
+.it-admin-page .audit-role-pill.role-system {
+  background: #E5E7EB;
+  color: #374151;
+}
+
+/* ==================================================================
+   VIEW / FLAGGED BUTTONS
+================================================================== */
+.it-admin-page .btn-view,
+.it-admin-page .btn-flagged {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.it-admin-page .btn-view {
+  background: #FFFFFF;
+  border: 1px solid #D1D5DB;
+  color: #374151;
+}
+
+.it-admin-page .btn-view:hover {
+  background: #F3F4F6;
+}
+
+.it-admin-page .btn-flagged {
+  background: #DC2626;
+  border: 1px solid #DC2626;
+  color: #FFFFFF;
+}
+
+.it-admin-page .btn-flagged:hover {
+  background: #B91C1C;
+  border-color: #B91C1C;
+}
+
+/* ==================================================================
+   MODAL TEXTAREA READONLY
+================================================================== */
+.modal .form-field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #111827;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+  background: #FFFFFF;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+
+.modal .form-field textarea:read-only {
+  background: #F9FAFB;
+  color: #374151;
+  cursor: default;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .it-admin-page .audit-content {
+    padding: 20px 24px 24px;
+  }
+
+  .it-admin-page .audit-toolbar {
+    grid-template-columns: 1fr 200px;
+  }
+
+  .it-admin-page .audit-table th,
+  .it-admin-page .audit-table td {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .it-admin-page .audit-content {
+    padding: 16px 16px 20px;
+  }
+
+  .it-admin-page .audit-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .it-admin-page .audit-table {
+    font-size: 12px;
+  }
+
+  .it-admin-page .audit-table th,
+  .it-admin-page .audit-table td {
+    padding: 10px 8px;
+  }
+
+  .it-admin-page .cell-ip,
+  .it-admin-page .cell-record {
+    font-size: 11px;
+  }
+}

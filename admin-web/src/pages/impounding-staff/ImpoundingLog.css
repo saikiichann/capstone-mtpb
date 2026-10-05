@@ -1,0 +1,297 @@
+/* ==================================================================
+   ImpoundingLog.css
+   Extends Homepage.css — Impounding Log page styles.
+
+   Relies on Homepage.css for the shared layout (sidebar, header,
+   .card) and for the status pills (.status-clamped, .status-impounded,
+   .status-released), so keep the updated Homepage.css in place.
+================================================================== */
+
+/* ==================================================================
+   SEARCH + FILTER TOOLBAR
+================================================================== */
+.impounding-page .log-toolbar {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+}
+
+.impounding-page .log-search {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  padding: 0 18px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+}
+
+.impounding-page .log-search:focus-within {
+  box-shadow: 0 0 0 2px #3B82F6;
+}
+
+.impounding-page .log-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 15px;
+  color: #111827;
+}
+
+.impounding-page .log-search-input::placeholder {
+  color: #9CA3AF;
+  font-style: italic;
+}
+
+.impounding-page .log-search-icon {
+  flex-shrink: 0;
+  color: #111827;
+}
+
+.impounding-page .log-filter {
+  position: relative;
+  width: 200px;
+  flex-shrink: 0;
+}
+
+.impounding-page .log-filter-select {
+  width: 100%;
+  height: 48px;
+  padding: 0 44px 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  text-overflow: ellipsis;
+}
+
+.impounding-page .log-filter-select:focus-visible {
+  outline: 2px solid #3B82F6;
+  outline-offset: 0;
+}
+
+.impounding-page .log-filter-icon {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  color: #111827;
+  pointer-events: none;
+}
+
+/* ==================================================================
+   LOG CARD
+   Tall enough that pagination sits at the bottom, like the design.
+================================================================== */
+.impounding-page .log-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 520px;
+}
+
+.impounding-page .log-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.impounding-page .log-header .card-title {
+  margin: 0;
+}
+
+.impounding-page .log-total {
+  margin: 0;
+  font-size: 14px;
+  color: #374151;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.impounding-page .log-total strong {
+  font-weight: 700;
+  color: #111827;
+}
+
+/* ==================================================================
+   LOG TABLE
+================================================================== */
+.impounding-page .log-table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.impounding-page .log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.impounding-page .log-table thead {
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.impounding-page .log-table th {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  padding: 12px 12px;
+  white-space: nowrap;
+}
+
+.impounding-page .log-table td {
+  padding: 14px 12px;
+  color: #374151;
+  vertical-align: middle;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.impounding-page .log-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.impounding-page .log-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+.impounding-page .log-table .cell-reference {
+  color: #111827;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.impounding-page .log-table .cell-plate {
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.impounding-page .log-table .cell-violation {
+  color: #374151;
+}
+
+.impounding-page .log-table .cell-location {
+  color: #374151;
+}
+
+.impounding-page .log-table .cell-towed-by {
+  color: #374151;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.impounding-page .log-table .cell-time {
+  color: #374151;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+/* ==================================================================
+   PAGINATION
+================================================================== */
+.impounding-page .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 24px;
+}
+
+.impounding-page .pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: #FFFFFF;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.impounding-page .pagination-btn:hover:not(:disabled) {
+  background: #F3F4F6;
+}
+
+.impounding-page .pagination-btn:disabled {
+  color: #9CA3AF;
+  cursor: not-allowed;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.impounding-page .pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.impounding-page .pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  background: #FFFFFF;
+  border: 1px solid #D1D5DB;
+  border-radius: 4px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.impounding-page .pagination-sep {
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 768px) {
+  .impounding-page .log-toolbar {
+    flex-direction: column;
+  }
+
+  .impounding-page .log-filter {
+    width: 100%;
+  }
+
+  .impounding-page .log-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .impounding-page .log-total {
+    font-size: 13px;
+  }
+
+  .impounding-page .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

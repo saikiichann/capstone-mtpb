@@ -1,0 +1,614 @@
+/* =========================================
+   MTPB LOGIN PAGE
+========================================= */
+
+
+/* =========================================
+   PAGE
+========================================= */
+
+.login-body {
+  width: 100%;
+  min-height: 100vh;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  box-sizing: border-box;
+
+  padding: 40px 20px;
+
+  background: #f5f6f8;
+
+  font-family:
+    "Segoe UI",
+    Arial,
+    Helvetica,
+    sans-serif;
+}
+
+
+/* =========================================
+   LOGIN CARD
+========================================= */
+
+.login-card {
+  position: relative;
+
+  width: 590px;
+  max-width: 100%;
+
+  background: #ffffff;
+
+  border-radius: 12px;
+
+  overflow: hidden;
+
+  box-sizing: border-box;
+
+  box-shadow:
+    0 20px 45px rgba(0, 0, 0, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+
+/* =========================================
+   HEADER (navy)
+========================================= */
+
+.login-header {
+  position: relative;
+
+  width: 100%;
+  height: 230px;
+
+  display: flex;
+  align-items: flex-start;
+
+  gap: 22px;
+
+  padding: 40px 25px 0;
+
+  box-sizing: border-box;
+
+  background: #020c1a;
+
+  z-index: 1;
+}
+
+
+/* =========================================
+   WHITE FORM SECTION
+   Curves on BOTH top-left and top-right
+========================================= */
+
+.login-form-section {
+  position: relative;
+
+  background: #ffffff;
+
+  border-top-left-radius: 15px;
+  border-top-right-radius: 15px;
+
+  margin-top: -50px;
+  padding-top: 50px;
+  z-index: 2;
+}
+
+
+/* =========================================
+   LOGO
+========================================= */
+
+.login-logo {
+  flex: 0 0 105px;
+
+  width: 105px;
+  height: 105px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  overflow: hidden;
+
+  background: #ffffff;
+
+  box-shadow:
+    0 0 0 2px #020c1a inset;
+}
+
+.login-logo-img {
+  width: 100%;
+  height: 100%;
+
+  display: block;
+
+  object-fit: contain;
+
+  border-radius: 50%;
+}
+
+
+/* =========================================
+   HEADER TEXT
+========================================= */
+
+.login-titles {
+  min-width: 0;
+  flex: 1;
+
+  padding-top: 18px;
+}
+
+.login-titles h1 {
+  margin: 0;
+
+  color: #ffffff;
+
+  font-family:
+    "Segoe UI",
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  font-size: 25px;
+  font-weight: 700;
+
+  line-height: 1.25;
+
+  letter-spacing: -0.2px;
+
+  white-space: nowrap;
+}
+
+.login-titles p {
+  margin: 4px 0 0;
+
+  color: #ffffff;
+
+  font-family:
+    "Segoe UI",
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  font-size: 20px;
+  font-weight: 400;
+
+  line-height: 1.3;
+
+  opacity: 0.95;
+}
+
+
+/* =========================================
+   FORM
+========================================= */
+
+.login-form {
+  width: 100%;
+
+  box-sizing: border-box;
+
+  padding: 10px 68px 30px;
+}
+
+
+/* =========================================
+   FIELD
+========================================= */
+
+.login-field {
+  width: 100%;
+
+  margin-bottom: 25px;
+}
+
+.login-field label {
+  display: block;
+
+  margin-bottom: 9px;
+
+  color: #111111;
+
+  font-size: 14px;
+  font-weight: 700;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.4px;
+}
+
+
+/* =========================================
+   INPUT WRAPPER
+========================================= */
+
+.input-wrap {
+  position: relative;
+
+  width: 100%;
+
+  box-sizing: border-box;
+}
+
+
+/* =========================================
+   INPUT
+========================================= */
+
+.input-wrap input {
+  display: block;
+
+  width: 100%;
+  height: 56px;
+
+  box-sizing: border-box;
+
+  padding: 0 48px;
+
+  border: 1.5px solid #d6d9dd;
+
+  border-radius: 9px;
+
+  background: #ffffff;
+
+  color: #222222;
+
+  font-family:
+    "Segoe UI",
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  font-size: 16px;
+
+  font-style: normal;
+
+  outline: none;
+
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+
+/* =========================================
+   PLACEHOLDER
+========================================= */
+
+.input-wrap input::placeholder {
+  color: #9aa0a6;
+
+  opacity: 1;
+
+  font-size: 15px;
+
+  font-style: normal;
+}
+
+
+/* =========================================
+   INPUT FOCUS
+========================================= */
+
+.input-wrap input:focus {
+  border-color: #020c1a;
+
+  box-shadow:
+    0 0 0 3px rgba(2, 12, 26, 0.08);
+}
+
+
+/* =========================================
+   DISABLED INPUT
+========================================= */
+
+.input-wrap input:disabled {
+  background: #f7f7f8;
+
+  cursor: not-allowed;
+}
+
+
+/* =========================================
+   LEFT ICON
+========================================= */
+
+.icon-left {
+  position: absolute;
+
+  left: 16px;
+  top: 50%;
+
+  transform: translateY(-50%);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 20px;
+  height: 20px;
+
+  color: #172235;
+
+  pointer-events: none;
+}
+
+
+/* =========================================
+   PASSWORD TOGGLE
+========================================= */
+
+.icon-right {
+  position: absolute;
+
+  right: 16px;
+  top: 50%;
+
+  transform: translateY(-50%);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 20px;
+  height: 20px;
+
+  padding: 0;
+
+  color: #a5a8ad;
+
+  background: transparent;
+
+  border: none;
+
+  cursor: pointer;
+
+  transition: color 0.2s ease;
+}
+
+.icon-right:hover {
+  color: #020c1a;
+}
+
+.icon-right:focus-visible {
+  outline: 2px solid #020c1a;
+
+  outline-offset: 3px;
+
+  border-radius: 4px;
+}
+
+
+/* =========================================
+   ERROR MESSAGE
+========================================= */
+
+.login-error {
+  margin: -5px 0 0;
+
+  color: #b42318;
+
+  font-size: 14px;
+
+  line-height: 1.4;
+
+  text-align: center;
+}
+
+
+/* =========================================
+   SUBMIT BUTTON
+========================================= */
+
+.submit-row {
+  display: flex;
+
+  justify-content: center;
+
+  margin-top: 32px;
+}
+
+.sign-in-btn {
+  width: 275px;
+  height: 55px;
+
+  padding: 0 20px;
+
+  border: none;
+
+  border-radius: 8px;
+
+  background: #020c1a;
+
+  color: #ffffff;
+
+  font-family:
+    "Segoe UI",
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  font-size: 18px;
+
+  font-weight: 700;
+
+  letter-spacing: 0.8px;
+
+  text-transform: uppercase;
+
+  cursor: pointer;
+
+  transition:
+    background-color 0.2s ease,
+    transform 0.1s ease,
+    box-shadow 0.2s ease;
+}
+
+.sign-in-btn:hover:not(:disabled) {
+  background: #071427;
+
+  box-shadow:
+    0 5px 12px rgba(2, 12, 26, 0.18);
+}
+
+.sign-in-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.sign-in-btn:focus-visible {
+  outline: 2px solid #020c1a;
+
+  outline-offset: 3px;
+}
+
+.sign-in-btn:disabled {
+  opacity: 0.6;
+
+  cursor: not-allowed;
+
+  box-shadow: none;
+}
+
+
+/* =========================================
+   FOOTER
+========================================= */
+
+.login-footer {
+  padding: 0 20px 27px;
+
+  color: #686868;
+
+  font-size: 12px;
+
+  font-style: italic;
+
+  line-height: 1.4;
+
+  text-align: center;
+}
+
+
+/* =========================================
+   TABLET
+========================================= */
+
+@media (max-width: 640px) {
+
+  .login-body {
+    padding: 20px 15px;
+  }
+
+  .login-card {
+    width: 100%;
+
+    border-radius: 10px;
+  }
+
+  .login-header {
+    height: 190px;
+
+    padding: 32px 25px 0;
+
+    gap: 16px;
+
+    align-items: flex-start;
+  }
+
+  .login-form-section {
+    border-top-left-radius: 24px;
+    border-top-right-radius: 36px;
+
+    margin-top: -40px;
+    padding-top: 40px;
+  }
+
+  .login-titles {
+    padding-top: 12px;
+  }
+
+  .login-logo {
+    flex: 0 0 78px;
+
+    width: 78px;
+    height: 78px;
+  }
+
+  .login-titles h1 {
+    font-size: 18px;
+
+    white-space: normal;
+  }
+
+  .login-titles p {
+    font-size: 15px;
+  }
+
+  .login-form {
+    padding: 8px 25px 28px;
+  }
+
+  .sign-in-btn {
+    width: 100%;
+  }
+}
+
+
+/* =========================================
+   SMALL MOBILE
+========================================= */
+
+@media (max-width: 400px) {
+
+  .login-header {
+    height: 170px;
+
+    padding: 28px 18px 0;
+
+    gap: 12px;
+
+    align-items: flex-start;
+  }
+
+  .login-form-section {
+    border-top-left-radius: 20px;
+    border-top-right-radius: 30px;
+
+    margin-top: -32px;
+    padding-top: 32px;
+  }
+
+  .login-titles {
+    padding-top: 8px;
+  }
+
+  .login-logo {
+    flex: 0 0 65px;
+
+    width: 65px;
+    height: 65px;
+  }
+
+  .login-titles h1 {
+    font-size: 16px;
+  }
+
+  .login-titles p {
+    font-size: 13px;
+  }
+
+  .login-form {
+    padding: 6px 20px 25px;
+  }
+
+  .login-field label {
+    font-size: 13px;
+  }
+}

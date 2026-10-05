@@ -1,0 +1,128 @@
+/* ==================================================================
+   FieldUpdates.css
+   Extends Homepage.css — Field Updates page styles.
+
+   Relies on Homepage.css for the shared layout (sidebar, header,
+   .card, loading/empty states).
+================================================================== */
+
+/* ==================================================================
+   FEED CARD
+   Tall enough to match the design even with only a couple of entries.
+================================================================== */
+.impounding-page .feed-card {
+  min-height: 560px;
+}
+
+.impounding-page .feed-header {
+  margin-bottom: 8px;
+}
+
+.impounding-page .feed-header .card-title {
+  margin: 0;
+}
+
+/* ==================================================================
+   LIVE FEED LIST
+================================================================== */
+.impounding-page .feed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.impounding-page .feed-item {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 24px;
+  padding: 18px 0;
+  border-bottom: 1px solid #D1D5DB;
+  align-items: flex-start;
+}
+
+.impounding-page .feed-time {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.impounding-page .time-pill {
+  display: inline-block;
+  min-width: 92px;
+  padding: 6px 14px;
+  background: #DBEAFE;
+  border: 1px solid #60A5FA;
+  border-radius: 8px;
+  color: #1E40AF;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Only shown for entries from earlier days */
+.impounding-page .time-date {
+  padding-left: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6B7280;
+}
+
+.impounding-page .feed-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.impounding-page .feed-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #111827;
+  line-height: 1.4;
+}
+
+.impounding-page .feed-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 640px) {
+  .impounding-page .feed-item {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 14px 0;
+  }
+
+  .impounding-page .feed-time {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding-top: 0;
+  }
+
+  .impounding-page .time-pill {
+    min-width: 0;
+    font-size: 12px;
+    padding: 4px 12px;
+  }
+
+  .impounding-page .feed-title {
+    font-size: 14px;
+  }
+
+  .impounding-page .feed-subtitle {
+    font-size: 12px;
+  }
+}

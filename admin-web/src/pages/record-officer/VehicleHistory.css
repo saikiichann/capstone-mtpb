@@ -1,0 +1,179 @@
+/* ==================================================================
+   VehicleHistory.css
+   Extends Homepage.css (record-officer) — Vehicle History styles
+================================================================== */
+
+/* ==================================================================
+   LOOKUP CARD
+================================================================== */
+.record-page .lookup-card {
+  background: #ffffff;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.record-page .lookup-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.record-page .lookup-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #6B7280;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.record-page .lookup-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  margin: 4px 0 8px 0;
+}
+
+.record-page .lookup-subtitle {
+  font-size: 14px;
+  color: #374151;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Search Bar */
+.record-page .search-bar {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+}
+
+.record-page .search-bar-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #000000;
+  pointer-events: none;
+}
+
+.record-page .search-input {
+  width: 100%;
+  padding: 10px 14px 10px 40px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #111827;
+  background-color: #ffffff;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.record-page .search-input::placeholder {
+  color: #9CA3AF;
+  font-style: italic;
+}
+
+.record-page .search-input:focus {
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* ==================================================================
+   TIMELINE CARD
+================================================================== */
+.record-page .timeline-card {
+  background: #ffffff;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.record-page .timeline-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #6B7280;
+  text-transform: uppercase;
+  margin: 0 0 4px 0;
+}
+
+.record-page .timeline-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 24px 0;
+}
+
+/* Timeline List */
+.record-page .timeline-list {
+  position: relative;
+  padding-left: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Vertical connecting line */
+.record-page .timeline-list::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 5px;
+  width: 2px;
+  background-color: #E5E7EB;
+}
+
+.record-page .timeline-item {
+  position: relative;
+}
+
+/* Timeline dot */
+.record-page .timeline-dot {
+  position: absolute;
+  left: -24px;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #111827;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 2px #111827;
+  z-index: 1;
+}
+
+.record-page .timeline-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.record-page .timeline-item-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.record-page .timeline-item-subtitle {
+  font-size: 13px;
+  color: #6B7280;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.record-page .timeline-empty-text {
+  font-size: 14px;
+  color: #6B7280;
+  font-style: italic;
+  margin-top: 16px;
+}

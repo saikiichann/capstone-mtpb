@@ -1,75 +1,56 @@
-# OSX
-#
-.DS_Store
 
-# Xcode
-#
-build/
-*.pbxuser
-!default.pbxuser
-*.mode1v3
-!default.mode1v3
-*.mode2v3
-!default.mode2v3
-*.perspectivev3
-!default.perspectivev3
-xcuserdata
-*.xccheckout
-*.moved-aside
-DerivedData
-*.hmap
-*.ipa
-*.xcuserstate
-**/.xcode.env.local
+# ==================================================================
+# MONOREPO — Admin Web (added for capstone-mtpb)
+# ==================================================================
 
-# Android/IntelliJ
-#
-build/
-.idea
-.gradle
-local.properties
-*.iml
-*.hprof
-.cxx/
-*.keystore
-!debug.keystore
-.kotlin/
+# Admin web dependencies
+admin-web/node_modules/
+admin-web/dist/
+admin-web/build/
 
-# node.js
-#
-node_modules/
-npm-debug.log
-yarn-error.log
+# Admin web Vite cache
+admin-web/.vite/
+admin-web/node_modules/.vite/
 
-# fastlane
-#
-# It is recommended to not store the screenshots in the git repo. Instead, use fastlane to re-generate the
-# screenshots whenever they are needed.
-# For more information about the recommended setup visit:
-# https://docs.fastlane.tools/best-practices/source-control/
+# Admin web environment variables — NEVER COMMIT
+admin-web/.env
+admin-web/.env.local
+admin-web/.env.development.local
+admin-web/.env.test.local
+admin-web/.env.production.local
 
-**/fastlane/report.xml
-**/fastlane/Preview.html
-**/fastlane/screenshots
-**/fastlane/test_output
+# Admin web logs
+admin-web/npm-debug.log*
+admin-web/yarn-debug.log*
+admin-web/yarn-error.log*
+admin-web/*.log
 
-# Bundle artifact
-*.jsbundle
+# Admin web OS
+admin-web/.DS_Store
+admin-web/Thumbs.db
 
-# Ruby / CocoaPods
-**/Pods/
-/vendor/bundle/
+# Admin web TypeScript
+admin-web/*.tsbuildinfo
 
-# Temporary files created by Metro to check the health of the file watcher
-.metro-health-check*
+# Admin web Firebase
+admin-web/.firebase/
+admin-web/firebase-debug.log
+admin-web/firestore-debug.log
 
-# testing
-/coverage
+# ==================================================================
+# SHARED — Environment variables (root level, if any)
+# ==================================================================
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
 
-# Yarn
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/sdks
-!.yarn/versions
+# ==================================================================
+# SHARED — Firebase sensitive files
+# ==================================================================
+serviceAccountKey.json
+*serviceAccountKey*.json
+google-services.json
+GoogleService-Info.plist
+*.plist.bak

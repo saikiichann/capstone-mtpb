@@ -1,0 +1,768 @@
+/* ==================================================================
+   PendingPayments.css (OIC)
+   Standalone stylesheet — top-level wrapper is `.pending-payments-page`,
+   not `.finance-page`, since the Finance module's own CSS files already
+   claim that class name with different chrome colors/rules.
+================================================================== */
+
+/* ==================================================================
+   LAYOUT
+================================================================== */
+.oic-page.pending-payments-page {
+  display: flex;
+  min-height: 100vh;
+  background: #F8F9FA;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #111827;
+}
+
+.pending-payments-page .dashboard {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ==================================================================
+   SIDEBAR
+================================================================== */
+.pending-payments-page .sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: #010A16;
+  color: #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 24px;
+}
+
+.pending-payments-page .sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pending-payments-page .sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #FFFFFF;
+}
+
+.pending-payments-page .sidebar-brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.pending-payments-page .sidebar-brand-role {
+  font-size: 11px;
+  color: #FFFFFF;
+  margin: 2px 0 0;
+  line-height: 1.2;
+}
+
+.pending-payments-page .sidebar-nav {
+  padding-top: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.pending-payments-page .nav-group {
+  padding: 0 16px;
+  margin-bottom: 18px;
+}
+
+.pending-payments-page .nav-group-label {
+  margin: 0 0 8px;
+  padding: 0 18px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+}
+
+.pending-payments-page .nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pending-payments-page .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 18px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.pending-payments-page .nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.pending-payments-page .nav-item-active {
+  background: rgba(59, 130, 246, 0.12);
+  border-left-color: #3B82F6;
+  font-weight: 600;
+}
+
+.pending-payments-page .nav-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* ==================================================================
+   MAIN + HEADER
+================================================================== */
+.pending-payments-page .main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pending-payments-page .main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  background: #F8F9FA;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.pending-payments-page .main-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+.pending-payments-page .main-header p {
+  font-size: 14px;
+  color: #6B7280;
+  font-weight: 500;
+  margin: 4px 0 0;
+}
+
+/* ==================================================================
+   AVATAR + DROPDOWN
+================================================================== */
+.pending-payments-page .avatar-container {
+  position: relative;
+}
+
+.pending-payments-page .avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  cursor: pointer;
+  border: 2px solid #E5E7EB;
+  background-color: #D1D5DB;
+  transition: opacity 0.2s ease;
+}
+
+.pending-payments-page .avatar-img:hover {
+  opacity: 0.8;
+}
+
+.pending-payments-page .profile-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 240px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.pending-payments-page .dropdown-header {
+  background: #010A16;
+  padding: 16px;
+}
+
+.pending-payments-page .dropdown-name {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: #FFFFFF;
+}
+
+.pending-payments-page .dropdown-role {
+  font-size: 13px;
+  font-weight: 500;
+  color: #FFFFFF;
+  margin: 4px 0 0;
+}
+
+.pending-payments-page .dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #FFFFFF;
+  border: none;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.pending-payments-page .dropdown-item:hover {
+  background: #F3F4F6;
+}
+
+.pending-payments-page .dropdown-item + .dropdown-item {
+  border-top: 1px solid #F3F4F6;
+}
+
+.pending-payments-page .dropdown-item.logout {
+  color: #DC2626;
+}
+
+.pending-payments-page .dropdown-item.logout:hover {
+  background: #FEF2F2;
+}
+
+.pending-payments-page .dropdown-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.pending-payments-page .dropdown-item.logout img {
+  filter: invert(24%) sepia(94%) saturate(1800%) hue-rotate(343deg)
+    brightness(90%) contrast(90%);
+}
+
+/* ==================================================================
+   MAIN CONTENT + CARD
+================================================================== */
+.pending-payments-page .main-content {
+  flex: 1;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.pending-payments-page .card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #F3F4F6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  width: 100%;
+}
+
+.pending-payments-page .card-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.pending-payments-page .card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+/* ==================================================================
+   METRIC CARDS (3 columns)
+================================================================== */
+.pending-payments-page .metric-grid-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.pending-payments-page .metric-card {
+  padding: 20px 24px;
+}
+
+.pending-payments-page .metric-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.pending-payments-page .metric-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #000;
+  margin: 8px 0 0;
+  line-height: 1;
+}
+
+/* ==================================================================
+   TABLE
+================================================================== */
+.pending-payments-page .table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.pending-payments-page .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin-top: 16px;
+}
+
+.pending-payments-page .data-table thead {
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.pending-payments-page .data-table th {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  padding: 12px 8px;
+  white-space: nowrap;
+}
+
+.pending-payments-page .data-table td {
+  padding: 14px 8px;
+  color: #374151;
+  vertical-align: middle;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.pending-payments-page .data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.pending-payments-page .data-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+.pending-payments-page .cin-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pending-payments-page .cell-violation-no {
+  color: #111827;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pending-payments-page .cell-plate {
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.pending-payments-page .cell-amount {
+  color: #111827;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pending-payments-page .cell-due-date {
+  color: #374151;
+  white-space: nowrap;
+}
+
+.pending-payments-page .cell-days-left {
+  color: #16A34A;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pending-payments-page .cell-days-left.text-red {
+  color: #DC2626;
+}
+
+.pending-payments-page .cell-action {
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   STATUS PILLS
+================================================================== */
+.pending-payments-page .status-pill {
+  display: inline-block;
+  padding: 5px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pending-payments-page .status-unpaid {
+  background: #FEF9C3;
+  border-color: #EAB308;
+  color: #854D0E;
+}
+
+.pending-payments-page .status-overdue {
+  background: #FEE2E2;
+  border-color: #EF4444;
+  color: #991B1B;
+}
+
+/* ==================================================================
+   CASH PAYMENT BUTTON
+================================================================== */
+.pending-payments-page .btn-cash-payment {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #16A34A;
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.pending-payments-page .btn-cash-payment:hover {
+  background: #15803D;
+}
+
+/* ==================================================================
+   LOADING / EMPTY
+================================================================== */
+.pending-payments-page .table-loading,
+.pending-payments-page .table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #6B7280;
+  font-size: 14px;
+}
+
+.pending-payments-page .table-loading p,
+.pending-payments-page .table-empty p {
+  margin: 0;
+}
+
+/* ==================================================================
+   PAGINATION
+================================================================== */
+.pending-payments-page .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 20px 0 0;
+  margin-top: 16px;
+  border-top: 1px solid #F3F4F6;
+}
+
+.pending-payments-page .pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #FFFFFF;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.pending-payments-page .pagination-btn:hover:not(:disabled) {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.pending-payments-page .pagination-btn:disabled {
+  color: #9CA3AF;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.pending-payments-page .pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.pending-payments-page .pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  background: #F3F4F6;
+  color: #111827;
+  font-weight: 700;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.pending-payments-page .pagination-sep {
+  color: #6B7280;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   CASH PAYMENT MODAL
+================================================================== */
+.pending-payments-page .modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.pending-payments-page .modal-content {
+  background: #FFFFFF;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pending-payments-page .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #F3F4F6;
+  flex-shrink: 0;
+}
+
+.pending-payments-page .modal-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.pending-payments-page .modal-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: #6B7280;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+
+.pending-payments-page .modal-close-btn:hover {
+  background: #F3F4F6;
+  color: #111827;
+}
+
+.pending-payments-page .modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.pending-payments-page .modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid #F3F4F6;
+  background: #FAFAFA;
+  flex-shrink: 0;
+}
+
+.pending-payments-page .cash-summary {
+  background: #F3F4F6;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pending-payments-page .cash-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.pending-payments-page .cash-summary-row strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.pending-payments-page .form-group {
+  margin-bottom: 12px;
+}
+
+.pending-payments-page .form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.pending-payments-page .form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #111827;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pending-payments-page .form-input:focus {
+  outline: none;
+  border-color: #0035A9;
+  box-shadow: 0 0 0 3px rgba(0, 53, 169, 0.1);
+}
+
+.pending-payments-page .form-input:disabled {
+  background: #F3F4F6;
+  cursor: not-allowed;
+}
+
+.pending-payments-page .cash-change-line {
+  font-size: 13px;
+  color: #374151;
+  margin: 8px 0 0;
+}
+
+.pending-payments-page .cash-change-line strong {
+  color: #16A34A;
+}
+
+.pending-payments-page .form-error {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 6px;
+  color: #991B1B;
+  font-size: 12px;
+}
+
+.pending-payments-page .modal-note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #6B7280;
+  line-height: 1.5;
+}
+
+.pending-payments-page .cash-reference-box {
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.pending-payments-page .cash-reference-label {
+  font-size: 12px;
+  color: #16A34A;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 4px;
+}
+
+.pending-payments-page .cash-reference-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+  font-family: "Courier New", monospace;
+}
+
+.pending-payments-page .cash-saved-note {
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .pending-payments-page .metric-grid-three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .pending-payments-page .metric-grid-three {
+    grid-template-columns: 1fr;
+  }
+
+  .pending-payments-page .main-content {
+    padding: 16px;
+  }
+
+  .pending-payments-page .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

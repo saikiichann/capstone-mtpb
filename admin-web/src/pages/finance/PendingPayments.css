@@ -1,0 +1,461 @@
+/* ==================================================================
+   PendingPayments.css
+   Extends Homepage.css (finance) — Pending Payments styles
+   + Cash Payment modal
+================================================================== */
+
+/* ==================================================================
+   METRIC CARDS (3 columns)
+================================================================== */
+.finance-page .metric-grid-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.finance-page .metric-grid-three .metric-card {
+  padding: 20px 24px;
+}
+
+.finance-page .metric-grid-three .metric-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.finance-page .metric-grid-three .metric-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #000;
+  margin: 8px 0 4px;
+  line-height: 1.1;
+}
+
+/* ==================================================================
+   TABLE CELLS
+================================================================== */
+.finance-page .cell-due-date {
+  color: #374151;
+  white-space: nowrap;
+}
+
+.finance-page .cell-days-left {
+  color: #16A34A;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.finance-page .cell-days-left.text-red {
+  color: #DC2626;
+}
+
+/* Violation No. cell */
+.finance-page .cell-violation-no {
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+}
+
+/* Action cell */
+.finance-page .cell-action {
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* ==================================================================
+   STATUS PILLS (Pending Payments)
+================================================================== */
+.finance-page .status-unpaid {
+  background: #FEF9C3;
+  color: #854D0E;
+}
+
+.finance-page .status-overdue {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+/* ==================================================================
+   CASH PAYMENT BUTTON
+================================================================== */
+.finance-page .btn-cash-payment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #16A34A;
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+
+.finance-page .btn-cash-payment:hover:not(:disabled) {
+  background: #15803D;
+}
+
+.finance-page .btn-cash-payment:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.finance-page .btn-cash-payment:disabled {
+  background: #9CA3AF;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* ==================================================================
+   CASH PAYMENT MODAL
+================================================================== */
+.finance-page .modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.finance-page .modal-content {
+  background: #FFFFFF;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.finance-page .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.finance-page .modal-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.finance-page .modal-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #6B7280;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.finance-page .modal-close-btn:hover {
+  background: #F3F4F6;
+  color: #111827;
+}
+
+.finance-page .modal-body {
+  padding: 20px 24px;
+}
+
+.finance-page .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px 20px;
+}
+
+/* ------------------------------------------------------------------
+   REFERENCE BOX
+   Lumalabas lang pagkatapos ma-save — doon pa lang nabubuo ang
+   reference number, kaya hindi ito ipinapakita bago mag-save.
+------------------------------------------------------------------ */
+.finance-page .cash-reference-box {
+  background: #DBEAFE;
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+
+.finance-page .cash-reference-label {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1D4ED8;
+}
+
+.finance-page .cash-reference-value {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #1E3A8A;
+  font-family: "Courier New", monospace;
+}
+
+.finance-page .cash-saved-note {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #374151;
+}
+
+/* ------------------------------------------------------------------
+   SUMMARY
+------------------------------------------------------------------ */
+.finance-page .cash-summary {
+  background: #F3F4F6;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+
+.finance-page .cash-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.finance-page .cash-summary-row + .cash-summary-row {
+  margin-top: 10px;
+}
+
+.finance-page .cash-summary-row strong {
+  color: #111827;
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------
+   FORM
+------------------------------------------------------------------ */
+.finance-page .form-group {
+  margin-bottom: 14px;
+}
+
+.finance-page .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.finance-page .form-input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.finance-page .form-input:focus {
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.finance-page .form-input:disabled {
+  background: #F9FAFB;
+  color: #9CA3AF;
+}
+
+.finance-page .form-error {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #B91C1C;
+}
+
+.finance-page .cash-change-line {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #374151;
+}
+
+.finance-page .cash-change-line strong {
+  color: #047857;
+  font-weight: 700;
+}
+
+.finance-page .modal-note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #6B7280;
+}
+
+/* ------------------------------------------------------------------
+   MODAL BUTTONS
+------------------------------------------------------------------ */
+.finance-page .btn-primary,
+.finance-page .btn-secondary {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.finance-page .btn-primary {
+  background: #1D4ED8;
+  color: #FFFFFF;
+  border: none;
+}
+
+.finance-page .btn-primary:hover:not(:disabled) {
+  background: #1E40AF;
+}
+
+.finance-page .btn-secondary {
+  background: #FFFFFF;
+  color: #374151;
+  border: 1px solid #D1D5DB;
+}
+
+.finance-page .btn-secondary:hover:not(:disabled) {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.finance-page .btn-primary:disabled,
+.finance-page .btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ==================================================================
+   PAGINATION
+================================================================== */
+.finance-page .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 20px 0 0;
+  margin-top: 16px;
+  border-top: 1px solid #F3F4F6;
+}
+
+.finance-page .pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #FFFFFF;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.finance-page .pagination-btn:hover:not(:disabled) {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.finance-page .pagination-btn:disabled {
+  color: #9CA3AF;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.finance-page .pagination-btn svg {
+  flex-shrink: 0;
+}
+
+.finance-page .pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.finance-page .pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  background: #F3F4F6;
+  color: #111827;
+  font-weight: 700;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.finance-page .pagination-sep {
+  color: #6B7280;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .finance-page .metric-grid-three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .finance-page .metric-grid-three {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-page .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .finance-page .btn-cash-payment {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .finance-page .modal-content {
+    max-width: 100%;
+  }
+
+  .finance-page .modal-footer {
+    flex-direction: column-reverse;
+  }
+
+  .finance-page .modal-footer button {
+    width: 100%;
+  }
+}

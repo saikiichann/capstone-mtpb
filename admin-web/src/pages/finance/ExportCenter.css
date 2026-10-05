@@ -1,0 +1,255 @@
+/* ==================================================================
+   ExportCenter.css
+   Extends Homepage.css (finance) — Export Center styles
+================================================================== */
+
+/* Two-column layout */
+.finance-page .export-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  width: 100%;
+  align-items: start;
+}
+
+.finance-page .export-card,
+.finance-page .recent-exports-card {
+  padding: 24px;
+}
+
+.finance-page .export-card-title {
+  margin: 0 0 24px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.finance-page .export-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.finance-page .export-field label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+/* Select dropdown */
+.finance-page .export-field .select-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.finance-page .export-field .select-wrap select {
+  width: 100%;
+  padding: 12px 40px 12px 16px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #111827;
+  font-family: inherit;
+  background: #FFFFFF;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.finance-page .export-field .select-wrap select:focus {
+  outline: none;
+  border-color: #0035A9;
+  box-shadow: 0 0 0 3px rgba(0, 53, 169, 0.1);
+}
+
+.finance-page .export-field .select-wrap select:disabled {
+  background: #F3F4F6;
+  cursor: not-allowed;
+}
+
+.finance-page .export-field .select-icon {
+  position: absolute;
+  right: 14px;
+  pointer-events: none;
+  color: #6B7280;
+}
+
+/* Date range */
+.finance-page .date-range-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.finance-page .date-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.finance-page .date-input-wrap input[type="date"] {
+  width: 100%;
+  padding: 12px 40px 12px 16px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #111827;
+  font-family: inherit;
+  background: #FFFFFF;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.finance-page .date-input-wrap input[type="date"]:focus {
+  outline: none;
+  border-color: #0035A9;
+  box-shadow: 0 0 0 3px rgba(0, 53, 169, 0.1);
+}
+
+.finance-page .date-input-wrap input[type="date"]:disabled {
+  background: #F3F4F6;
+  cursor: not-allowed;
+}
+
+.finance-page .date-input-wrap .date-icon {
+  position: absolute;
+  right: 14px;
+  pointer-events: none;
+  color: #6B7280;
+}
+
+/* Hide native calendar icon */
+.finance-page .date-input-wrap input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+/* Error */
+.finance-page .export-error {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 6px;
+  color: #991B1B;
+  font-size: 13px;
+}
+
+/* Export buttons */
+.finance-page .export-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.finance-page .btn-export-primary {
+  padding: 12px 20px;
+  background: #0035A9;
+  border: 1px solid #0035A9;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #FFFFFF;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.finance-page .btn-export-primary:hover:not(:disabled) {
+  background: #002B8A;
+  border-color: #002B8A;
+}
+
+.finance-page .btn-export-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.finance-page .btn-export-secondary {
+  padding: 12px 20px;
+  background: #FFFFFF;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.finance-page .btn-export-secondary:hover:not(:disabled) {
+  background: #F9FAFB;
+}
+
+.finance-page .btn-export-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ==================================================================
+   RECENT EXPORTS LIST
+================================================================== */
+.finance-page .recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.finance-page .recent-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.finance-page .recent-item:last-child {
+  border-bottom: 0;
+}
+
+.finance-page .recent-name {
+  font-size: 14px;
+  color: #111827;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.finance-page .recent-time {
+  font-size: 13px;
+  color: #6B7280;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .finance-page .export-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .finance-page .date-range-row {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-page .export-buttons {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,545 @@
+/* ==================================================================
+   TransactionHistory.css (OIC)
+   Standalone stylesheet — top-level wrapper is `.transaction-history-
+   page`, not `.finance-page` or `.txn-page`.
+================================================================== */
+
+/* ==================================================================
+   LAYOUT
+================================================================== */
+.oic-page.transaction-history-page {
+  display: flex;
+  min-height: 100vh;
+  background: #F8F9FA;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #111827;
+}
+
+.transaction-history-page .dashboard {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ==================================================================
+   SIDEBAR
+================================================================== */
+.transaction-history-page .sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: #010A16;
+  color: #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 24px;
+}
+
+.transaction-history-page .sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.transaction-history-page .sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #FFFFFF;
+}
+
+.transaction-history-page .sidebar-brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.transaction-history-page .sidebar-brand-role {
+  font-size: 11px;
+  color: #FFFFFF;
+  margin: 2px 0 0;
+  line-height: 1.2;
+}
+
+.transaction-history-page .sidebar-nav {
+  padding-top: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.transaction-history-page .nav-group {
+  padding: 0 16px;
+  margin-bottom: 18px;
+}
+
+.transaction-history-page .nav-group-label {
+  margin: 0 0 8px;
+  padding: 0 18px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+}
+
+.transaction-history-page .nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.transaction-history-page .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 18px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.transaction-history-page .nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.transaction-history-page .nav-item-active {
+  background: rgba(59, 130, 246, 0.12);
+  border-left-color: #3B82F6;
+  font-weight: 600;
+}
+
+.transaction-history-page .nav-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* ==================================================================
+   MAIN + HEADER
+================================================================== */
+.transaction-history-page .main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.transaction-history-page .main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  background: #F8F9FA;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.transaction-history-page .main-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+.transaction-history-page .main-header p {
+  font-size: 14px;
+  color: #6B7280;
+  font-weight: 500;
+  margin: 4px 0 0;
+}
+
+/* ==================================================================
+   AVATAR + DROPDOWN
+================================================================== */
+.transaction-history-page .avatar-container {
+  position: relative;
+}
+
+.transaction-history-page .avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  cursor: pointer;
+  border: 2px solid #E5E7EB;
+  background-color: #D1D5DB;
+  transition: opacity 0.2s ease;
+}
+
+.transaction-history-page .avatar-img:hover {
+  opacity: 0.8;
+}
+
+.transaction-history-page .profile-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 240px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.transaction-history-page .dropdown-header {
+  background: #010A16;
+  padding: 16px;
+}
+
+.transaction-history-page .dropdown-name {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: #FFFFFF;
+}
+
+.transaction-history-page .dropdown-role {
+  font-size: 13px;
+  font-weight: 500;
+  color: #FFFFFF;
+  margin: 4px 0 0;
+}
+
+.transaction-history-page .dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #FFFFFF;
+  border: none;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.transaction-history-page .dropdown-item:hover {
+  background: #F3F4F6;
+}
+
+.transaction-history-page .dropdown-item + .dropdown-item {
+  border-top: 1px solid #F3F4F6;
+}
+
+.transaction-history-page .dropdown-item.logout {
+  color: #DC2626;
+}
+
+.transaction-history-page .dropdown-item.logout:hover {
+  background: #FEF2F2;
+}
+
+.transaction-history-page .dropdown-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.transaction-history-page .dropdown-item.logout img {
+  filter: invert(24%) sepia(94%) saturate(1800%) hue-rotate(343deg)
+    brightness(90%) contrast(90%);
+}
+
+/* ==================================================================
+   MAIN CONTENT + CARD
+================================================================== */
+.transaction-history-page .main-content {
+  flex: 1;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.transaction-history-page .card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #F3F4F6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  width: 100%;
+}
+
+.transaction-history-page .card-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.transaction-history-page .card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 0 0 16px;
+}
+
+/* ==================================================================
+   SEARCH
+================================================================== */
+.transaction-history-page .search-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 13px 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.transaction-history-page .search-bar-icon {
+  color: #9CA3AF;
+  flex-shrink: 0;
+}
+
+.transaction-history-page .search-bar-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: #111827;
+  font-family: inherit;
+}
+
+.transaction-history-page .search-bar-input::placeholder {
+  color: #9CA3AF;
+}
+
+/* ==================================================================
+   TABLE
+================================================================== */
+.transaction-history-page .table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.transaction-history-page .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.transaction-history-page .data-table thead {
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.transaction-history-page .data-table th {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  padding: 12px 8px;
+  white-space: nowrap;
+}
+
+.transaction-history-page .data-table td {
+  padding: 14px 8px;
+  color: #374151;
+  vertical-align: middle;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.transaction-history-page .data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.transaction-history-page .data-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+.transaction-history-page .cin-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.transaction-history-page .cell-reference {
+  color: #111827;
+  white-space: nowrap;
+}
+
+.transaction-history-page .cell-plate {
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.transaction-history-page .cell-amount {
+  color: #111827;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.transaction-history-page .cell-method {
+  color: #374151;
+  white-space: nowrap;
+}
+
+.transaction-history-page .cell-verified-by {
+  color: #374151;
+  white-space: nowrap;
+}
+
+.transaction-history-page .cell-datetime {
+  color: #374151;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.transaction-history-page .cell-empty {
+  color: #9CA3AF;
+  font-style: italic;
+}
+
+/* ==================================================================
+   STATUS PILLS
+================================================================== */
+.transaction-history-page .status-pill {
+  display: inline-block;
+  padding: 5px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.transaction-history-page .status-verified {
+  background: #DCFCE7;
+  border-color: #22C55E;
+  color: #166534;
+}
+
+.transaction-history-page .status-rejected {
+  background: #FEE2E2;
+  border-color: #EF4444;
+  color: #991B1B;
+}
+
+/* ==================================================================
+   LOADING / EMPTY
+================================================================== */
+.transaction-history-page .table-loading,
+.transaction-history-page .table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #6B7280;
+  font-size: 14px;
+}
+
+.transaction-history-page .table-loading p,
+.transaction-history-page .table-empty p {
+  margin: 0;
+}
+
+/* ==================================================================
+   PAGINATION
+================================================================== */
+.transaction-history-page .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 20px 0 0;
+  margin-top: 16px;
+  border-top: 1px solid #F3F4F6;
+}
+
+.transaction-history-page .pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #FFFFFF;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.transaction-history-page .pagination-btn:hover:not(:disabled) {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.transaction-history-page .pagination-btn:disabled {
+  color: #9CA3AF;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.transaction-history-page .pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.transaction-history-page .pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  background: #F3F4F6;
+  color: #111827;
+  font-weight: 700;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.transaction-history-page .pagination-sep {
+  color: #6B7280;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 640px) {
+  .transaction-history-page .main-content {
+    padding: 16px;
+  }
+
+  .transaction-history-page .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

@@ -1,0 +1,283 @@
+/* ==================================================================
+   PaymentVerification.css
+   Extends Homepage.css (finance) — Payment Verification styles
+================================================================== */
+
+/* ==================================================================
+   METRIC CARDS (3 columns)
+================================================================== */
+.finance-page .metric-grid-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.finance-page .metric-grid-three .metric-card {
+  padding: 20px 24px;
+}
+
+.finance-page .metric-grid-three .metric-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.finance-page .metric-grid-three .metric-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #000;
+  margin: 8px 0 4px;
+  line-height: 1.1;
+}
+
+/* ==================================================================
+   TABLE CELLS
+================================================================== */
+.finance-page .cell-reference {
+  color: #111827;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.finance-page .cell-plate {
+  color: #111827;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.finance-page .cell-amount {
+  color: #111827;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-page .cell-method {
+  color: #374151;
+  white-space: nowrap;
+}
+
+.finance-page .cell-actions {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* Label kapag walang laman ang cell — mas mabuti kaysa blangko,
+   halatang wala talaga imbes na mukhang sirang render. */
+.finance-page .cell-empty {
+  color: #9CA3AF;
+  font-style: italic;
+  font-size: 13px;
+}
+
+/* ==================================================================
+   WAITING PILLS
+   Kung gaano na katagal naghihintay ang bayad — hindi kung sino ang
+   uunahin. Strict FIFO ang proseso ayon sa Definition of Terms, kaya
+   walang priority ranking dito.
+================================================================== */
+.finance-page .waiting-pill {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.finance-page .waiting-fresh {
+  background: #E0F2FE;
+  color: #075985;
+}
+
+.finance-page .waiting-mid {
+  background: #FEF9C3;
+  color: #854D0E;
+}
+
+.finance-page .waiting-long {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+/* ==================================================================
+   ORPHANED PAYMENT
+   Walang naka-link na violation. Naka-disable ang Approve at Reject —
+   walang malalaman kung kanino at para saan ang bayad.
+================================================================== */
+.finance-page .row-orphaned {
+  background: #FFFBEB;
+}
+
+.finance-page .row-orphaned:hover {
+  background: #FEF3C7;
+}
+
+.finance-page .orphan-icon {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 6px;
+  color: #D97706;
+  cursor: help;
+}
+
+/* ==================================================================
+   ACTION BUTTONS
+================================================================== */
+.finance-page .btn-approve {
+  padding: 6px 14px;
+  background: #16A34A;
+  border: 1px solid #16A34A;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #FFFFFF;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.finance-page .btn-approve:hover:not(:disabled) {
+  background: #15803D;
+  border-color: #15803D;
+}
+
+.finance-page .btn-reject {
+  padding: 6px 14px;
+  background: #DC2626;
+  border: 1px solid #DC2626;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #FFFFFF;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.finance-page .btn-reject:hover:not(:disabled) {
+  background: #B91C1C;
+  border-color: #B91C1C;
+}
+
+.finance-page .btn-approve:disabled,
+.finance-page .btn-reject:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
+/* ==================================================================
+   PAGINATION
+================================================================== */
+.finance-page .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 20px 0 0;
+  margin-top: 16px;
+  border-top: 1px solid #F3F4F6;
+}
+
+.finance-page .pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #FFFFFF;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.finance-page .pagination-btn:hover:not(:disabled) {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.finance-page .pagination-btn:disabled {
+  color: #9CA3AF;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.finance-page .pagination-btn svg {
+  flex-shrink: 0;
+}
+
+.finance-page .pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.finance-page .pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  background: #F3F4F6;
+  color: #111827;
+  font-weight: 700;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.finance-page .pagination-sep {
+  color: #6B7280;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   LOADING / EMPTY
+================================================================== */
+.finance-page .table-loading,
+.finance-page .table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #6B7280;
+  font-size: 14px;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .finance-page .metric-grid-three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .finance-page .metric-grid-three {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-page .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .finance-page .btn-approve,
+  .finance-page .btn-reject {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+}

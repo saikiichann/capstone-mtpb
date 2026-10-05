@@ -1,0 +1,183 @@
+/* ============================================
+   CashPaymentModal.css
+   ============================================ */
+
+/* ---- Reference No. box ---- */
+.cp-ref-box {
+  background: #F0F9FF;
+  border: 1px dashed #7DD3FC;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.cp-ref-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #0369A1;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.cp-ref-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cp-ref-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0C4A6E;
+  letter-spacing: 0.5px;
+  font-family: "Courier New", monospace;
+}
+
+.cp-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #7DD3FC;
+  background: #FFFFFF;
+  color: #0369A1;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.cp-copy-btn:hover {
+  background: #E0F2FE;
+}
+
+/* ---- Details block ---- */
+.cp-details {
+  background: #F8FAFC;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.cp-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cp-detail-label {
+  color: #64748B;
+}
+
+.cp-detail-value {
+  color: #0F172A;
+  font-weight: 500;
+}
+
+.cp-detail-amount {
+  color: #059669;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* ---- Cash input field ---- */
+.cp-field {
+  margin-bottom: 12px;
+}
+
+.cp-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #475569;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.cp-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  font-size: 14px;
+  font-family: inherit;
+  color: #334155;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cp-input:focus {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.cp-input:disabled {
+  background: #F8FAFC;
+  color: #94A3B8;
+  cursor: not-allowed;
+}
+
+/* ---- Error ---- */
+.cp-error {
+  background: #FEF2F2;
+  color: #DC2626;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+/* ---- Success + change breakdown ---- */
+.cp-success {
+  background: #ECFDF5;
+  color: #047857;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.cp-success-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.cp-success-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.cp-success-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cp-success-change {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid #A7F3D0;
+  font-weight: 700;
+  font-size: 14px;
+  color: #065F46;
+}
+
+.cp-success-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #047857;
+  opacity: 0.85;
+}

@@ -1,0 +1,85 @@
+/* ==================================================================
+   AllReports.css
+   Extends Homepage.css (finance) — Finance Reports styles
+================================================================== */
+
+/* ==================================================================
+   TABLE CELLS
+================================================================== */
+.finance-page .cell-report-name {
+  color: #111827;
+  font-weight: 500;
+}
+
+.finance-page .cell-format {
+  color: #374151;
+  font-weight: 500;
+}
+
+.finance-page .cell-frequency {
+  color: #374151;
+  white-space: nowrap;
+}
+
+.finance-page .cell-recipients {
+  color: #374151;
+}
+
+.finance-page .cell-next-run {
+  color: #6B7280;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+/* ==================================================================
+   STATUS PILLS (Reports)
+================================================================== */
+.finance-page .status-active-report {
+  background: #DCFCE7;
+  color: #166534;
+}
+
+.finance-page .status-inactive-report {
+  background: #E5E7EB;
+  color: #374151;
+}
+
+/* ==================================================================
+   TABLE ROW ACTION BUTTON
+================================================================== */
+.finance-page .cell-more {
+  text-align: center;
+  width: 50px;
+}
+
+.finance-page .row-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: #6B7280;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.finance-page .row-more-btn:hover {
+  background: #F3F4F6;
+  color: #111827;
+}
+
+/* ==================================================================
+   LOADING / EMPTY STATES
+================================================================== */
+.finance-page .table-loading,
+.finance-page .table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #6B7280;
+  font-size: 14px;
+}

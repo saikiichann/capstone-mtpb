@@ -1,0 +1,54 @@
+/* ==================================================================
+   RevenueReports.css
+   Extends Homepage.css (finance) — Revenue Reports styles
+================================================================== */
+
+/* ==================================================================
+   METRIC CARDS (3 columns)
+================================================================== */
+.finance-page .metric-grid-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.finance-page .metric-grid-three .metric-card {
+  padding: 20px 24px;
+}
+
+.finance-page .metric-grid-three .metric-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.finance-page .metric-grid-three .metric-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #000;
+  margin: 8px 0 4px;
+  line-height: 1.1;
+}
+
+.finance-page .metric-grid-three .metric-subtitle {
+  font-size: 12px;
+  margin: 4px 0 0;
+  color: #6B7280;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .finance-page .metric-grid-three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .finance-page .metric-grid-three {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,116 @@
+.avatar-container {
+  position: relative;
+}
+
+.avatar-btn {
+  height: 40px;
+  width: 40px;
+  border-radius: 50%;
+  background: #010A16;
+  color: #FFFFFF;
+  border: 2px solid #E5E7EB;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s ease;
+}
+
+.avatar-btn:hover {
+  opacity: 0.85;
+}
+
+/* ---- Dropdown panel ---- */
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 224px;
+  background: #FFFFFF;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 100;
+  border: 1px solid #E5E7EB;
+}
+
+.profile-dropdown::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 14px;
+  width: 12px;
+  height: 12px;
+  background: #010A16;
+  transform: rotate(45deg);
+}
+
+/* ---- Header ---- */
+.dropdown-header {
+  background: #010A16;
+  padding: 16px;
+}
+
+.dropdown-name {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  color: #FFFFFF !important;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+}
+
+.dropdown-role {
+  font-size: 12px;
+  color: #ffffff !important;
+  margin: 4px 0 0;
+  line-height: 1.2;
+}
+
+/* ---- Body ---- */
+.dropdown-body {
+  background: #FFFFFF;
+  padding: 4px 0;
+}
+
+.dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #FFFFFF;
+  border: none;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.dropdown-item:hover {
+  background: #F3F4F6;
+}
+
+.dropdown-item + .dropdown-item {
+  border-top: 1px solid #F3F4F6;
+}
+
+.dropdown-item-logout {
+  color: #DC2626;
+}
+
+.dropdown-item-logout:hover {
+  background: #FEF2F2;
+}
+
+.dropdown-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.dropdown-item-logout .dropdown-icon {
+  filter: invert(24%) sepia(94%) saturate(1800%) hue-rotate(343deg)
+    brightness(90%) contrast(90%);
+}
