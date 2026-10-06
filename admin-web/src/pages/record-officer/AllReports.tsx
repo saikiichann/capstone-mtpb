@@ -1,14 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound } from "lucide-react";
+import { KeyRound, MoreHorizontal } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
   doc,
   getDoc,
-  onSnapshot,
-  orderBy,
-  query,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./AllReports.css";
@@ -17,20 +14,13 @@ import "./AllReports.css";
 import mtpbLogo from "../../assets/mtpb-logo.png";
 import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
-import queueMonitorIcon from "../../assets/queue.png";
 import allViolationsIcon from "../../assets/allviolations.png";
 import clampingIcon from "../../assets/clamping.png";
-import impoundingLogIcon from "../../assets/impounding.png";
-import vehicleHistoryIcon from "../../assets/history.png";
-import releaseRequestsIcon from "../../assets/releaserequest.png";
-import releaseOrdersIcon from "../../assets/releaseorder.png";
+import impoundingIcon from "../../assets/impounding.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
 import logoutIcon from "../../assets/logout.png";
-
-// 👇 IMPORT YOUR DOWNLOAD ICON HERE
-import downloadIcon from "../../assets/download.png";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -45,10 +35,7 @@ type RoleSlug =
   | "clamping-staff"
   | "impounding-staff";
 
-type CurrentUser = {
-  name: string;
-  role: RoleSlug;
-};
+type CurrentUser = { name: string; role: RoleSlug };
 
 type ReportStatus = "Active" | "Inactive";
 
@@ -62,28 +49,19 @@ type ReportRow = {
   status: ReportStatus;
 };
 
-type NavItem = {
-  label: string;
-  icon: string;
-  path: string;
-  active?: boolean;
-};
-
-type NavGroup = {
-  label: string;
-  items: NavItem[];
-};
+type NavItem = { label: string; icon: string; path: string; active?: boolean };
+type NavGroup = { label: string; items: NavItem[] };
 
 // ---------------------------------------------------------------------------
 // CONSTANTS
 // ---------------------------------------------------------------------------
 const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer in Charge",
+  oic: "Officer in Charge",
   "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
+  supervisor: "Supervisor",
   "record-officer": "Record Officer",
   "release-officer": "Release Officer",
-  "finance": "Finance Staff",
+  finance: "Finance Staff",
   "clamping-staff": "Clamping Staff",
   "impounding-staff": "Impounding Staff",
 };
@@ -93,7 +71,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Dashboard",
     items: [
       { label: "Overview", icon: overviewIcon, path: "/record-officer" },
-      { label: "Queue Monitor", icon: queueMonitorIcon, path: "/record-officer/queue" },
     ],
   },
   {
@@ -101,15 +78,12 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "All Violations", icon: allViolationsIcon, path: "/record-officer/violations" },
       { label: "Clamping Log", icon: clampingIcon, path: "/record-officer/clamping" },
-      { label: "Impounding Log", icon: impoundingLogIcon, path: "/record-officer/impounding" },
-      { label: "Vehicle History", icon: vehicleHistoryIcon, path: "/record-officer/vehicle-history" },
+      { label: "Impounding Log", icon: impoundingIcon, path: "/record-officer/impounding" },
     ],
   },
   {
     label: "Vehicle Release",
     items: [
-      { label: "Release Requests", icon: releaseRequestsIcon, path: "/record-officer/release-requests" },
-      { label: "Release Orders", icon: releaseOrdersIcon, path: "/record-officer/release-orders" },
       { label: "Release Log", icon: releaseLogIcon, path: "/record-officer/release-log" },
     ],
   },
@@ -122,13 +96,47 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+/**
+ * Static list ng scheduled reports — match sa Figma design.
+ * Ito yung source of truth para sa All Reports page.
+ */
+const REPORTS: ReportRow[] = [
+  {
+    id: "daily-violations",
+    name: "Daily violations summary",
+    format: "PDF",
+    frequency: "Daily · 6:00 PM",
+    recipients: "All units",
+    nextRun: "Today, 6:00 PM",
+    status: "Active",
+  },
+  {
+    id: "weekly-finance",
+    name: "Weekly finance summary",
+    format: "Excel",
+    frequency: "Mon · 8:00 AM",
+    recipients: "OIC",
+    nextRun: "May 6, 2026",
+    status: "Active",
+  },
+  {
+    id: "monthly-enforcement",
+    name: "Monthly enforcement report",
+    format: "PDF",
+    frequency: "1st of month · 7:00 AM",
+    recipients: "All units",
+    nextRun: "June 1, 2026",
+    status: "Active",
+  },
+];
+
 // ---------------------------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------------------------
 const getStatusClass = (status: ReportStatus): string => {
   const map: Record<ReportStatus, string> = {
-    "Active": "status-active-report",
-    "Inactive": "status-inactive-report",
+    Active: "status-active-report",
+    Inactive: "status-inactive-report",
   };
   return map[status] ?? "";
 };
@@ -146,11 +154,8 @@ export default function AllReports() {
     role: "record-officer",
   });
 
-  const [rows, setRows] = useState<ReportRow[]>([]);
-  const [loading, setLoading] = useState(true);
-
   // -----------------------------------------------------------------------
-  // EFFECT: Fetch current user
+  // Fetch current user
   // -----------------------------------------------------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
@@ -181,44 +186,14 @@ export default function AllReports() {
   }, []);
 
   // -----------------------------------------------------------------------
-  // EFFECT: Real-time listener for reports
-  // -----------------------------------------------------------------------
-  useEffect(() => {
-    const ref = collection(db, "reports");
-    const q = query(ref, orderBy("name", "asc"));
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snap) => {
-        const fetched: ReportRow[] = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            name: data.name ?? "—",
-            format: data.format ?? "PDF",
-            frequency: data.frequency ?? "—",
-            recipients: data.recipients ?? "—",
-            nextRun: data.nextRun ?? "—",
-            status: (data.status ?? "Active") as ReportStatus,
-          };
-        });
-        setRows(fetched);
-        setLoading(false);
-      },
-      (err) => {
-        console.warn("Reports fetch failed:", err.code);
-        setLoading(false);
-      }
-    );
-    return () => unsubscribe();
-  }, []);
-
-  // -----------------------------------------------------------------------
-  // EFFECT: Click-outside for dropdown
+  // Click-outside for dropdown
   // -----------------------------------------------------------------------
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsMenuOpen(false);
       }
     }
@@ -249,9 +224,9 @@ export default function AllReports() {
     setIsMenuOpen(false);
   };
 
-  const handleDownloadReport = (row: ReportRow) => {
-    console.log("Downloading report:", row.name, row.format);
-    // TODO: Implement actual download logic (generate or fetch file)
+  const handleMoreOptions = (report: ReportRow) => {
+    console.log("More options for:", report.name);
+    // TODO: Add dropdown menu (Edit, Pause, Run Now, Delete)
   };
 
   // -----------------------------------------------------------------------
@@ -341,57 +316,47 @@ export default function AllReports() {
               <p className="card-eyebrow">SECTOR 3</p>
               <h2 className="card-title">Reports</h2>
 
-              {loading ? (
-                <div className="table-loading">
-                  <p>Loading reports...</p>
-                </div>
-              ) : rows.length === 0 ? (
-                <div className="table-empty">
-                  <p>No reports available.</p>
-                </div>
-              ) : (
-                <div className="table-wrapper">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Report Name</th>
-                        <th>Format</th>
-                        <th>Frequency</th>
-                        <th>Recipients</th>
-                        <th>Next run</th>
-                        <th>Status</th>
-                        <th aria-label="Actions"></th>
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Report Name</th>
+                      <th>Format</th>
+                      <th>Frequency</th>
+                      <th>Recipients</th>
+                      <th>Next run</th>
+                      <th>Status</th>
+                      <th aria-label="Actions"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {REPORTS.map((row) => (
+                      <tr key={row.id}>
+                        <td className="cell-report-name">{row.name}</td>
+                        <td className="cell-format">{row.format}</td>
+                        <td className="cell-frequency">{row.frequency}</td>
+                        <td className="cell-recipients">{row.recipients}</td>
+                        <td className="cell-next-run">{row.nextRun}</td>
+                        <td>
+                          <span className={`status-pill ${getStatusClass(row.status)}`}>
+                            {row.status}
+                          </span>
+                        </td>
+                        <td className="cell-more">
+                          <button
+                            type="button"
+                            className="row-more-btn"
+                            aria-label="More options"
+                            onClick={() => handleMoreOptions(row)}
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row) => (
-                        <tr key={row.id}>
-                          <td className="cell-report-name">{row.name}</td>
-                          <td className="cell-format">{row.format}</td>
-                          <td className="cell-frequency">{row.frequency}</td>
-                          <td className="cell-recipients">{row.recipients}</td>
-                          <td className="cell-next-run">{row.nextRun}</td>
-                          <td>
-                            <span className={`status-pill ${getStatusClass(row.status)}`}>
-                              {row.status}
-                            </span>
-                          </td>
-                          <td className="cell-more">
-                            <button
-                              type="button"
-                              className="row-more-btn"
-                              aria-label="Download report"
-                              onClick={() => handleDownloadReport(row)}
-                            >
-                              <img src={downloadIcon} alt="Download" className="download-icon" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </main>
         </div>

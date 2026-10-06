@@ -1,18 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, Search, ChevronDown, X, MoreHorizontal } from "lucide-react";
+import { KeyRound, Search, ChevronDown } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
   onSnapshot,
   orderBy,
   query,
-  serverTimestamp,
   Timestamp,
-  updateDoc,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./AllViolations.css";
@@ -21,13 +18,9 @@ import "./AllViolations.css";
 import mtpbLogo from "../../assets/mtpb-logo.png";
 import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
-import queueMonitorIcon from "../../assets/queue.png";
 import allViolationsIcon from "../../assets/allviolations.png";
 import clampingIcon from "../../assets/clamping.png";
 import impoundingLogIcon from "../../assets/impounding.png";
-import vehicleHistoryIcon from "../../assets/history.png";
-import releaseRequestsIcon from "../../assets/releaserequest.png";
-import releaseOrdersIcon from "../../assets/releaseorder.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
@@ -46,16 +39,15 @@ type RoleSlug =
   | "clamping-staff"
   | "impounding-staff";
 
-type CurrentUser = {
-  name: string;
-  role: RoleSlug;
-};
+type CurrentUser = { name: string; role: RoleSlug };
 
 type ViolationStatus =
-  | "Pending Settlement"
-  | "Settled"
-  | "For Release"
-  | "Disputed";
+  | "Unpaid"
+  | "Pending Verification"
+  | "Awaiting OIC Approval"
+  | "Approved — For Release"
+  | "Released"
+  | "Payment Rejected";
 
 type ViolationRow = {
   id: string;
@@ -68,64 +60,65 @@ type ViolationRow = {
   recordedAt: Timestamp | null;
 };
 
-type NavItem = {
-  label: string;
-  icon: string;
-  path: string;
-  active?: boolean;
-};
-
-type NavGroup = {
-  label: string;
-  items: NavItem[];
-};
+type NavItem = { label: string; icon: string; path: string; active?: boolean };
+type NavGroup = { label: string; items: NavItem[] };
 
 // ---------------------------------------------------------------------------
 // CONSTANTS
 // ---------------------------------------------------------------------------
 const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer in Charge",
+  oic: "Officer in Charge",
   "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
+  supervisor: "Supervisor",
   "record-officer": "Record Officer",
   "release-officer": "Release Officer",
-  "finance": "Finance Staff",
+  finance: "Finance Staff",
   "clamping-staff": "Clamping Staff",
   "impounding-staff": "Impounding Staff",
 };
 
-const STATUS_OPTIONS: ViolationStatus[] = [
-  "Pending Settlement",
-  "Settled",
-  "For Release",
-  "Disputed",
+const STATUS_FILTER_OPTIONS: Array<ViolationStatus | "All Status"> = [
+  "All Status",
+  "Unpaid",
+  "Pending Verification",
+  "Awaiting OIC Approval",
+  "Approved — For Release",
+  "Released",
+  "Payment Rejected",
 ];
-
-const STATUS_FILTER_OPTIONS = ["All Status", ...STATUS_OPTIONS];
 
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
     items: [
       { label: "Overview", icon: overviewIcon, path: "/record-officer" },
-      { label: "Queue Monitor", icon: queueMonitorIcon, path: "/record-officer/queue" },
     ],
   },
   {
     label: "Enforcement",
     items: [
-      { label: "All Violations", icon: allViolationsIcon, path: "/record-officer/violations", active: true },
+      {
+        label: "All Violations",
+        icon: allViolationsIcon,
+        path: "/record-officer/violations",
+        active: true,
+      },
       { label: "Clamping Log", icon: clampingIcon, path: "/record-officer/clamping" },
-      { label: "Impounding Log", icon: impoundingLogIcon, path: "/record-officer/impounding" },
-      { label: "Vehicle History", icon: vehicleHistoryIcon, path: "/record-officer/vehicle-history" },
+      {
+        label: "Impounding Log",
+        icon: impoundingLogIcon,
+        path: "/record-officer/impounding",
+      },
     ],
   },
   {
     label: "Vehicle Release",
     items: [
-      { label: "Release Requests", icon: releaseRequestsIcon, path: "/record-officer/release-requests" },
-      { label: "Release Orders", icon: releaseOrdersIcon, path: "/record-officer/release-orders" },
-      { label: "Release Log", icon: releaseLogIcon, path: "/record-officer/release-log" },
+      {
+        label: "Release Log",
+        icon: releaseLogIcon,
+        path: "/record-officer/release-log",
+      },
     ],
   },
   {
@@ -161,230 +154,67 @@ const formatCurrency = (amount: number): string => {
 
 const getStatusClass = (status: ViolationStatus): string => {
   const map: Record<ViolationStatus, string> = {
-    "Settled": "status-settled",
-    "Pending Settlement": "status-pending",
-    "For Release": "status-release",
-    "Disputed": "status-disputed",
+    Unpaid: "status-unpaid",
+    "Pending Verification": "status-pending-verification",
+    "Awaiting OIC Approval": "status-awaiting-oic",
+    "Approved — For Release": "status-approved",
+    Released: "status-released",
+    "Payment Rejected": "status-rejected",
   };
   return map[status] ?? "";
 };
 
-// ---------------------------------------------------------------------------
-// EDIT MODAL
-// ---------------------------------------------------------------------------
-type EditModalProps = {
-  row: ViolationRow;
-  currentUser: CurrentUser;
-  onClose: () => void;
-  onSave: () => void;
+/**
+ * Derive the violation status from payment + release fields.
+ *
+ * Detection order (first match wins):
+ *   1. paymentStatus = "rejected"    → Payment Rejected
+ *   2. rejectionReason + rejectedAt  → Payment Rejected
+ *   3. releaseStatus = "released"    → Released
+ *   4. releaseStatus = "approved by oic"  → Approved — For Release
+ *   5. releaseStatus = "awaiting oic approval"  → Awaiting OIC Approval
+ *   6. paymentStatus = "pending verification"   → Pending Verification
+ *   7. default                       → Unpaid
+ */
+const deriveStatus = (data: any): ViolationStatus => {
+  const paymentStatus = String(data.paymentStatus ?? "").toLowerCase();
+  const releaseStatus = String(data.releaseStatus ?? "").toLowerCase();
+
+  // Payment Rejected — either detection method
+  if (paymentStatus === "rejected") {
+    return "Payment Rejected";
+  }
+
+  if (data.rejectionReason && data.rejectedAt) {
+    return "Payment Rejected";
+  }
+
+  // Released — tapos na yung process
+  if (releaseStatus === "released") {
+    return "Released";
+  }
+
+  // Approved by OIC — ready for release
+  if (releaseStatus === "approved by oic") {
+    return "Approved — For Release";
+  }
+
+  // Awaiting OIC Approval — verified, wait pa OIC
+  if (releaseStatus === "awaiting oic approval") {
+    return "Awaiting OIC Approval";
+  }
+
+  // Pending Verification — bayad na, wait pa Finance
+  if (paymentStatus === "pending verification") {
+    return "Pending Verification";
+  }
+
+  // Default — Unpaid
+  return "Unpaid";
 };
 
-function EditViolationModal({ row, currentUser, onClose, onSave }: EditModalProps) {
-  const [plateNo, setPlateNo] = useState(row.plateNo);
-  const [location, setLocation] = useState(row.location);
-  const [fine, setFine] = useState(String(row.fine));
-  const [violationType, setViolationType] = useState(row.violationType);
-  const [status, setStatus] = useState<ViolationStatus>(row.status);
-  const [reason, setReason] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSave = async () => {
-    setError("");
-
-    if (!plateNo.trim() || !location.trim() || !violationType.trim()) {
-      setError("Please fill in all required fields.");
-      return;
-    }
-
-    const parsedFine = parseInt(fine, 10);
-    if (isNaN(parsedFine) || parsedFine < 0) {
-      setError("Fine amount must be a valid number.");
-      return;
-    }
-
-    if (status !== row.status && !reason.trim()) {
-      setError("Amendment reason is required when changing the status.");
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      const rowRef = doc(db, "violations", row.id);
-
-      await updateDoc(rowRef, {
-        plateNo: plateNo.trim(),
-        location: location.trim(),
-        fineAmount: parsedFine,   // ✅ FIXED: was "fine"
-        violationType: violationType.trim(),
-        status,
-        updatedAt: serverTimestamp(),
-        updatedBy: currentUser.name,
-      });
-
-      await addDoc(collection(db, "auditLogs"), {
-        userName: currentUser.name,
-        action: `updated violation ${row.cin} (status: ${row.status} → ${status})`,
-        record: row.cin,
-        type: "violation",
-        metadata: {
-          cin: row.cin,
-          oldStatus: row.status,
-          newStatus: status,
-          reason: reason.trim() || "no reason provided",
-        },
-        timestamp: serverTimestamp(),
-      });
-
-      console.log("Violation updated:", row.cin);
-      onSave();
-    } catch (err: any) {
-      console.error("Error updating violation:", err);
-      if (err.code === "permission-denied") {
-        setError("Permission denied. Please check your Firestore rules.");
-      } else {
-        setError(err.message || "Failed to update violation.");
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">{row.cin}</h2>
-          <button
-            type="button"
-            className="modal-close"
-            onClick={onClose}
-            disabled={saving}
-            aria-label="Close"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <div className="form-row">
-            <div className="form-field">
-              <label htmlFor="edit-plate">Plate Number</label>
-              <input
-                id="edit-plate"
-                type="text"
-                value={plateNo}
-                onChange={(e) => setPlateNo(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-            <div className="form-field">
-              <label htmlFor="edit-location">Location</label>
-              <input
-                id="edit-location"
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-          </div>
-
-          <div className="form-row">
-            <div className="form-field">
-              <label htmlFor="edit-fine">Fine Amount (₱)</label>
-              <input
-                id="edit-fine"
-                type="number"
-                value={fine}
-                onChange={(e) => setFine(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-            <div className="form-field">
-              <label htmlFor="edit-violation">Violation Type</label>
-              <input
-                id="edit-violation"
-                type="text"
-                value={violationType}
-                onChange={(e) => setViolationType(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-          </div>
-
-          <div className="form-row">
-            <div className="form-field">
-              <label htmlFor="edit-time">Time</label>
-              <input
-                id="edit-time"
-                type="text"
-                value={formatDateTime(row.recordedAt)}
-                readOnly
-                style={{ background: "#F3F4F6", cursor: "not-allowed", color: "#6B7280" }}
-              />
-            </div>
-            <div className="form-field">
-              <label htmlFor="edit-status">Status Override</label>
-              <div className="select-wrap">
-                <select
-                  id="edit-status"
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as ViolationStatus)}
-                  disabled={saving}
-                >
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-                <ChevronDown size={16} className="select-icon" />
-              </div>
-            </div>
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="edit-reason">
-              Amendment reason {status !== row.status && <span className="required">(required for audit)</span>}
-            </label>
-            <textarea
-              id="edit-reason"
-              placeholder="Describe the reason for this change..."
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              disabled={saving}
-              rows={4}
-            />
-          </div>
-
-          {error && <p className="modal-error">{error}</p>}
-        </div>
-
-        <div className="modal-footer">
-          <button
-            type="button"
-            className="btn-cancel"
-            onClick={onClose}
-            disabled={saving}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn-save"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? "Saving..." : "Save Changes"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
-// MAIN COMPONENT
+// COMPONENT
 // ---------------------------------------------------------------------------
 export default function AllViolations() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -400,11 +230,8 @@ export default function AllViolations() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All Status");
-  const [selectedRow, setSelectedRow] = useState<ViolationRow | null>(null);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Fetch current user
-  // -----------------------------------------------------------------------
+  // Fetch current user
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
       if (!loggedUser) {
@@ -433,9 +260,7 @@ export default function AllViolations() {
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Real-time listener for violations
-  // -----------------------------------------------------------------------
+  // Fetch violations
   useEffect(() => {
     const ref = collection(db, "violations");
     const q = query(ref, orderBy("recordedAt", "desc"));
@@ -451,11 +276,12 @@ export default function AllViolations() {
             plateNo: data.plateNo ?? "—",
             violationType: data.violationType ?? "—",
             location: data.location ?? "—",
-            fine: Number(data.fineAmount ?? 0),   // ✅ FIXED: was "data.fine"
-            status: (data.status ?? "Pending Settlement") as ViolationStatus,
+            fine: Number(data.fineAmount ?? 0),
+            status: deriveStatus(data),
             recordedAt: data.recordedAt ?? null,
           };
         });
+
         setViolations(rows);
         setLoading(false);
       },
@@ -467,12 +293,13 @@ export default function AllViolations() {
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Click-outside for dropdown
-  // -----------------------------------------------------------------------
+  // Click-outside for dropdown
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsMenuOpen(false);
       }
     }
@@ -480,22 +307,6 @@ export default function AllViolations() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Escape key for modal
-  // -----------------------------------------------------------------------
-  useEffect(() => {
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && selectedRow) {
-        setSelectedRow(null);
-      }
-    }
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [selectedRow]);
-
-  // -----------------------------------------------------------------------
-  // HANDLERS
-  // -----------------------------------------------------------------------
   const handleLogout = async () => {
     try {
       await firebaseSignOut(auth);
@@ -516,9 +327,7 @@ export default function AllViolations() {
     setIsMenuOpen(false);
   };
 
-  // -----------------------------------------------------------------------
-  // FILTER VIOLATIONS
-  // -----------------------------------------------------------------------
+  // Filter
   const filteredViolations = violations.filter((v) => {
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
@@ -532,9 +341,6 @@ export default function AllViolations() {
     return matchesSearch && matchesStatus;
   });
 
-  // -----------------------------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------------------------
   return (
     <div className="record-page">
       <div className="dashboard">
@@ -557,7 +363,9 @@ export default function AllViolations() {
                     <li key={item.label}>
                       <button
                         type="button"
-                        className={`nav-item ${item.active ? "nav-item-active" : ""}`}
+                        className={`nav-item ${
+                          item.active ? "nav-item-active" : ""
+                        }`}
                         onClick={() => navigate(item.path)}
                       >
                         <img src={item.icon} alt="" className="nav-icon" />
@@ -601,11 +409,17 @@ export default function AllViolations() {
                       {ROLE_LABELS[currentUser.role]}
                     </p>
                   </div>
-                  <button className="dropdown-item" onClick={handleChangePassword}>
+                  <button
+                    className="dropdown-item"
+                    onClick={handleChangePassword}
+                  >
                     <KeyRound size={18} />
                     <span>Change Password</span>
                   </button>
-                  <button className="dropdown-item logout" onClick={handleLogout}>
+                  <button
+                    className="dropdown-item logout"
+                    onClick={handleLogout}
+                  >
                     <img src={logoutIcon} alt="" className="dropdown-icon" />
                     <span>Log Out</span>
                   </button>
@@ -633,7 +447,9 @@ export default function AllViolations() {
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
                   {STATUS_FILTER_OPTIONS.map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
                   ))}
                 </select>
                 <ChevronDown size={16} className="filter-icon" />
@@ -662,39 +478,31 @@ export default function AllViolations() {
                         <th>Fine</th>
                         <th>Status</th>
                         <th>Recorded</th>
-                        <th aria-label="Actions"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredViolations.map((row) => (
-                        <tr
-                          key={row.id}
-                          onClick={() => setSelectedRow(row)}
-                          className="violation-row-clickable"
-                        >
+                        <tr key={row.id}>
                           <td>
                             <span className="cin-pill">{row.cin}</span>
                           </td>
                           <td className="cell-plate">{row.plateNo}</td>
                           <td className="cell-violation">{row.violationType}</td>
                           <td className="cell-location">{row.location}</td>
-                          <td className="cell-fine">{formatCurrency(row.fine)}</td>
+                          <td className="cell-fine">
+                            {formatCurrency(row.fine)}
+                          </td>
                           <td>
-                            <span className={`status-pill ${getStatusClass(row.status)}`}>
+                            <span
+                              className={`status-pill ${getStatusClass(
+                                row.status
+                              )}`}
+                            >
                               {row.status}
                             </span>
                           </td>
                           <td className="cell-recorded">
                             {formatDateTime(row.recordedAt)}
-                          </td>
-                          <td className="cell-more">
-                            <button
-                              type="button"
-                              className="row-more-btn"
-                              aria-label="More options"
-                            >
-                              <MoreHorizontal size={16} />
-                            </button>
                           </td>
                         </tr>
                       ))}
@@ -706,16 +514,6 @@ export default function AllViolations() {
           </main>
         </div>
       </div>
-
-      {/* EDIT MODAL */}
-      {selectedRow && (
-        <EditViolationModal
-          row={selectedRow}
-          currentUser={currentUser}
-          onClose={() => setSelectedRow(null)}
-          onSave={() => setSelectedRow(null)}
-        />
-      )}
     </div>
   );
 }

@@ -1,14 +1,20 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, MoreHorizontal, X } from "lucide-react";
+import {
+  KeyRound,
+  Search,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
   doc,
   getDoc,
   onSnapshot,
-  orderBy,
   query,
+  where,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
@@ -18,13 +24,9 @@ import "./ClampingLog.css";
 import mtpbLogo from "../../assets/mtpb-logo.png";
 import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
-import queueMonitorIcon from "../../assets/queue.png";
 import allViolationsIcon from "../../assets/allviolations.png";
 import clampingIcon from "../../assets/clamping.png";
 import impoundingLogIcon from "../../assets/impounding.png";
-import vehicleHistoryIcon from "../../assets/history.png";
-import releaseRequestsIcon from "../../assets/releaserequest.png";
-import releaseOrdersIcon from "../../assets/releaseorder.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
@@ -48,17 +50,21 @@ type CurrentUser = {
   role: RoleSlug;
 };
 
-// UI displays "Clamped" / "Removed", but DB might store "Active" / "Released"
-type ClampStatus = "Active" | "Released" | "Impounded";
+// Matches this page's own Figma design exactly — "Clamped"/"Released",
+// not the "Removed" wording used on the OIC Clamping Log, and not the
+// three-state Active/Released/Impounded the old mock invented (nothing
+// in this screenshot shows an "Impounded" status on a clamping log).
+type ClampStatus = "Clamped" | "Released";
 
 type ClampingRow = {
   id: string;
+  reference: string | null;
   cin: string;
   plateNo: string;
-  vehicleType: string;
+  violation: string;
   location: string;
-  clampedBy: string;
-  clampedAt: Timestamp | null;
+  officer: string;
+  recordedAt: Timestamp | null;
   status: ClampStatus;
 };
 
@@ -77,6 +83,39 @@ type NavGroup = {
 // ---------------------------------------------------------------------------
 // CONSTANTS
 // ---------------------------------------------------------------------------
+const ITEMS_PER_PAGE = 10;
+const ALL_VIOLATIONS = "All Violations";
+
+/**
+ * Master list ng lahat ng violation types na supported ng MTPB.
+ *
+ * Ito ang source of truth para sa dropdown options — hindi ito naka-derive
+ * lang sa existing data, kasi kung 2 violations pa lang ang naka-record,
+ * 2 options lang ang lalabas sa dropdown. Ang master list na ito ay
+ * naka-merge sa actual data para kumpleto yung dropdown.
+ *
+ * Kung may bagong violation type sa future, i-add lang dito. Kopya ito
+ * mula sa OIC Clamping Log — dapat parehong listahan ang dalawa.
+ */
+const MASTER_VIOLATIONS = [
+  "Illegal Parking",
+  "No Parking Zone",
+  "Obstruction",
+  "Sidewalk Parking",
+  "Street Corner Parking",
+  "Left Side Parking",
+  "Right Side Parking",
+  "Top of the Bridge Parking",
+  "Loading & Unloading Area",
+  "Blocking Driveway",
+  "Blocking PWD Lane",
+  "Blocking Fire Hydrant",
+  "Complaint Area",
+  "Blocking Pedestrian Lane",
+  "Blocking Fire Truck Lane",
+  "Double Parking",
+];
+
 const ROLE_LABELS: Record<RoleSlug, string> = {
   "oic": "Officer in Charge",
   "it-admin": "IT Admin",
@@ -88,29 +127,46 @@ const ROLE_LABELS: Record<RoleSlug, string> = {
   "impounding-staff": "Impounding Staff",
 };
 
+// Trimmed to match the Figma design — Queue Monitor, Vehicle History,
+// Release Requests, and Release Orders removed; none of those appear in
+// the design. All Violations is kept, consistent with Homepage.tsx and
+// AllViolations.tsx.
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
     items: [
       { label: "Overview", icon: overviewIcon, path: "/record-officer" },
-      { label: "Queue Monitor", icon: queueMonitorIcon, path: "/record-officer/queue" },
     ],
   },
   {
     label: "Enforcement",
     items: [
-      { label: "All Violations", icon: allViolationsIcon, path: "/record-officer/violations" },
-      { label: "Clamping Log", icon: clampingIcon, path: "/record-officer/clamping", active: true },
-      { label: "Impounding Log", icon: impoundingLogIcon, path: "/record-officer/impounding" },
-      { label: "Vehicle History", icon: vehicleHistoryIcon, path: "/record-officer/vehicle-history" },
+      {
+        label: "All Violations",
+        icon: allViolationsIcon,
+        path: "/record-officer/violations",
+      },
+      {
+        label: "Clamping Log",
+        icon: clampingIcon,
+        path: "/record-officer/clamping",
+        active: true,
+      },
+      {
+        label: "Impounding Log",
+        icon: impoundingLogIcon,
+        path: "/record-officer/impounding",
+      },
     ],
   },
   {
     label: "Vehicle Release",
     items: [
-      { label: "Release Requests", icon: releaseRequestsIcon, path: "/record-officer/release-requests" },
-      { label: "Release Orders", icon: releaseOrdersIcon, path: "/record-officer/release-orders" },
-      { label: "Release Log", icon: releaseLogIcon, path: "/record-officer/release-log" },
+      {
+        label: "Release Log",
+        icon: releaseLogIcon,
+        path: "/record-officer/release-log",
+      },
     ],
   },
   {
@@ -140,21 +196,71 @@ const formatDateTime = (ts: Timestamp | null): string => {
   }
 };
 
-// Maps internal DB status to UI display label for the table
-const getStatusLabel = (status: ClampStatus): string => {
-  if (status === "Active") return "Clamped";
-  if (status === "Released") return "Removed";
-  return status;
+const millis = (ts: Timestamp | null): number => {
+  try {
+    return ts ? ts.toMillis() : 0;
+  } catch {
+    return 0;
+  }
 };
 
-const getStatusClass = (status: ClampStatus): string => {
-  const map: Record<ClampStatus, string> = {
-    "Active": "status-active-clamp",
-    "Released": "status-released-clamp",
-    "Impounded": "status-impounded-clamp",
+/**
+ * Normalizes violation type strings for consistent display.
+ *
+ * Ang mga violation types ay naka-store sa Firestore nang iba-ibang casing
+ * (e.g. "Illegal parking" vs "Illegal Parking") depende kung saan na-create.
+ * Ito ay nagna-normalize para consistent ang display sa filter dropdown at
+ * sa table cells — Title Case na may proper capitalization. Kopya ito mula
+ * sa OIC Clamping Log.
+ */
+const normalizeViolationType = (raw: unknown): string => {
+  if (typeof raw !== "string") return "—";
+  const trimmed = raw.trim();
+  if (!trimmed) return "—";
+
+  // Special case: known multi-word violations na dapat may specific casing
+  const knownMap: Record<string, string> = {
+    "illegal parking": "Illegal Parking",
+    "no parking zone": "No Parking Zone",
+    obstruction: "Obstruction",
+    "sidewalk parking": "Sidewalk Parking",
+    "street corner parking": "Street Corner Parking",
+    "left side parking": "Left Side Parking",
+    "right side parking": "Right Side Parking",
+    "top of the bridge parking": "Top of the Bridge Parking",
+    "loading & unloading area": "Loading & Unloading Area",
+    "blocking driveway": "Blocking Driveway",
+    "blocking pwd lane": "Blocking PWD Lane",
+    "blocking fire hydrant": "Blocking Fire Hydrant",
+    "complaint area": "Complaint Area",
+    "blocking pedestrian lane": "Blocking Pedestrian Lane",
+    "blocking fire truck lane": "Blocking Fire Truck Lane",
+    "double parking": "Double Parking",
   };
-  return map[status] ?? "";
+
+  const key = trimmed.toLowerCase();
+  if (key in knownMap) return knownMap[key];
+
+  // Fallback: title-case each word, pero panatilihin yung acronyms
+  return trimmed
+    .split(" ")
+    .map((word) => {
+      if (!word) return word;
+      // All-caps acronym (PWD, LTO, MMDA, etc.) — keep as-is
+      if (word === word.toUpperCase() && word.length <= 4) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
 };
+
+/** Same two-state rule as every other real-data log in this system:
+ *  "Released" once the release flow has actually released it
+ *  (releaseStatus === "Released"); "Clamped" for everything before that. */
+const deriveStatus = (releaseStatus: unknown): ClampStatus =>
+  releaseStatus === "Released" ? "Released" : "Clamped";
+
+const getStatusClass = (status: ClampStatus): string =>
+  status === "Released" ? "status-released-clamp" : "status-active-clamp";
 
 // ---------------------------------------------------------------------------
 // COMPONENT
@@ -172,21 +278,9 @@ export default function ClampingLog() {
   const [rows, setRows] = useState<ClampingRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Modal State
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [selectedRow, setSelectedRow] = useState<ClampingRow | null>(null);
-
-  // Form State for Modal
-  const [formData, setFormData] = useState({
-    plateNo: "",
-    vehicleType: "",
-    fineAmount: "₱500",
-    violationType: "Sidewalk Parking",
-    officer: "",
-    location: "",
-    time: "",
-    status: "Active" as ClampStatus,
-  });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [violationFilter, setViolationFilter] = useState(ALL_VIOLATIONS);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // -----------------------------------------------------------------------
   // EFFECT: Fetch current user
@@ -219,34 +313,48 @@ export default function ClampingLog() {
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Real-time listener for clamping records
-  // -----------------------------------------------------------------------
+  /**
+   * Reads `violations` filtered to enforcementType == "clamped" — the
+   * same real collection every other Clamping Log in this system reads
+   * (OIC's, for one), instead of the separate `clampingRecords`
+   * collection this page used before. No orderBy() on purpose: Firestore
+   * silently drops documents missing the ordered field, so sorting
+   * happens client-side instead.
+   */
   useEffect(() => {
-    const ref = collection(db, "clampingRecords");
-    const q = query(ref, orderBy("clampedAt", "desc"));
+    const q = query(
+      collection(db, "violations"),
+      where("enforcementType", "==", "clamped")
+    );
 
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        const fetched: ClampingRow[] = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            cin: data.cin ?? "—",
-            plateNo: data.plateNo ?? "—",
-            vehicleType: data.vehicleType ?? "—",
-            location: data.location ?? "—",
-            clampedBy: data.clampedBy ?? "—",
-            clampedAt: data.clampedAt ?? null,
-            status: (data.status ?? "Active") as ClampStatus,
-          };
-        });
+        const fetched: ClampingRow[] = snap.docs
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              reference:
+                (data.referenceNumber as string) ??
+                (data.paymentReference as string) ??
+                null,
+              cin: data.cin ?? "—",
+              plateNo: data.plateNo ?? "—",
+              violation: normalizeViolationType(data.violationType),
+              location: data.location ?? "—",
+              officer: data.officer ?? "—",
+              recordedAt: (data.recordedAt as Timestamp) ?? null,
+              status: deriveStatus(data.releaseStatus),
+            };
+          })
+          .sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
+
         setRows(fetched);
         setLoading(false);
       },
       (err) => {
-        console.warn("Clamping records fetch failed:", err.code);
+        console.warn("Clamping log fetch failed:", err.code);
         setLoading(false);
       }
     );
@@ -289,50 +397,49 @@ export default function ClampingLog() {
     setIsMenuOpen(false);
   };
 
-  const handleOpenEditModal = (row: ClampingRow) => {
-    setSelectedRow(row);
-    setFormData({
-      plateNo: row.plateNo,
-      vehicleType: row.vehicleType,
-      fineAmount: "₱500", // Placeholder: Replace with actual data from row if available
-      violationType: "Sidewalk Parking", // Placeholder: Replace with actual data from row if available
-      officer: row.clampedBy,
-      location: row.location,
-      time: formatDateTime(row.clampedAt),
-      status: row.status,
+  /**
+   * Dropdown options: master list + actual data — matches OIC's approach,
+   * so all 16+ violation types always show even if few are recorded yet,
+   * and any unexpected manual-entry type still appears automatically.
+   */
+  const violationOptions = useMemo(() => {
+    const unique = new Set<string>(MASTER_VIOLATIONS);
+    rows.forEach((row) => {
+      if (row.violation && row.violation !== "—") unique.add(row.violation);
     });
-    setIsEditModalOpen(true);
-  };
+    return [ALL_VIOLATIONS, ...Array.from(unique).sort()];
+  }, [rows]);
 
-  const handleCloseEditModal = () => {
-    setIsEditModalOpen(false);
-    setSelectedRow(null);
-  };
+  /* Search + filter */
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    return rows.filter((row) => {
+      const matchesSearch =
+        !q ||
+        row.cin.toLowerCase().includes(q) ||
+        row.plateNo.toLowerCase().includes(q) ||
+        row.location.toLowerCase().includes(q) ||
+        row.violation.toLowerCase().includes(q);
+      const matchesViolation =
+        violationFilter === ALL_VIOLATIONS || row.violation === violationFilter;
+      return matchesSearch && matchesViolation;
+    });
+  }, [rows, searchQuery, violationFilter]);
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
+  const activeClamps = useMemo(
+    () => rows.filter((r) => r.status === "Clamped").length,
+    [rows]
+  );
 
-  const handleSaveChanges = () => {
-    // TODO: Implement Firebase update logic here
-    console.log("Saving changes for CIN:", selectedRow?.cin, formData);
-    // After saving, close the modal and optionally refetch or rely on onSnapshot
-    handleCloseEditModal();
-  };
+  /* Pagination */
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+  const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  // Map UI Status to Database Status for the Dropdown
-  const getDropdownValue = (status: ClampStatus) => {
-    if (status === "Active") return "Clamped";
-    if (status === "Released") return "Removed";
-    return status;
-  };
-
-  const getStatusFromDropdown = (value: string): ClampStatus => {
-    if (value === "Clamped") return "Active";
-    if (value === "Removed") return "Released";
-    return "Impounded";
-  };
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, violationFilter]);
 
   // -----------------------------------------------------------------------
   // RENDER
@@ -417,58 +524,98 @@ export default function ClampingLog() {
           </header>
 
           <main className="main-content">
+            {/* SEARCH + FILTER */}
+            <div className="search-filter-row">
+              <div className="search-bar-container">
+                <Search size={18} className="search-bar-icon" />
+                <input
+                  type="text"
+                  className="search-bar-input"
+                  placeholder="Search CIN, Plate No..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+
+              <div className="filter-select-wrap">
+                <select
+                  className="filter-select"
+                  value={violationFilter}
+                  onChange={(e) => setViolationFilter(e.target.value)}
+                  aria-label="Filter by violation"
+                >
+                  {violationOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={18} className="filter-select-icon" />
+              </div>
+            </div>
+
             <div className="card">
-              <p className="card-eyebrow">Sector 3 · Clamping history</p>
-              <h2 className="card-title">Clamping Log</h2>
+              <div className="log-header">
+                <p className="card-eyebrow">Sector 3</p>
+                <div className="log-header-meta">
+                  Active clamps: {activeClamps} total
+                </div>
+              </div>
+              <h2 className="card-title" style={{ marginBottom: 16 }}>
+                Clamping Log
+              </h2>
 
               {loading ? (
                 <div className="table-loading">
-                  <p>Loading clamping records...</p>
+                  <p>Loading clamping log...</p>
                 </div>
-              ) : rows.length === 0 ? (
+              ) : paginatedRows.length === 0 ? (
                 <div className="table-empty">
-                  <p>No clamping records found.</p>
+                  <p>
+                    {rows.length === 0
+                      ? "No clamping records found."
+                      : "No records match your search or filter."}
+                  </p>
                 </div>
               ) : (
                 <div className="table-wrapper">
                   <table className="data-table">
                     <thead>
                       <tr>
+                        <th>Reference</th>
                         <th>CIN</th>
                         <th>Plate No.</th>
-                        <th>Vehicle Type</th>
+                        <th>Violation</th>
                         <th>Location</th>
-                        <th>Officer</th>
+                        <th>Clamped by</th>
                         <th>Time</th>
                         <th>Status</th>
-                        <th aria-label="Actions"></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((row) => (
+                      {paginatedRows.map((row) => (
                         <tr key={row.id}>
+                          <td className="cell-reference">
+                            {row.reference ?? "—"}
+                          </td>
                           <td>
                             <span className="cin-pill">{row.cin}</span>
                           </td>
                           <td className="cell-plate">{row.plateNo}</td>
-                          <td className="cell-vehicle-type">{row.vehicleType}</td>
+                          <td className="cell-violation">{row.violation}</td>
                           <td className="cell-location">{row.location}</td>
-                          <td className="cell-clamped-by">{row.clampedBy}</td>
-                          <td className="cell-datetime">{formatDateTime(row.clampedAt)}</td>
-                          <td>
-                            <span className={`status-pill ${getStatusClass(row.status)}`}>
-                              {getStatusLabel(row.status)}
-                            </span>
+                          <td className="cell-clamped-by">{row.officer}</td>
+                          <td className="cell-datetime">
+                            {formatDateTime(row.recordedAt)}
                           </td>
-                          <td className="cell-more">
-                            <button
-                              type="button"
-                              className="row-more-btn"
-                              aria-label="More options"
-                              onClick={() => handleOpenEditModal(row)}
+                          <td>
+                            <span
+                              className={`status-pill ${getStatusClass(
+                                row.status
+                              )}`}
                             >
-                              <MoreHorizontal size={16} />
-                            </button>
+                              {row.status}
+                            </span>
                           </td>
                         </tr>
                       ))}
@@ -476,136 +623,42 @@ export default function ClampingLog() {
                   </table>
                 </div>
               )}
+
+              {/* PAGINATION */}
+              {!loading && paginatedRows.length > 0 && (
+                <div className="pagination">
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={safePage === 1}
+                  >
+                    <ChevronLeft size={16} />
+                    Previous
+                  </button>
+
+                  <div className="pagination-info">
+                    <span className="pagination-page">{safePage}</span>
+                    <span className="pagination-sep">of {totalPages} pages</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                    disabled={safePage === totalPages}
+                  >
+                    Next
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              )}
             </div>
           </main>
         </div>
       </div>
-
-      {/* EDIT MODAL */}
-      {isEditModalOpen && selectedRow && (
-        <div className="modal-overlay" onClick={handleCloseEditModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">{selectedRow.cin}</h3>
-              <button className="modal-close-btn" onClick={handleCloseEditModal}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="modal-grid">
-              <div className="form-group">
-                <label htmlFor="plateNo">Plate Number</label>
-                <input
-                  id="plateNo"
-                  name="plateNo"
-                  type="text"
-                  className="form-input"
-                  value={formData.plateNo}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="vehicleType">Vehicle Type</label>
-                <input
-                  id="vehicleType"
-                  name="vehicleType"
-                  type="text"
-                  className="form-input"
-                  value={formData.vehicleType}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="fineAmount">Fine Amount (₱)</label>
-                <input
-                  id="fineAmount"
-                  name="fineAmount"
-                  type="text"
-                  className="form-input"
-                  value={formData.fineAmount}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="violationType">Violation Type</label>
-                <input
-                  id="violationType"
-                  name="violationType"
-                  type="text"
-                  className="form-input"
-                  value={formData.violationType}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="officer">Officer</label>
-                <input
-                  id="officer"
-                  name="officer"
-                  type="text"
-                  className="form-input"
-                  value={formData.officer}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="location">Location</label>
-                <input
-                  id="location"
-                  name="location"
-                  type="text"
-                  className="form-input"
-                  value={formData.location}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="time">Time</label>
-                <input
-                  id="time"
-                  name="time"
-                  type="text"
-                  className="form-input"
-                  value={formData.time}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="status">Status</label>
-                <select
-                  id="status"
-                  name="status"
-                  className="form-select"
-                  value={getDropdownValue(formData.status)}
-                  onChange={(e) => {
-                    const newStatus = getStatusFromDropdown(e.target.value);
-                    setFormData((prev) => ({ ...prev, status: newStatus }));
-                  }}
-                >
-                  <option value="Clamped">Clamped</option>
-                  <option value="Removed">Removed</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={handleCloseEditModal}>
-                Cancel
-              </button>
-              <button className="btn-primary" onClick={handleSaveChanges}>
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

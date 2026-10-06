@@ -1,15 +1,41 @@
 /* ==================================================================
-   ExportCenter.css
+   ExportCenter.css — Modern redesign (no-hover, scrollable list)
    Extends Homepage.css (record-officer) — Export Center styles
 ================================================================== */
+
+/* ==================================================================
+   PAGE HEADER — Hero with subtitle
+================================================================== */
+.record-page .export-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.record-page .export-hero-text h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.record-page .export-hero-text p {
+  font-size: 13px;
+  color: #64748B;
+  margin: 6px 0 0;
+  font-weight: 500;
+}
 
 /* ==================================================================
    TWO-COLUMN GRID LAYOUT
 ================================================================== */
 .record-page .export-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 24px;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 20px;
   align-items: start;
 }
 
@@ -20,50 +46,123 @@
 }
 
 /* ==================================================================
-   EXPORT DATA CARD
+   CARD BASE
 ================================================================== */
-.record-page .export-card {
-  background: #ffffff;
-  border: 1px solid #E5E7EB;
-  border-radius: 12px;
+.record-page .export-card,
+.record-page .recent-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
   padding: 24px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: box-shadow 0.2s ease;
 }
 
-.record-page .export-title {
-  font-size: 18px;
+.record-page .export-card:hover,
+.record-page .recent-card:hover {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+/* ==================================================================
+   CARD HEADER — Icon badge + title + subtitle
+================================================================== */
+.record-page .card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.record-page .card-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.record-page .card-icon-badge.blue {
+  background: #DBEAFE;
+  color: #1D4ED8;
+}
+
+.record-page .card-icon-badge.slate {
+  background: #F1F5F9;
+  color: #334155;
+}
+
+.record-page .card-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.record-page .card-title {
+  font-size: 15px;
   font-weight: 700;
-  color: #111827;
-  margin: 0 0 24px 0;
+  color: #0F172A;
+  margin: 0;
+  line-height: 1.3;
 }
 
+.record-page .card-subtitle {
+  font-size: 12px;
+  color: #94A3B8;
+  margin: 0;
+  font-weight: 500;
+}
+
+.record-page .card-header-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748B;
+  background: #F1F5F9;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ==================================================================
+   FORM GROUPS
+================================================================== */
 .record-page .export-form-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   margin-bottom: 20px;
 }
 
 .record-page .export-form-group label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #111827;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-/* Select Wrapper (for Lucide ChevronDown overlay) */
+/* ==================================================================
+   SELECT
+================================================================== */
 .record-page .select-wrapper {
   position: relative;
   width: 100%;
 }
 
-/* Custom Select — no native arrow, uses Lucide icon instead */
 .record-page .export-select {
   width: 100%;
   padding: 12px 40px 12px 14px;
-  border: 1px solid #D1D5DB;
-  border-radius: 8px;
+  border: 1px solid #CBD5E1;
+  border-radius: 10px;
   font-size: 14px;
-  color: #111827;
-  background-color: #ffffff;
+  color: #0F172A;
+  background-color: #FFFFFF;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   box-sizing: border-box;
@@ -71,32 +170,47 @@
   -webkit-appearance: none;
   -moz-appearance: none;
   font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.record-page .export-select:hover {
+  border-color: #94A3B8;
 }
 
 .record-page .export-select:focus {
-  border-color: #0035A9;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: #1D4ED8;
+  box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.12);
 }
 
 .record-page .export-select.placeholder {
-  color: #111827;
+  color: #94A3B8;
 }
 
-/* Lucide ChevronDown icon positioned absolutely */
 .record-page .select-chevron {
   position: absolute;
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: #6B7280;
+  color: #64748B;
   pointer-events: none;
 }
 
-/* Date Range — two columns */
+/* ==================================================================
+   DATE RANGE
+================================================================== */
 .record-page .date-range-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.record-page .date-range-arrow {
+  color: #94A3B8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .record-page .date-input-wrapper {
@@ -106,23 +220,27 @@
 .record-page .date-input {
   width: 100%;
   padding: 12px 40px 12px 14px;
-  border: 1px solid #D1D5DB;
-  border-radius: 8px;
+  border: 1px solid #CBD5E1;
+  border-radius: 10px;
   font-size: 14px;
-  color: #111827;
-  background-color: #ffffff;
+  color: #0F172A;
+  background-color: #FFFFFF;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   box-sizing: border-box;
   font-family: inherit;
+  font-weight: 500;
+}
+
+.record-page .date-input:hover {
+  border-color: #94A3B8;
 }
 
 .record-page .date-input:focus {
-  border-color: #2563EB;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: #1D4ED8;
+  box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.12);
 }
 
-/* 🔥 HIDE the native browser calendar icon */
 .record-page .date-input::-webkit-calendar-picker-indicator {
   opacity: 0;
   position: absolute;
@@ -132,124 +250,228 @@
   cursor: pointer;
 }
 
-/* Position the Lucide Calendar icon */
 .record-page .date-input-wrapper .calendar-icon {
   position: absolute;
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: #374151;
+  color: #64748B;
   pointer-events: none;
   z-index: 1;
 }
 
 /* ==================================================================
-   EXPORT BUTTONS
+   ERROR MESSAGE
 ================================================================== */
-.record-page .export-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.record-page .btn-export-csv {
-  flex: 1;
-  padding: 12px 20px;
-  border: none;
+.record-page .export-error {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  color: #B91C1C;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 14px;
   border-radius: 8px;
-  background-color: #1D4ED8;
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.record-page .btn-export-csv:hover {
-  background-color: #1E40AF;
-}
-
-.record-page .btn-export-excel {
-  flex: 1;
-  padding: 12px 20px;
-  border: 1px solid #D1D5DB;
-  border-radius: 8px;
-  background-color: #ffffff;
-  color: #374151;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s, border-color 0.2s;
-}
-
-.record-page .btn-export-excel:hover {
-  background-color: #F9FAFB;
-  border-color: #9CA3AF;
+  margin: 0 0 16px;
 }
 
 /* ==================================================================
-   RECENT EXPORTS CARD
+   EXPORT BUTTONS — Modern with icons
 ================================================================== */
-.record-page .recent-card {
-  background: #ffffff;
-  border: 1px solid #E5E7EB;
-  border-radius: 12px;
-  padding: 24px;
+.record-page .export-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
 }
 
-.record-page .recent-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #111827;
-  margin: 0 0 16px 0;
+.record-page .btn-export {
+  flex: 1;
+  min-width: 130px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
+.record-page .btn-export:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* CSV — Primary blue */
+.record-page .btn-export-csv {
+  background: #1D4ED8;
+  border: 1px solid #1D4ED8;
+  color: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(29, 78, 216, 0.2);
+}
+
+.record-page .btn-export-csv:hover:not(:disabled) {
+  background: #1E40AF;
+  border-color: #1E40AF;
+  box-shadow: 0 4px 10px rgba(29, 78, 216, 0.25);
+  transform: translateY(-1px);
+}
+
+/* Excel — Outlined */
+.record-page .btn-export-excel {
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  color: #334155;
+}
+
+.record-page .btn-export-excel:hover:not(:disabled) {
+  background: #F8FAFC;
+  border-color: #94A3B8;
+  transform: translateY(-1px);
+}
+
+/* PDF — Accent red */
+.record-page .btn-export-pdf {
+  background: #DC2626;
+  border: 1px solid #DC2626;
+  color: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.2);
+}
+
+.record-page .btn-export-pdf:hover:not(:disabled) {
+  background: #B91C1C;
+  border-color: #B91C1C;
+  box-shadow: 0 4px 10px rgba(220, 38, 38, 0.25);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+  .record-page .export-actions {
+    flex-direction: column;
+  }
+
+  .record-page .btn-export {
+    width: 100%;
+  }
+}
+
+/* ==================================================================
+   RECENT EXPORTS LIST — Non-interactive, scrollable
+================================================================== */
 .record-page .recent-list {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+
+  /* Scrollable list — cap at 420px, then scroll */
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-right: -4px;
+
+  /* Firefox scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}
+
+/* Slim custom scrollbar (Chrome/Edge/Safari) */
+.record-page .recent-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.record-page .recent-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.record-page .recent-list::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 999px;
+}
+
+.record-page .recent-list::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
 }
 
 .record-page .recent-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid #F3F4F6;
+  padding: 12px 10px;
+  border-radius: 10px;
+
+  /* Not interactive — no pointer, no hover */
+  cursor: default;
+  user-select: none;
 }
 
-.record-page .recent-item:last-child {
-  border-bottom: none;
+.record-page .recent-file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.recent-file-icon.type-csv {
+  background: #DBEAFE;
+  color: #1D4ED8;
+}
+
+.recent-file-icon.type-xlsx {
+  background: #DCFCE7;
+  color: #15803D;
+}
+
+.recent-file-icon.type-pdf {
+  background: #FEE2E2;
+  color: #B91C1C;
+}
+
+.record-page .recent-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .record-page .recent-filename {
   font-size: 13px;
-  color: #111827;
-  text-decoration: underline;
-  text-decoration-color: #D1D5DB;
-  text-underline-offset: 3px;
-  cursor: pointer;
+  font-weight: 600;
+  color: #0F172A;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.record-page .recent-filename:hover {
-  color: #1D4ED8;
-  text-decoration-color: #1D4ED8;
+  margin: 0;
 }
 
 .record-page .recent-time {
-  font-size: 12px;
-  color: #9CA3AF;
-  font-style: italic;
-  white-space: nowrap;
-  flex-shrink: 0;
+  font-size: 11px;
+  color: #94A3B8;
+  font-weight: 500;
+  margin: 0;
 }
 
 .record-page .recent-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   font-size: 13px;
-  color: #9CA3AF;
-  font-style: italic;
-  margin: 8px 0;
+  color: #94A3B8;
+  margin: 24px 0;
+  text-align: center;
+}
+
+.record-page .recent-empty-icon {
+  color: #CBD5E1;
 }

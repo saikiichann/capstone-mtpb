@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, ChevronDown, Calendar } from "lucide-react";
+import {
+  KeyRound,
+  ChevronDown,
+  Calendar,
+  ArrowRight,
+  Upload,
+  Download,
+  FileSpreadsheet,
+  FileText,
+} from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
   doc,
@@ -8,12 +17,15 @@ import {
   collection,
   addDoc,
   query,
-  orderBy,
   limit,
   onSnapshot,
+  getDocs,
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { auth, db } from "../../firebase";
 import "./ExportCenter.css";
 
@@ -21,13 +33,9 @@ import "./ExportCenter.css";
 import mtpbLogo from "../../assets/mtpb-logo.png";
 import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
-import queueMonitorIcon from "../../assets/queue.png";
 import allViolationsIcon from "../../assets/allviolations.png";
 import clampingIcon from "../../assets/clamping.png";
 import impoundingLogIcon from "../../assets/impounding.png";
-import vehicleHistoryIcon from "../../assets/history.png";
-import releaseRequestsIcon from "../../assets/releaserequest.png";
-import releaseOrdersIcon from "../../assets/releaseorder.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
@@ -46,41 +54,31 @@ type RoleSlug =
   | "clamping-staff"
   | "impounding-staff";
 
-type CurrentUser = {
-  name: string;
-  role: RoleSlug;
-};
+type CurrentUser = { name: string; role: RoleSlug };
 
 type RecentExport = {
   id: string;
   filename: string;
+  fileType: "csv" | "xlsx" | "pdf" | "other";
   timeAgo: string;
+  timestamp: Timestamp | null;
 };
 
-type NavItem = {
-  label: string;
-  icon: string;
-  path: string;
-  active?: boolean;
-};
+type NavItem = { label: string; icon: string; path: string; active?: boolean };
+type NavGroup = { label: string; items: NavItem[] };
 
-type NavGroup = {
-  label: string;
-  items: NavItem[];
-};
-
-type ExportFormat = "CSV" | "Excel";
+type ExportFormat = "CSV" | "Excel" | "PDF";
 
 // ---------------------------------------------------------------------------
 // CONSTANTS
 // ---------------------------------------------------------------------------
 const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer in Charge",
+  oic: "Officer in Charge",
   "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
+  supervisor: "Supervisor",
   "record-officer": "Record Officer",
   "release-officer": "Release Officer",
-  "finance": "Finance Staff",
+  finance: "Finance Staff",
   "clamping-staff": "Clamping Staff",
   "impounding-staff": "Impounding Staff",
 };
@@ -90,7 +88,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Dashboard",
     items: [
       { label: "Overview", icon: overviewIcon, path: "/record-officer" },
-      { label: "Queue Monitor", icon: queueMonitorIcon, path: "/record-officer/queue" },
     ],
   },
   {
@@ -99,14 +96,11 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "All Violations", icon: allViolationsIcon, path: "/record-officer/violations" },
       { label: "Clamping Log", icon: clampingIcon, path: "/record-officer/clamping" },
       { label: "Impounding Log", icon: impoundingLogIcon, path: "/record-officer/impounding" },
-      { label: "Vehicle History", icon: vehicleHistoryIcon, path: "/record-officer/vehicle-history" },
     ],
   },
   {
     label: "Vehicle Release",
     items: [
-      { label: "Release Requests", icon: releaseRequestsIcon, path: "/record-officer/release-requests" },
-      { label: "Release Orders", icon: releaseOrdersIcon, path: "/record-officer/release-orders" },
       { label: "Release Log", icon: releaseLogIcon, path: "/record-officer/release-log" },
     ],
   },
@@ -126,6 +120,24 @@ const DATA_TYPES = [
   "Release Log",
 ] as const;
 
+const DATA_TYPE_CONFIG: Record<
+  string,
+  { collection: string; filterField?: string; filterValue?: string }
+> = {
+  Violations: { collection: "violations" },
+  "Clamping Log": {
+    collection: "violations",
+    filterField: "enforcementType",
+    filterValue: "clamped",
+  },
+  "Impounding Log": {
+    collection: "violations",
+    filterField: "enforcementType",
+    filterValue: "impounded",
+  },
+  "Release Log": { collection: "releaseLog" },
+};
+
 // ---------------------------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------------------------
@@ -135,9 +147,9 @@ const formatTimeAgo = (timestamp: Timestamp | null): string => {
     const date = timestamp.toDate();
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
 
     if (diffMins < 1) return "Just now";
     if (diffMins < 60) return `${diffMins} min ago`;
@@ -147,6 +159,21 @@ const formatTimeAgo = (timestamp: Timestamp | null): string => {
   } catch {
     return "—";
   }
+};
+
+const getFileType = (filename: string): "csv" | "xlsx" | "pdf" | "other" => {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  if (ext === "csv") return "csv";
+  if (ext === "xlsx" || ext === "xls") return "xlsx";
+  if (ext === "pdf") return "pdf";
+  return "other";
+};
+
+const getFileTypeLabel = (type: "csv" | "xlsx" | "pdf" | "other"): string => {
+  if (type === "csv") return "CSV";
+  if (type === "xlsx") return "XLS";
+  if (type === "pdf") return "PDF";
+  return "FILE";
 };
 
 const getDefaultDateRange = (): { start: string; end: string } => {
@@ -161,15 +188,11 @@ const getDefaultDateRange = (): { start: string; end: string } => {
     return `${y}-${m}-${day}`;
   };
 
-  return {
-    start: format(fiveDaysAgo),
-    end: format(today),
-  };
+  return { start: format(fiveDaysAgo), end: format(today) };
 };
 
-const slugifyDataType = (dataType: string): string => {
-  return dataType.toLowerCase().replace(/\s+/g, "_");
-};
+const slugifyDataType = (dataType: string): string =>
+  dataType.toLowerCase().replace(/\s+/g, "_");
 
 const formatDateForFilename = (dateStr: string): string => {
   try {
@@ -179,6 +202,326 @@ const formatDateForFilename = (dateStr: string): string => {
   } catch {
     return "unknown";
   }
+};
+
+const sanitizeData = (data: any[]): Record<string, any>[] => {
+  return data.map((item) => {
+    const out: Record<string, any> = {};
+    Object.keys(item).forEach((key) => {
+      const value = item[key];
+      if (value instanceof Timestamp) {
+        out[key] = value.toDate().toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      } else if (value === null || value === undefined) {
+        out[key] = "";
+      } else if (typeof value === "object") {
+        out[key] = JSON.stringify(value);
+      } else {
+        out[key] = value;
+      }
+    });
+    return out;
+  });
+};
+
+const filterByDateRange = (
+  data: any[],
+  startDate: string,
+  endDate: string,
+  timestampField: string = "recordedAt"
+): any[] => {
+  if (!startDate || !endDate) return data;
+
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+
+  return data.filter((item) => {
+    const ts = item[timestampField];
+    if (!(ts instanceof Timestamp)) return true;
+    try {
+      const date = ts.toDate();
+      return date >= start && date <= end;
+    } catch {
+      return true;
+    }
+  });
+};
+
+// ---------------------------------------------------------------------------
+// EXPORT FUNCTIONS (unchanged logic)
+// ---------------------------------------------------------------------------
+const downloadCsv = (
+  filename: string,
+  rows: Record<string, any>[]
+): void => {
+  if (rows.length === 0) {
+    alert("Walang data na ma-export para sa napiling date range.");
+    return;
+  }
+
+  const headers = Object.keys(rows[0]);
+  const csvContent = [
+    headers.join(","),
+    ...rows.map((row) =>
+      headers
+        .map((h) => {
+          const value = row[h];
+          if (value === null || value === undefined) return "";
+          const str = String(value);
+          if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+            return `"${str.replace(/"/g, '""')}"`;
+          }
+          return str;
+        })
+        .join(",")
+    ),
+  ].join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+const downloadExcel = (
+  filename: string,
+  rows: Record<string, any>[]
+): void => {
+  if (rows.length === 0) {
+    alert("Walang data na ma-export para sa napiling date range.");
+    return;
+  }
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+
+  const columnWidths = Object.keys(rows[0]).map((key) => {
+    const maxLength = Math.max(
+      key.length,
+      ...rows.map((row) => String(row[key] ?? "").length)
+    );
+    return { wch: Math.min(maxLength + 2, 50) };
+  });
+  worksheet["!cols"] = columnWidths;
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Export");
+  XLSX.writeFile(workbook, filename);
+};
+
+const downloadPdf = (
+  filename: string,
+  rows: Record<string, any>[],
+  title: string,
+  metadata: { exportedBy: string; dateRange: string }
+): void => {
+  if (rows.length === 0) {
+    alert("Walang data na ma-export para sa napiling date range.");
+    return;
+  }
+
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "pt",
+    format: "a4",
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  const headerHeight = 90;
+
+  doc.setFillColor(15, 23, 42);
+  doc.rect(0, 0, pageWidth, headerHeight, "F");
+
+  doc.setFillColor(29, 78, 216);
+  doc.rect(0, headerHeight, pageWidth, 4, "F");
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.setFont("helvetica", "bold");
+  doc.text("MTPB", 40, 42);
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(200, 210, 230);
+  doc.text("Manila Traffic and Parking Bureau", 40, 58);
+  doc.text("Integrated Enforcement System", 40, 72);
+
+  doc.setFontSize(18);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 255, 255);
+  doc.text(title.toUpperCase(), pageWidth - 40, 48, { align: "right" });
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(200, 210, 230);
+  doc.text(
+    `Date Range: ${metadata.dateRange}`,
+    pageWidth - 40,
+    66,
+    { align: "right" }
+  );
+  doc.text(
+    `Exported by: ${metadata.exportedBy}`,
+    pageWidth - 40,
+    80,
+    { align: "right" }
+  );
+
+  const cardY = headerHeight + 24;
+  const cardHeight = 56;
+  const cardGap = 12;
+  const cardWidth = (pageWidth - 80 - cardGap * 3) / 4;
+
+  const totalRecords = rows.length;
+  const verifiedCount = rows.filter(
+    (r) => String(r.paymentStatus).toLowerCase() === "verified"
+  ).length;
+  const totalFines = rows.reduce(
+    (sum, r) => sum + (Number(r.fineAmount) || 0),
+    0
+  );
+
+  const summaryCards = [
+    { label: "Total Records", value: String(totalRecords) },
+    { label: "Verified Payments", value: String(verifiedCount) },
+    { label: "Total Fines", value: `PHP ${totalFines.toLocaleString()}` },
+    {
+      label: "Generated",
+      value: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+    },
+  ];
+
+  summaryCards.forEach((card, i) => {
+    const x = 40 + i * (cardWidth + cardGap);
+
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(x, cardY, cardWidth, cardHeight, 6, 6, "FD");
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 116, 139);
+    doc.text(card.label.toUpperCase(), x + 12, cardY + 20);
+
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text(card.value, x + 12, cardY + 42);
+  });
+
+  const columns = [
+    { key: "cin", label: "CIN", width: 90 },
+    { key: "plateNo", label: "PLATE NO.", width: 70 },
+    { key: "violationType", label: "VIOLATION", width: 100 },
+    { key: "location", label: "LOCATION", width: 110 },
+    { key: "officer", label: "OFFICER", width: 80 },
+    { key: "recordedAt", label: "RECORDED", width: 90 },
+    { key: "fineAmount", label: "FINE", width: 55 },
+    { key: "paymentStatus", label: "PAYMENT", width: 65 },
+    { key: "releaseStatus", label: "RELEASE", width: 70 },
+  ];
+
+  const headers = columns.map((c) => c.label);
+  const body = rows.map((row) =>
+    columns.map((c) => {
+      const value = row[c.key];
+      if (value === null || value === undefined) return "";
+      if (c.key === "fineAmount") {
+        const num = Number(value);
+        return isNaN(num) ? String(value) : num.toLocaleString();
+      }
+      return String(value);
+    })
+  );
+
+  autoTable(doc, {
+    head: [headers],
+    body: body,
+    startY: cardY + cardHeight + 20,
+    theme: "plain",
+    styles: {
+      fontSize: 8.5,
+      cellPadding: { top: 8, right: 6, bottom: 8, left: 6 },
+      overflow: "linebreak",
+      textColor: [51, 65, 85],
+      lineColor: [241, 245, 249],
+      lineWidth: 0.3,
+    },
+    headStyles: {
+      fillColor: [30, 58, 138],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 8,
+      halign: "left",
+      cellPadding: { top: 10, right: 6, bottom: 10, left: 6 },
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+    bodyStyles: {
+      lineWidth: { bottom: 0.3 },
+      lineColor: [226, 232, 240],
+    },
+    margin: { left: 40, right: 40 },
+    columnStyles: columns.reduce(
+      (acc, col, idx) => ({
+        ...acc,
+        [idx]: { cellWidth: col.width },
+      }),
+      {}
+    ),
+    didDrawPage: (data) => {
+      const pageCount = doc.getNumberOfPages();
+
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.5);
+      doc.line(40, pageHeight - 40, pageWidth - 40, pageHeight - 40);
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        "MTPB — Integrated Enforcement System",
+        40,
+        pageHeight - 24
+      );
+
+      doc.text(
+        `Generated ${new Date().toLocaleString("en-US")}`,
+        pageWidth / 2,
+        pageHeight - 24,
+        { align: "center" }
+      );
+
+      doc.text(
+        `Page ${data.pageNumber} of ${pageCount}`,
+        pageWidth - 40,
+        pageHeight - 24,
+        { align: "right" }
+      );
+    },
+  });
+
+  doc.save(filename);
 };
 
 // ---------------------------------------------------------------------------
@@ -194,7 +537,6 @@ export default function ExportCenter() {
     role: "record-officer",
   });
 
-  // Form State
   const defaultRange = getDefaultDateRange();
   const [dataType, setDataType] = useState<string>("");
   const [startDate, setStartDate] = useState(defaultRange.start);
@@ -202,13 +544,9 @@ export default function ExportCenter() {
   const [exporting, setExporting] = useState<ExportFormat | null>(null);
   const [error, setError] = useState("");
 
-  // Recent Exports State (from Firestore)
   const [recentExports, setRecentExports] = useState<RecentExport[]>([]);
   const [loadingExports, setLoadingExports] = useState(true);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Fetch current user
-  // -----------------------------------------------------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
       if (!loggedUser) {
@@ -237,24 +575,33 @@ export default function ExportCenter() {
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Real-time listener for Recent Exports
-  // -----------------------------------------------------------------------
   useEffect(() => {
-    const ref = collection(db, "exports");
-    const q = query(ref, orderBy("createdAt", "desc"), limit(10));
+    const ref = collection(db, "auditLogs");
+    const q = query(ref, limit(200));
 
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        const fetched: RecentExport[] = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            filename: data.filename ?? "—",
-            timeAgo: formatTimeAgo(data.createdAt ?? null),
-          };
-        });
+        const fetched: RecentExport[] = snap.docs
+          .filter((d) => d.data().type === "export")
+          .map((d) => {
+            const data = d.data();
+            const filename = data.metadata?.filename ?? data.record ?? "—";
+            return {
+              id: d.id,
+              filename,
+              fileType: getFileType(filename),
+              timeAgo: formatTimeAgo(data.timestamp ?? null),
+              timestamp: (data.timestamp as Timestamp) ?? null,
+            };
+          })
+          .sort((a, b) => {
+            const at = a.timestamp?.toMillis?.() ?? 0;
+            const bt = b.timestamp?.toMillis?.() ?? 0;
+            return bt - at;
+          })
+          .slice(0, 10);
+
         setRecentExports(fetched);
         setLoadingExports(false);
       },
@@ -266,12 +613,12 @@ export default function ExportCenter() {
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Click-outside for dropdown
-  // -----------------------------------------------------------------------
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsMenuOpen(false);
       }
     }
@@ -279,9 +626,6 @@ export default function ExportCenter() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // -----------------------------------------------------------------------
-  // HANDLERS
-  // -----------------------------------------------------------------------
   const handleLogout = async () => {
     try {
       await firebaseSignOut(auth);
@@ -323,33 +667,68 @@ export default function ExportCenter() {
     setExporting(format);
 
     try {
-      // Build filename
+      const config = DATA_TYPE_CONFIG[dataType];
+      if (!config) {
+        setError("Unknown data type.");
+        return;
+      }
+
+      const sourceSnap = await getDocs(collection(db, config.collection));
+      let data: any[] = sourceSnap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+
+      if (config.filterField && config.filterValue) {
+        data = data.filter(
+          (item) => item[config.filterField!] === config.filterValue
+        );
+      }
+
+      data = filterByDateRange(data, startDate, endDate, "recordedAt");
+      const cleaned = sanitizeData(data);
+
       const slug = slugifyDataType(dataType);
       const startSlug = formatDateForFilename(startDate);
       const endSlug = formatDateForFilename(endDate);
-      const extension = format === "CSV" ? "csv" : "xlsx";
+      const extension =
+        format === "CSV" ? "csv" : format === "Excel" ? "xlsx" : "pdf";
       const filename = `${slug}_${startSlug}_${endSlug}.${extension}`;
 
-      // Simulate export delay
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      if (format === "CSV") {
+        downloadCsv(filename, cleaned);
+      } else if (format === "Excel") {
+        downloadExcel(filename, cleaned);
+      } else {
+        downloadPdf(filename, cleaned, `${dataType} Report`, {
+          exportedBy: currentUser.name,
+          dateRange: `${startDate} to ${endDate}`,
+        });
+      }
 
-      // Log the export to Firestore
-      await addDoc(collection(db, "exports"), {
-        filename,
-        dataType,
-        format,
-        startDate,
-        endDate,
-        exportedBy: currentUser.name,
-        createdAt: serverTimestamp(),
+      await addDoc(collection(db, "auditLogs"), {
+        userName: currentUser.name,
+        action: `exported ${dataType} (${cleaned.length} records) as ${format}`,
+        record: filename,
+        type: "export",
+        metadata: {
+          filename,
+          dataType,
+          format,
+          startDate,
+          endDate,
+          recordCount: cleaned.length,
+        },
+        timestamp: serverTimestamp(),
       });
 
-      console.log("Export logged:", filename);
-      alert(`Export ready: ${filename}\n\n(In production, this would download the file.)`);
+      console.log(`Export ready: ${filename} (${cleaned.length} records)`);
     } catch (err: any) {
       console.error("Export error:", err);
       if (err.code === "permission-denied") {
-        setError("Permission denied. Please check your Firestore rules.");
+        setError(
+          "Permission denied. Check your Firestore rules para sa source collection."
+        );
       } else {
         setError(err.message || "Failed to export data.");
       }
@@ -358,13 +737,9 @@ export default function ExportCenter() {
     }
   };
 
-  // -----------------------------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------------------------
   return (
     <div className="record-page">
       <div className="dashboard">
-        {/* SIDEBAR */}
         <aside className="sidebar">
           <div className="sidebar-brand">
             <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
@@ -383,7 +758,9 @@ export default function ExportCenter() {
                     <li key={item.label}>
                       <button
                         type="button"
-                        className={`nav-item ${item.active ? "nav-item-active" : ""}`}
+                        className={`nav-item ${
+                          item.active ? "nav-item-active" : ""
+                        }`}
                         onClick={() => navigate(item.path)}
                       >
                         <img src={item.icon} alt="" className="nav-icon" />
@@ -397,18 +774,11 @@ export default function ExportCenter() {
           </nav>
         </aside>
 
-        {/* MAIN CONTENT */}
         <div className="main">
           <header className="main-header">
-            <div>
+            <div className="export-hero-text">
               <h1>Export Center</h1>
-              <p>
-                {new Date().toLocaleDateString("en-US", {
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </p>
+              <p>Download reports and data in multiple formats</p>
             </div>
 
             <div className="avatar-container" ref={dropdownRef}>
@@ -427,11 +797,17 @@ export default function ExportCenter() {
                       {ROLE_LABELS[currentUser.role]}
                     </p>
                   </div>
-                  <button className="dropdown-item" onClick={handleChangePassword}>
+                  <button
+                    className="dropdown-item"
+                    onClick={handleChangePassword}
+                  >
                     <KeyRound size={18} />
                     <span>Change Password</span>
                   </button>
-                  <button className="dropdown-item logout" onClick={handleLogout}>
+                  <button
+                    className="dropdown-item logout"
+                    onClick={handleLogout}
+                  >
                     <img src={logoutIcon} alt="" className="dropdown-icon" />
                     <span>Log Out</span>
                   </button>
@@ -442,22 +818,37 @@ export default function ExportCenter() {
 
           <main className="main-content">
             <div className="export-grid">
-              {/* EXPORT DATA CARD */}
+              {/* ═══════════════════════════════════════════════
+                  EXPORT DATA CARD
+              ═══════════════════════════════════════════════ */}
               <div className="export-card">
-                <h2 className="export-title">Export Data</h2>
+                <div className="card-header">
+                  <span className="card-icon-badge blue">
+                    <Upload size={18} />
+                  </span>
+                  <div className="card-header-text">
+                    <h2 className="card-title">Export Data</h2>
+                    <p className="card-subtitle">
+                      Configure and download your report
+                    </p>
+                  </div>
+                </div>
 
-                {/* Data Type */}
                 <div className="export-form-group">
                   <label htmlFor="dataType">Data Type</label>
                   <div className="select-wrapper">
                     <select
                       id="dataType"
-                      className={`export-select ${!dataType ? "placeholder" : ""}`}
+                      className={`export-select ${
+                        !dataType ? "placeholder" : ""
+                      }`}
                       value={dataType}
                       onChange={(e) => setDataType(e.target.value)}
                       disabled={exporting !== null}
                     >
-                      <option value="" disabled hidden>Select Data Type</option>
+                      <option value="" disabled hidden>
+                        Select Data Type
+                      </option>
                       {DATA_TYPES.map((type) => (
                         <option key={type} value={type}>
                           {type}
@@ -468,7 +859,6 @@ export default function ExportCenter() {
                   </div>
                 </div>
 
-                {/* Date Range */}
                 <div className="export-form-group">
                   <label>Date Range</label>
                   <div className="date-range-row">
@@ -482,6 +872,11 @@ export default function ExportCenter() {
                       />
                       <Calendar size={16} className="calendar-icon" />
                     </div>
+
+                    <span className="date-range-arrow">
+                      <ArrowRight size={16} />
+                    </span>
+
                     <div className="date-input-wrapper">
                       <input
                         type="date"
@@ -495,44 +890,84 @@ export default function ExportCenter() {
                   </div>
                 </div>
 
-                {/* Error */}
                 {error && <p className="export-error">{error}</p>}
 
-                {/* Export Buttons */}
                 <div className="export-actions">
                   <button
                     type="button"
-                    className="btn-export-csv"
+                    className="btn-export btn-export-csv"
                     onClick={() => handleExport("CSV")}
                     disabled={exporting !== null}
                   >
+                    <FileText size={15} />
                     {exporting === "CSV" ? "Exporting..." : "Export CSV"}
                   </button>
                   <button
                     type="button"
-                    className="btn-export-excel"
+                    className="btn-export btn-export-excel"
                     onClick={() => handleExport("Excel")}
                     disabled={exporting !== null}
                   >
+                    <FileSpreadsheet size={15} />
                     {exporting === "Excel" ? "Exporting..." : "Export Excel"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-export btn-export-pdf"
+                    onClick={() => handleExport("PDF")}
+                    disabled={exporting !== null}
+                  >
+                    <FileText size={15} />
+                    {exporting === "PDF" ? "Exporting..." : "Export PDF"}
                   </button>
                 </div>
               </div>
 
-              {/* RECENT EXPORTS CARD */}
+              {/* ═══════════════════════════════════════════════
+                  RECENT EXPORTS CARD
+              ═══════════════════════════════════════════════ */}
               <div className="recent-card">
-                <h2 className="recent-title">Recent Exports</h2>
+                <div className="card-header">
+                  <span className="card-icon-badge slate">
+                    <Download size={18} />
+                  </span>
+                  <div className="card-header-text">
+                    <h2 className="card-title">Recent Exports</h2>
+                    <p className="card-subtitle">
+                      Last 10 downloaded reports
+                    </p>
+                  </div>
+                  {recentExports.length > 0 && (
+                    <span className="card-header-count">
+                      {recentExports.length}
+                    </span>
+                  )}
+                </div>
 
                 {loadingExports ? (
                   <p className="recent-empty">Loading exports...</p>
                 ) : recentExports.length === 0 ? (
-                  <p className="recent-empty">No recent exports yet.</p>
+                  <div className="recent-empty">
+                    <Download
+                      size={32}
+                      className="recent-empty-icon"
+                      strokeWidth={1.5}
+                    />
+                    <span>No recent exports yet</span>
+                  </div>
                 ) : (
                   <div className="recent-list">
                     {recentExports.map((item) => (
                       <div key={item.id} className="recent-item">
-                        <span className="recent-filename">{item.filename}</span>
-                        <span className="recent-time">{item.timeAgo}</span>
+                        <span
+                          className={`recent-file-icon type-${item.fileType}`}
+                        >
+                          {getFileTypeLabel(item.fileType)}
+                        </span>
+                        <div className="recent-item-info">
+                          <p className="recent-filename">{item.filename}</p>
+                          <p className="recent-time">{item.timeAgo}</p>
+                        </div>
                       </div>
                     ))}
                   </div>

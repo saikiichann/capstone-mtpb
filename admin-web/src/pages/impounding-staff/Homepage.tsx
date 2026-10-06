@@ -403,8 +403,6 @@ export default function ImpoundingStaffHomepage() {
 
           return {
             id: d.id,
-            // Fallback chains — adjust to the exact field names your
-            // Impounding Log page reads.
             reference: data.referenceNumber ?? data.paymentReference ?? null,
             cin: data.cin ?? "—",
             plateNo: data.plateNo ?? "—",
@@ -711,7 +709,7 @@ export default function ImpoundingStaffHomepage() {
                         <th>Plate No.</th>
                         <th>Violation</th>
                         <th>Location</th>
-                        <th>Towed by</th>
+                        <th>Impounded by</th>
                         <th>Time</th>
                         <th>Status</th>
                       </tr>

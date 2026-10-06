@@ -76,7 +76,6 @@ type PaymentRow = {
   paidAt: Timestamp | null;
   violationId: string | null;
   clampId: string | null;
-  /** True kapag walang linked violation — hindi dapat ma-approve. */
   orphaned: boolean;
 };
 
@@ -208,9 +207,7 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 /* ------------------------------------------------------------------
-   HELPERS — identical to the Finance version. This is shared business
-   logic (waiting band, the atomic approve/reject transaction); it must
-   not diverge just because a different role's page calls it.
+   HELPERS
 ------------------------------------------------------------------ */
 const formatCurrency = (amount: number): string =>
   `₱${amount.toLocaleString("en-US", {
@@ -235,15 +232,6 @@ const millis = (ts: Timestamp | null): number => {
   }
 };
 
-/**
- * Gaano na katagal naghihintay ang bayad.
- *
- * Hindi "Priority" ang gamit dito kahit ganoon ang label sa ilang Figma
- * frame — sadyang pinalitan noon dahil kontra ito sa manuscript, na
- * nagsasabing strict FIFO ang proseso, "with no priority scoring or
- * algorithmic reordering." Kapareho ang pagkalkula; ang ipinapakita lang
- * ay kung gaano katagal naghihintay, hindi kung sino ang unahin.
- */
 const computeWaitingBand = (paidAt: Timestamp | null): WaitingBand => {
   if (!paidAt) return "Over 24 hrs";
   try {
@@ -316,13 +304,7 @@ export default function PaymentVerification() {
     return () => unsubscribe();
   }, []);
 
-  /**
-   * Payments listener — same enrichment/fallback logic as Finance's
-   * version: no orderBy (would drop cash payments that lack paidAt),
-   * accepts multiple field-naming conventions (cin/violationCin,
-   * plateNo/plateNumber), and backfills CIN/plate/clampId from the
-   * linked violation when the payment document itself is missing them.
-   */
+  /* Payments listener */
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(db, "payments"),
@@ -465,8 +447,6 @@ export default function PaymentVerification() {
     }
   };
 
-  /** Kept for consistency with the other OIC pages even though this route
-   *  is OIC-only (Supervisor never reaches it) — see App.tsx. */
   const navGroups = useMemo(
     () =>
       NAV_GROUPS.filter(
@@ -476,7 +456,6 @@ export default function PaymentVerification() {
     [currentUser.role]
   );
 
-  /** Hinahanap ang clamp document reference gamit ang clampId. */
   const findClampRef = async (clampId: string | null) => {
     if (!clampId) return null;
     try {
@@ -490,7 +469,6 @@ export default function PaymentVerification() {
     }
   };
 
-  /** Hinahanap ang violation document reference, by ID o by CIN. */
   const findViolationRef = async (row: PaymentRow) => {
     if (row.violationId) return doc(db, "violations", row.violationId);
     if (!row.cin) return null;
@@ -506,15 +484,11 @@ export default function PaymentVerification() {
   };
 
   /**
-   * Approve o reject ang bayad — isang atomic write, kaparehong-kapareho
-   * ng Finance's handlePaymentAction. Sa Verified, ang violation ay
-   * lumilipat sa releaseStatus "Awaiting OIC Approval" — HINDI diretso sa
-   * "Approved by OIC" — kahit OIC mismo ang nag-a-approve dito. Ang
-   * violation ay lalabas pa rin sa Release Requests page, at kailangan pa
-   * ring pindutin doon ang Approve bago makarating sa Release Officer.
-   * Payment verification (may bayad na ba?) at release approval (handa na
-   * bang palabasin?) ay dalawang hiwalay na tanong, kahit isang tao na
-   * ngayon ang sumasagot sa pareho.
+   * Approve o reject ang bayad — isang atomic write.
+   *
+   * ✅ FIX: Kapag Rejected, `paymentStatus` ay naka-set sa "Rejected" — HINDI
+   * "Unpaid". Para lumabas yung status na "Payment Rejected" sa AllViolations
+   * page (na nagde-derive mula sa `paymentStatus` field).
    */
   const handlePaymentAction = async (
     row: PaymentRow,
@@ -590,8 +564,9 @@ export default function PaymentVerification() {
       });
 
       // 2. Violation
+      // ✅ FIX: Rejected → "Rejected" (hindi "Unpaid")
       batch.update(violationRef, {
-        paymentStatus: action === "Verified" ? "Verified" : "Unpaid",
+        paymentStatus: action === "Verified" ? "Verified" : "Rejected",
         verifiedBy: currentUser.name,
         verifiedAt: serverTimestamp(),
         ...(action === "Verified"
@@ -670,8 +645,6 @@ export default function PaymentVerification() {
     () => Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE)),
     [rows.length]
   );
-  // Clamped during render instead of a corrective useEffect — same fix
-  // applied to the other OIC pages built earlier.
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
   const paginatedRows = rows.slice(startIndex, startIndex + ITEMS_PER_PAGE);

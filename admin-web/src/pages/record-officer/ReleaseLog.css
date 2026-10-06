@@ -1,18 +1,123 @@
 /* ==================================================================
    ReleaseLog.css
    Extends Homepage.css (record-officer) — Release Log styles
+   Scoped under `.record-page` to match the homepage wrapper.
 ================================================================== */
+.record-page {
+  display: flex;
+  min-height: 100vh;
+  background: #F8F9FA;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #111827;
+}
+
+.record-page .dashboard {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+/* ==================================================================
+   SEARCH BAR — match Impounding Log / homepage sizing
+================================================================== */
+.record-page .log-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 13px 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.record-page .log-search-bar:focus-within {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.record-page .log-search-icon {
+  color: #9CA3AF;
+  flex-shrink: 0;
+  
+}
+
+.record-page .log-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: #111827;
+  font-family: inherit;
+}
+
+.record-page .log-search-input::placeholder {
+  color: #9CA3AF;
+  
+}
+
+/* ==================================================================
+   LOG TOTAL (Released Today counter)
+================================================================== */
+.record-page .log-total {
+  font-size: 13px;
+  color: #6B7280;
+  font-weight: 500;
+  margin: 0;
+  white-space: nowrap;
+  align-self: center;
+}
+
+.record-page .log-total strong {
+  color: #111827;
+  font-weight: 700;
+}
+
+/* ==================================================================
+   TABLE WRAPPER + RELEASE LOG TABLE
+   - Wrapper scrolls horizontally on small screens.
+   - Table uses `table-layout: auto` so columns share space naturally.
+   - `min-width: 720px` keeps all 6 columns readable; below that the
+     wrapper scrolls instead of crushing cells.
+================================================================== */
+.record-page .table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.record-page .release-log-table {
+  width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 720px;
+}
 
 /* ==================================================================
    TABLE CELLS
 ================================================================== */
+.record-page .release-log-table th,
+.record-page .release-log-table td {
+  padding: 14px 16px;
+  text-align: left;
+  vertical-align: middle;
+}
+
 .record-page .cell-order-id {
   font-weight: 600;
   color: #111827;
+  white-space: nowrap;
 }
 
 .record-page .cell-plate,
 .record-page .cell-cleared-by {
+  color: #374151;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.record-page .cell-location {
   color: #374151;
 }
 
@@ -25,10 +130,75 @@
 .record-page .cell-fine {
   color: #111827;
   font-weight: 500;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
-.record-page .cell-duration {
+/* ==================================================================
+   PAGINATION
+================================================================== */
+.record-page .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 20px 0 0;
+  margin-top: 16px;
+  border-top: 1px solid #F3F4F6;
+}
+
+.record-page .pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #FFFFFF;
   color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.record-page .pagination-btn:hover:not(:disabled) {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.record-page .pagination-btn:disabled {
+  color: #9CA3AF;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.record-page .pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.record-page .pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  background: #F3F4F6;
+  color: #111827;
+  font-weight: 700;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.record-page .pagination-sep {
+  color: #6B7280;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -69,7 +239,8 @@
   width: 100%;
   max-width: 680px;
   padding: 32px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04);
   animation: modalFadeIn 0.2s ease-out;
 }
 
@@ -204,4 +375,42 @@
 
 .record-page .btn-primary:hover {
   background-color: #1E40AF;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .record-page .release-log-table {
+    min-width: 640px;
+  }
+}
+
+@media (max-width: 640px) {
+  .record-page .log-search-bar {
+    max-width: 100%;
+  }
+
+  .record-page .card-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .record-page .pagination {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .record-page .pagination-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .record-page .modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .record-page .release-log-table {
+    min-width: 560px;
+  }
 }

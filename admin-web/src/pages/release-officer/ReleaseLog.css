@@ -555,7 +555,7 @@
 .release-page .cell-order-id {
   color: #111827;
   white-space: nowrap;
-  font-family: "Courier New", monospace;
+
 }
 
 .release-page .cell-plate {
@@ -569,8 +569,7 @@
   white-space: nowrap;
 }
 
-/* Location ang pinakamahaba, kaya siya ang binibigyan ng natitirang
-   espasyo at pinapayagang mag-wrap. */
+
 .release-page .cell-location {
   color: #374151;
   white-space: normal;

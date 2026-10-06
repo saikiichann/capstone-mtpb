@@ -1,29 +1,31 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, MoreHorizontal, X } from "lucide-react";
+import {
+  KeyRound,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+} from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
   doc,
   getDoc,
   onSnapshot,
-  orderBy,
   query,
+  where,
+  Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
-import "./ReleaseLog.css";
+import "../../pages/record-officer/ReleaseLog.css";
 
 // Asset imports
 import mtpbLogo from "../../assets/mtpb-logo.png";
 import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
-import queueMonitorIcon from "../../assets/queue.png";
 import allViolationsIcon from "../../assets/allviolations.png";
 import clampingIcon from "../../assets/clamping.png";
 import impoundingLogIcon from "../../assets/impounding.png";
-import vehicleHistoryIcon from "../../assets/history.png";
-import releaseRequestsIcon from "../../assets/releaserequest.png";
-import releaseOrdersIcon from "../../assets/releaseorder.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
@@ -47,17 +49,14 @@ type CurrentUser = {
   role: RoleSlug;
 };
 
-type LogStatus = "Completed" | "Cancelled";
-
 type ReleaseLogRow = {
   id: string;
   orderId: string;
   plateNo: string;
   clearedBy: string;
-  dateTime: string;
-  totalFinePaid: string;
-  duration: string;
-  status: LogStatus;
+  location: string;
+  dateTime: Timestamp | null;
+  totalFinePaid: number | null;
 };
 
 type NavItem = {
@@ -75,6 +74,8 @@ type NavGroup = {
 // ---------------------------------------------------------------------------
 // CONSTANTS
 // ---------------------------------------------------------------------------
+const ITEMS_PER_PAGE = 10;
+
 const ROLE_LABELS: Record<RoleSlug, string> = {
   "oic": "Officer in Charge",
   "it-admin": "IT Admin",
@@ -91,31 +92,52 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Dashboard",
     items: [
       { label: "Overview", icon: overviewIcon, path: "/record-officer" },
-      { label: "Queue Monitor", icon: queueMonitorIcon, path: "/record-officer/queue" },
     ],
   },
   {
     label: "Enforcement",
     items: [
-      { label: "All Violations", icon: allViolationsIcon, path: "/record-officer/violations" },
-      { label: "Clamping Log", icon: clampingIcon, path: "/record-officer/clamping" },
-      { label: "Impounding Log", icon: impoundingLogIcon, path: "/record-officer/impounding" },
-      { label: "Vehicle History", icon: vehicleHistoryIcon, path: "/record-officer/vehicle-history" },
+      {
+        label: "All Violations",
+        icon: allViolationsIcon,
+        path: "/record-officer/violations",
+      },
+      {
+        label: "Clamping Log",
+        icon: clampingIcon,
+        path: "/record-officer/clamping",
+      },
+      {
+        label: "Impounding Log",
+        icon: impoundingLogIcon,
+        path: "/record-officer/impounding",
+      },
     ],
   },
   {
     label: "Vehicle Release",
     items: [
-      { label: "Release Requests", icon: releaseRequestsIcon, path: "/record-officer/release-requests" },
-      { label: "Release Orders", icon: releaseOrdersIcon, path: "/record-officer/release-orders" },
-      { label: "Release Log", icon: releaseLogIcon, path: "/record-officer/release-log", active: true },
+      {
+        label: "Release Log",
+        icon: releaseLogIcon,
+        path: "/record-officer/release-log",
+        active: true,
+      },
     ],
   },
   {
     label: "Reports",
     items: [
-      { label: "All Reports", icon: allReportsIcon, path: "/record-officer/reports" },
-      { label: "Export Center", icon: exportCenterIcon, path: "/record-officer/export" },
+      {
+        label: "All Reports",
+        icon: allReportsIcon,
+        path: "/record-officer/reports",
+      },
+      {
+        label: "Export Center",
+        icon: exportCenterIcon,
+        path: "/record-officer/export",
+      },
     ],
   },
 ];
@@ -123,12 +145,26 @@ const NAV_GROUPS: NavGroup[] = [
 // ---------------------------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------------------------
-const getStatusClass = (status: LogStatus): string => {
-  const map: Record<LogStatus, string> = {
-    "Completed": "status-completed-pill",
-    "Cancelled": "status-cancelled-pill",
-  };
-  return map[status] ?? "";
+const formatDateTime = (ts: Timestamp | null): string => {
+  if (!ts) return "—";
+  try {
+    return ts.toDate().toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
+};
+
+const formatCurrency = (amount: number | null): string => {
+  if (amount === null || amount === undefined) return "—";
+  return `₱${amount.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`;
 };
 
 // ---------------------------------------------------------------------------
@@ -144,20 +180,12 @@ export default function ReleaseLog() {
     role: "record-officer",
   });
 
-  const [rows, setRows] = useState<ReleaseLogRow[]>([]);
+  const [logs, setLogs] = useState<ReleaseLogRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Modal State
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [selectedRow, setSelectedRow] = useState<ReleaseLogRow | null>(null);
-
-  // Form State for Modal
-  const [formData, setFormData] = useState({
-    plateNo: "",
-    time: "",
-    duration: "",
-    status: "Completed" as LogStatus,
-  });
+  // Search + Pagination
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   // -----------------------------------------------------------------------
   // EFFECT: Fetch current user
@@ -191,56 +219,41 @@ export default function ReleaseLog() {
   }, []);
 
   // -----------------------------------------------------------------------
-  // EFFECT: Real-time listener for release log
+  // EFFECT: Real-time listener for released violations
   // -----------------------------------------------------------------------
   useEffect(() => {
-    const ref = collection(db, "releaseLog");
-    const q = query(ref, orderBy("clearedAt", "desc"));
+    const q = query(
+      collection(db, "violations"),
+      where("releaseStatus", "==", "Released")
+    );
 
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        const fetched: ReleaseLogRow[] = snap.docs.map((d) => {
-          const data = d.data();
-
-          // Format date/time
-          let dateTime = "—";
-          if (data.clearedAt) {
-            try {
-              const date = data.clearedAt.toDate
-                ? data.clearedAt.toDate()
-                : new Date(data.clearedAt);
-              dateTime = date
-                .toLocaleString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                  hour12: true,
-                })
-                .replace(",", ",");
-            } catch {
-              dateTime = "—";
-            }
-          }
-
-          // Format total fine paid
-          const finePaid = data.totalFinePaid
-            ? `₱${Number(data.totalFinePaid).toLocaleString()}`
-            : "—";
-
-          return {
-            id: d.id,
-            orderId: data.orderId ?? "—",
-            plateNo: data.plateNo ?? "—",
-            clearedBy: data.clearedBy ?? "—",
-            dateTime,
-            totalFinePaid: finePaid,
-            duration: data.duration ?? "—",
-            status: (data.status ?? "Completed") as LogStatus,
-          };
-        });
-        setRows(fetched);
+        const rows: ReleaseLogRow[] = snap.docs
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              orderId: data.releaseOrderId ?? "—",
+              plateNo: data.plateNo ?? "—",
+              clearedBy: data.releasedBy ?? data.updatedBy ?? "—",
+              location: data.location ?? "—",
+              dateTime: (data.releasedAt as Timestamp) ?? null,
+              totalFinePaid:
+                typeof data.totalPaid === "number"
+                  ? data.totalPaid
+                  : typeof data.fineAmount === "number"
+                  ? data.fineAmount
+                  : null,
+            };
+          })
+          .sort((a, b) => {
+            const at = a.dateTime?.toMillis() ?? 0;
+            const bt = b.dateTime?.toMillis() ?? 0;
+            return bt - at;
+          });
+        setLogs(rows);
         setLoading(false);
       },
       (err) => {
@@ -256,7 +269,10 @@ export default function ReleaseLog() {
   // -----------------------------------------------------------------------
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsMenuOpen(false);
       }
     }
@@ -274,11 +290,11 @@ export default function ReleaseLog() {
       localStorage.removeItem("user");
       sessionStorage.clear();
       setIsMenuOpen(false);
-      navigate("/");
+      navigate("/", { replace: true });
     } catch (err) {
       console.error("Logout error:", err);
       setIsMenuOpen(false);
-      navigate("/");
+      navigate("/", { replace: true });
     }
   };
 
@@ -287,32 +303,41 @@ export default function ReleaseLog() {
     setIsMenuOpen(false);
   };
 
-  const handleOpenEditModal = (row: ReleaseLogRow) => {
-    setSelectedRow(row);
-    setFormData({
-      plateNo: row.plateNo,
-      time: row.dateTime,
-      duration: row.duration === "—" ? "" : row.duration,
-      status: row.status,
-    });
-    setIsEditModalOpen(true);
-  };
+  // -----------------------------------------------------------------------
+  // DERIVED: Filter + Pagination
+  // -----------------------------------------------------------------------
+  const filteredLogs = logs.filter((log) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      log.orderId.toLowerCase().includes(q) ||
+      log.plateNo.toLowerCase().includes(q) ||
+      log.clearedBy.toLowerCase().includes(q) ||
+      log.location.toLowerCase().includes(q)
+    );
+  });
 
-  const handleCloseEditModal = () => {
-    setIsEditModalOpen(false);
-    setSelectedRow(null);
-  };
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredLogs.length / ITEMS_PER_PAGE)
+  );
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+  const paginatedLogs = filteredLogs.slice(
+    startIndex,
+    startIndex + ITEMS_PER_PAGE
+  );
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSaveChanges = () => {
-    console.log("Saving changes for Order:", selectedRow?.orderId, formData);
-    // TODO: Implement Firebase update logic here
-    handleCloseEditModal();
-  };
+  const releasedToday = logs.filter((log) => {
+    if (!log.dateTime) return false;
+    try {
+      return (
+        log.dateTime.toDate().toDateString() === new Date().toDateString()
+      );
+    } catch {
+      return false;
+    }
+  }).length;
 
   // -----------------------------------------------------------------------
   // RENDER
@@ -339,7 +364,9 @@ export default function ReleaseLog() {
                     <li key={item.label}>
                       <button
                         type="button"
-                        className={`nav-item ${item.active ? "nav-item-active" : ""}`}
+                        className={`nav-item ${
+                          item.active ? "nav-item-active" : ""
+                        }`}
                         onClick={() => navigate(item.path)}
                       >
                         <img src={item.icon} alt="" className="nav-icon" />
@@ -353,7 +380,7 @@ export default function ReleaseLog() {
           </nav>
         </aside>
 
-        {/* MAIN CONTENT */}
+        {/* MAIN */}
         <div className="main">
           <header className="main-header">
             <div>
@@ -383,11 +410,17 @@ export default function ReleaseLog() {
                       {ROLE_LABELS[currentUser.role]}
                     </p>
                   </div>
-                  <button className="dropdown-item" onClick={handleChangePassword}>
+                  <button
+                    className="dropdown-item"
+                    onClick={handleChangePassword}
+                  >
                     <KeyRound size={18} />
                     <span>Change Password</span>
                   </button>
-                  <button className="dropdown-item logout" onClick={handleLogout}>
+                  <button
+                    className="dropdown-item logout"
+                    onClick={handleLogout}
+                  >
                     <img src={logoutIcon} alt="" className="dropdown-icon" />
                     <span>Log Out</span>
                   </button>
@@ -397,14 +430,29 @@ export default function ReleaseLog() {
           </header>
 
           <main className="main-content">
+            {/* SEARCH BAR */}
+            <div className="log-search-bar">
+              <Search size={18} className="log-search-icon" />
+              <input
+                type="text"
+                className="log-search-input"
+                placeholder="Search Order ID, Plate No., Location..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+              />
+            </div>
+
             <div className="card">
               <div className="card-header-row">
                 <div>
-                  <p className="card-eyebrow">SECTOR 3 · HISTORY</p>
+                  <p className="card-eyebrow">Sector 3 · History</p>
                   <h2 className="card-title">Release Log</h2>
                 </div>
-                <p className="card-summary">
-                  <strong>Released Today:</strong> {rows.length} vehicles
+                <p className="log-total">
+                  Released Today: <strong>{releasedToday} vehicles</strong>
                 </p>
               </div>
 
@@ -412,137 +460,90 @@ export default function ReleaseLog() {
                 <div className="table-loading">
                   <p>Loading release log...</p>
                 </div>
-              ) : rows.length === 0 ? (
+              ) : paginatedLogs.length === 0 ? (
                 <div className="table-empty">
-                  <p>No release log records found.</p>
+                  <p>
+                    {logs.length === 0
+                      ? "No release history yet."
+                      : "No released vehicles match your search."}
+                  </p>
                 </div>
               ) : (
-                <div className="table-wrapper">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Order ID</th>
-                        <th>Plate No.</th>
-                        <th>Cleared by</th>
-                        <th>Date &amp; Time</th>
-                        <th>Total Fine Paid</th>
-                        <th>Duration</th>
-                        <th>Status</th>
-                        <th aria-label="Actions"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row) => (
-                        <tr key={row.id}>
-                          <td className="cell-order-id">{row.orderId}</td>
-                          <td className="cell-plate">{row.plateNo}</td>
-                          <td className="cell-cleared-by">{row.clearedBy}</td>
-                          <td className="cell-datetime">{row.dateTime}</td>
-                          <td className="cell-fine">{row.totalFinePaid}</td>
-                          <td className="cell-duration">{row.duration}</td>
-                          <td>
-                            <span className={`status-pill ${getStatusClass(row.status)}`}>
-                              {row.status}
-                            </span>
-                          </td>
-                          <td className="cell-more">
-                            <button
-                              type="button"
-                              className="row-more-btn"
-                              aria-label="More options"
-                              onClick={() => handleOpenEditModal(row)}
-                            >
-                              <MoreHorizontal size={16} />
-                            </button>
-                          </td>
+                <>
+                  <div className="table-wrapper">
+                    <table className="data-table release-log-table">
+                      <thead>
+                        <tr>
+                          <th>Order ID</th>
+                          <th>Plate No.</th>
+                          <th>Cleared by</th>
+                          <th>Location</th>
+                          <th>Date &amp; Time</th>
+                          <th>Total Fine Paid</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {paginatedLogs.map((row) => (
+                          <tr key={row.id}>
+                            <td className="cell-order-id">{row.orderId}</td>
+                            <td className="cell-plate">{row.plateNo}</td>
+                            <td className="cell-cleared-by">
+                              {row.clearedBy}
+                            </td>
+                            <td className="cell-location">
+                              {row.location}
+                            </td>
+                            <td className="cell-datetime">
+                              {formatDateTime(row.dateTime)}
+                            </td>
+                            <td className="cell-fine">
+                              {formatCurrency(row.totalFinePaid)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* PAGINATION */}
+                  <div className="pagination">
+                    <button
+                      type="button"
+                      className="pagination-btn"
+                      onClick={() =>
+                        setCurrentPage((p) => Math.max(1, p - 1))
+                      }
+                      disabled={safePage === 1}
+                    >
+                      <ChevronLeft size={16} />
+                      Previous
+                    </button>
+
+                    <div className="pagination-info">
+                      <span className="pagination-page">{safePage}</span>
+                      <span className="pagination-sep">
+                        of {totalPages} pages
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="pagination-btn"
+                      onClick={() =>
+                        setCurrentPage((p) => Math.min(totalPages, p + 1))
+                      }
+                      disabled={safePage === totalPages}
+                    >
+                      Next
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </main>
         </div>
       </div>
-
-      {/* EDIT MODAL */}
-      {isEditModalOpen && selectedRow && (
-        <div className="modal-overlay" onClick={handleCloseEditModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">{selectedRow.orderId}</h3>
-              <button className="modal-close-btn" onClick={handleCloseEditModal}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="modal-grid">
-              <div className="form-group">
-                <label htmlFor="plateNo">Plate Number</label>
-                <input
-                  id="plateNo"
-                  name="plateNo"
-                  type="text"
-                  className="form-input"
-                  value={formData.plateNo}
-                  onChange={handleFormChange}
-                  readOnly
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="time">Time</label>
-                <input
-                  id="time"
-                  name="time"
-                  type="text"
-                  className="form-input"
-                  value={formData.time}
-                  onChange={handleFormChange}
-                  readOnly
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="duration">Duration</label>
-                <input
-                  id="duration"
-                  name="duration"
-                  type="text"
-                  className="form-input"
-                  value={formData.duration}
-                  onChange={handleFormChange}
-                  placeholder="e.g. 23 min"
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="status">Status</label>
-                <select
-                  id="status"
-                  name="status"
-                  className="form-select"
-                  value={formData.status}
-                  onChange={handleFormChange}
-                >
-                  <option value="Completed">Completed</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={handleCloseEditModal}>
-                Cancel
-              </button>
-              <button className="btn-primary" onClick={handleSaveChanges}>
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

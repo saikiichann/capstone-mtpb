@@ -155,7 +155,6 @@ const millis = (ts: Timestamp | null): number => {
   }
 };
 
-
 const computeWaitingBand = (paidAt: Timestamp | null): WaitingBand => {
   if (!paidAt) return "Over 24 hrs";
   try {
@@ -228,6 +227,7 @@ export default function PaymentVerification() {
     return () => unsubscribe();
   }, []);
 
+  /* Payments listener */
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(db, "payments"),
@@ -256,12 +256,9 @@ export default function PaymentVerification() {
 
           return {
             id: d.id,
-            reference:
-              data.referenceNumber ?? data.paymentReference ?? d.id,
-            cin:
-              ((data.cin ?? data.violationCin) as string) ?? null,
-            plateNo:
-              ((data.plateNo ?? data.plateNumber) as string) ?? null,
+            reference: data.referenceNumber ?? data.paymentReference ?? d.id,
+            cin: ((data.cin ?? data.violationCin) as string) ?? null,
+            plateNo: ((data.plateNo ?? data.plateNumber) as string) ?? null,
             amount: Number(data.totalAmount ?? data.amount ?? 0),
             method,
             waiting: computeWaitingBand(paidAt),
@@ -273,6 +270,7 @@ export default function PaymentVerification() {
             orphaned: false,
           } as PaymentRow;
         });
+
         const needsLookup = base.filter(
           (r) => r.violationId && (!r.cin || !r.plateNo)
         );
@@ -312,7 +310,6 @@ export default function PaymentVerification() {
           const plateNo = r.plateNo ?? linked?.plateNo ?? null;
           const clampId = r.clampId ?? linked?.clampId ?? null;
 
-    
           const orphaned = !r.violationId && !cin;
 
           return { ...r, cin, plateNo, clampId, orphaned };
@@ -320,7 +317,7 @@ export default function PaymentVerification() {
 
         const pendingRows = enriched
           .filter((p) => p.status === "Pending Verification")
-          .sort((a, b) => millis(a.paidAt) - millis(b.paidAt)); // FIFO
+          .sort((a, b) => millis(a.paidAt) - millis(b.paidAt));
 
         setRows(pendingRows);
         setMetrics({
@@ -408,9 +405,14 @@ export default function PaymentVerification() {
   /**
    * Approve o reject ang bayad — isang atomic write.
    *
-   * Dati, apat na magkakahiwalay na updateDoc, at ang ilan ay naka-try/catch
-   * na nilulunok lang ang error. Pwedeng maging Verified ang payment pero
-   * hindi ang violation, at hindi mo malalaman.
+   * ✅ FIX: Kapag Rejected, `paymentStatus` ay naka-set sa "Rejected" — HINDI
+   * "Unpaid". Para lumabas yung status na "Payment Rejected" sa AllViolations
+   * page (na nagde-derive mula sa `paymentStatus` field).
+   *
+   * Note: Dati, "Unpaid" yung naka-set para makapag-resubmit yung violator.
+   * Pero yung AllViolations ay may fallback check din sa `rejectionReason` +
+   * `rejectedAt` — kaya hindi kailangan yung "Unpaid" workaround. Naka-set
+   * na sa "Rejected" para consistent yung status across pages.
    */
   const handlePaymentAction = async (
     row: PaymentRow,
@@ -462,8 +464,6 @@ export default function PaymentVerification() {
       const batch = writeBatch(db);
 
       // 1. Payment record
-      // Parehong field ang isinusulat para pareho ang nababasa ng lahat ng
-      // page — pati ng PWA, na `status` ang tinitingnan.
       batch.update(doc(db, "payments", row.id), {
         status: action,
         verificationStatus: action,
@@ -473,29 +473,18 @@ export default function PaymentVerification() {
       });
 
       // 2. Violation
-      //    Sa Rejected, babalik sa "Unpaid" — hindi "Rejected". Kung
-      //    "Rejected" ang isusulat, mawawala ang violation sa Pending
-      //    Payments (Unpaid lang ang hinahanap doon) at hindi na
-      //    makakabayad ulit ang violator. Dead end yun.
+      // ✅ FIX: Rejected → "Rejected" (hindi "Unpaid")
       batch.update(violationRef, {
-        paymentStatus: action === "Verified" ? "Verified" : "Unpaid",
+        paymentStatus: action === "Verified" ? "Verified" : "Rejected",
         verifiedBy: currentUser.name,
         verifiedAt: serverTimestamp(),
         ...(action === "Verified"
           ? {
-              // Kinokopya mula sa payment document. Kung hindi, walang
-              // method ang violation at "Not recorded" ang lalabas sa
-              // Transaction History kahit GCash naman ang bayad — doon
-              // kasi sa violations nagbabasa ang page na yun.
               paymentMethod: row.method,
               paymentReference: row.reference,
               referenceNumber: row.reference,
               totalPaid: row.amount,
               paidAt: row.paidAt ?? serverTimestamp(),
-              // Signal sa OIC — dito lumalabas ang violation sa Release
-              // Requests page. Kung wala ito, mananatiling "Pending" ang
-              // violation at hindi na siya makikita ng kahit sino
-              // pagkatapos ng Finance approve.
               releaseStatus: "Awaiting OIC Approval",
             }
           : {}),

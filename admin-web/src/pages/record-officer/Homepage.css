@@ -341,7 +341,17 @@
   margin-bottom: 0;
 }
 
+/* .card-link now sits on a <button> (View All), not an <a> — buttons
+   carry browser-default border/background/padding that an <a> never
+   had. border/background/padding/cursor reset those; font-family:
+   inherit (not the full `font` shorthand) picks up the page's font
+   without wiping out the font-size/font-weight already set below. */
 .record-page .card-link {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
   font-size: 13px;
   color: #0035A9;
   text-decoration: none;

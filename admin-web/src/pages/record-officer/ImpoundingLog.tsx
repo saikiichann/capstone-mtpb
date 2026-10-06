@@ -1,38 +1,40 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, MoreHorizontal, X } from "lucide-react";
+import {
+  KeyRound,
+  Search,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
   doc,
   getDoc,
   onSnapshot,
-  orderBy,
   query,
+  where,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./ImpoundingLog.css";
 
-// Asset imports
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
+import logo from "../../assets/mtpb-logo.png";
+import avatarImg from "../../assets/user.png";
+import logoutIcon from "../../assets/logout.png";
+
 import overviewIcon from "../../assets/overview.png";
-import queueMonitorIcon from "../../assets/queue.png";
 import allViolationsIcon from "../../assets/allviolations.png";
 import clampingIcon from "../../assets/clamping.png";
-import impoundingLogIcon from "../../assets/impounding.png";
-import vehicleHistoryIcon from "../../assets/history.png";
-import releaseRequestsIcon from "../../assets/releaserequest.png";
-import releaseOrdersIcon from "../../assets/releaseorder.png";
+import impoundingIcon from "../../assets/impounding.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
-import logoutIcon from "../../assets/logout.png";
 
-// ---------------------------------------------------------------------------
-// TYPES
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   TYPES
+------------------------------------------------------------------ */
 type RoleSlug =
   | "oic"
   | "it-admin"
@@ -43,47 +45,38 @@ type RoleSlug =
   | "clamping-staff"
   | "impounding-staff";
 
-type CurrentUser = {
-  name: string;
-  role: RoleSlug;
-};
+type CurrentUser = { name: string; role: RoleSlug };
 
-// UI displays "Impounded" / "Released"
-type ImpoundStatus = "Impounded" | "Released";
+type LogStatus = "Impounded" | "Released";
 
-type ImpoundingRow = {
+type ImpoundLogRow = {
   id: string;
+  reference: string | null;
   cin: string;
   plateNo: string;
-  vehicleType: string;
+  violation: string;
   location: string;
-  towedBy: string;
-  towedAt: Timestamp | null;
-  status: ImpoundStatus;
+  officer: string;
+  recordedAt: Timestamp | null;
+  status: LogStatus;
 };
 
-type NavItem = {
-  label: string;
-  icon: string;
-  path: string;
-  active?: boolean;
-};
+type NavItem = { label: string; icon: string; path: string; active?: boolean };
+type NavGroup = { label: string; items: NavItem[] };
 
-type NavGroup = {
-  label: string;
-  items: NavItem[];
-};
+/* ------------------------------------------------------------------
+   CONSTANTS
+------------------------------------------------------------------ */
+const ITEMS_PER_PAGE = 10;
+const ALL_VIOLATIONS = "All Violations";
 
-// ---------------------------------------------------------------------------
-// CONSTANTS
-// ---------------------------------------------------------------------------
 const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer in Charge",
+  oic: "Officer in Charge",
   "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
+  supervisor: "Supervisor",
   "record-officer": "Record Officer",
   "release-officer": "Release Officer",
-  "finance": "Finance Staff",
+  finance: "Finance",
   "clamping-staff": "Clamping Staff",
   "impounding-staff": "Impounding Staff",
 };
@@ -93,24 +86,37 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Dashboard",
     items: [
       { label: "Overview", icon: overviewIcon, path: "/record-officer" },
-      { label: "Queue Monitor", icon: queueMonitorIcon, path: "/record-officer/queue" },
     ],
   },
   {
     label: "Enforcement",
     items: [
-      { label: "All Violations", icon: allViolationsIcon, path: "/record-officer/violations" },
-      { label: "Clamping Log", icon: clampingIcon, path: "/record-officer/clamping" },
-      { label: "Impounding Log", icon: impoundingLogIcon, path: "/record-officer/impounding", active: true },
-      { label: "Vehicle History", icon: vehicleHistoryIcon, path: "/record-officer/vehicle-history" },
+      {
+        label: "All Violations",
+        icon: allViolationsIcon,
+        path: "/record-officer/violations",
+      },
+      {
+        label: "Clamping Log",
+        icon: clampingIcon,
+        path: "/record-officer/clamping",
+      },
+      {
+        label: "Impounding Log",
+        icon: impoundingIcon,
+        path: "/record-officer/impounding",
+        active: true,
+      },
     ],
   },
   {
     label: "Vehicle Release",
     items: [
-      { label: "Release Requests", icon: releaseRequestsIcon, path: "/record-officer/release-requests" },
-      { label: "Release Orders", icon: releaseOrdersIcon, path: "/record-officer/release-orders" },
-      { label: "Release Log", icon: releaseLogIcon, path: "/record-officer/release-log" },
+      {
+        label: "Release Log",
+        icon: releaseLogIcon,
+        path: "/record-officer/release-log",
+      },
     ],
   },
   {
@@ -122,14 +128,13 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// HELPERS
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   HELPERS
+------------------------------------------------------------------ */
 const formatDateTime = (ts: Timestamp | null): string => {
   if (!ts) return "—";
   try {
-    const date = ts.toDate();
-    return date.toLocaleString("en-US", {
+    return ts.toDate().toLocaleString("en-US", {
       month: "short",
       day: "numeric",
       hour: "numeric",
@@ -140,49 +145,47 @@ const formatDateTime = (ts: Timestamp | null): string => {
   }
 };
 
-const getStatusClass = (status: ImpoundStatus): string => {
-  const map: Record<ImpoundStatus, string> = {
-    "Impounded": "status-impounded-pill",
-    "Released": "status-released-pill",
-  };
-  return map[status] ?? "";
+const millis = (ts: Timestamp | null): number => {
+  try {
+    return ts ? ts.toMillis() : 0;
+  } catch {
+    return 0;
+  }
 };
 
-// ---------------------------------------------------------------------------
-// COMPONENT
-// ---------------------------------------------------------------------------
-export default function ImpoundingLog() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+/**
+ * Same rule as OIC/ImpoundingLog.tsx — "Released" once the release flow
+ * has actually released it (releaseStatus === "Released", written by
+ * markViolationAsReleased in lib/release.ts). "Impounded" for everything
+ * before that.
+ */
+const deriveLogStatus = (releaseStatus: unknown): LogStatus =>
+  releaseStatus === "Released" ? "Released" : "Impounded";
+
+const getStatusClass = (status: LogStatus): string =>
+  status === "Released" ? "status-released" : "status-impounded";
+
+/* ------------------------------------------------------------------
+   COMPONENT
+------------------------------------------------------------------ */
+export default function RecordOfficerImpoundingLog() {
   const navigate = useNavigate();
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "record-officer",
   });
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const [rows, setRows] = useState<ImpoundingRow[]>([]);
+  const [rows, setRows] = useState<ImpoundLogRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Modal State
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [selectedRow, setSelectedRow] = useState<ImpoundingRow | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [violationFilter, setViolationFilter] = useState(ALL_VIOLATIONS);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  // Form State for Modal
-  const [formData, setFormData] = useState({
-    plateNo: "",
-    vehicleType: "",
-    fineAmount: "₱500",
-    violationType: "Expired OVR/TOP",
-    towedBy: "",
-    location: "",
-    time: "",
-    status: "Impounded" as ImpoundStatus,
-  });
-
-  // -----------------------------------------------------------------------
-  // EFFECT: Fetch current user
-  // -----------------------------------------------------------------------
+  /* Current user */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
       if (!loggedUser) {
@@ -190,67 +193,76 @@ export default function ImpoundingLog() {
         return;
       }
       try {
-        const userDocRef = doc(db, "users", loggedUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const data = userDocSnap.data();
+        const snap = await getDoc(doc(db, "users", loggedUser.uid));
+        if (snap.exists()) {
+          const data = snap.data();
           setCurrentUser({
             name: data.name ?? "Unknown",
             role: (data.role ?? "record-officer") as RoleSlug,
           });
-        } else {
-          setCurrentUser({
-            name: loggedUser.email?.split("@")[0] ?? "Unknown",
-            role: "record-officer",
-          });
         }
       } catch (err) {
-        console.error("Error fetching current user:", err);
+        console.error("Failed to load current user:", err);
       }
     });
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Real-time listener for impounding records
-  // -----------------------------------------------------------------------
+  /**
+   * Impounding actions only (enforcementType == "impounded") — clamping
+   * has its own log page. Reads the SAME `violations` collection as
+   * OIC/ImpoundingLog.tsx so both roles see identical rows. No orderBy()
+   * on purpose: Firestore silently drops documents that lack the ordered
+   * field, so a record without recordedAt would vanish instead of
+   * appearing out of order. Sorting happens client-side.
+   */
   useEffect(() => {
-    const ref = collection(db, "impoundingRecords");
-    const q = query(ref, orderBy("towedAt", "desc"));
+    const q = query(
+      collection(db, "violations"),
+      where("enforcementType", "==", "impounded")
+    );
 
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        const fetched: ImpoundingRow[] = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            cin: data.cin ?? "—",
-            plateNo: data.plateNo ?? "—",
-            vehicleType: data.vehicleType ?? "—",
-            location: data.location ?? "—",
-            towedBy: data.towedBy ?? "—",
-            towedAt: data.towedAt ?? null,
-            status: (data.status ?? "Impounded") as ImpoundStatus,
-          };
-        });
+        const fetched: ImpoundLogRow[] = snap.docs
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              reference:
+                (data.referenceNumber as string) ??
+                (data.paymentReference as string) ??
+                null,
+              cin: data.cin ?? "—",
+              plateNo: data.plateNo ?? "—",
+              violation: data.violationType ?? "—",
+              location: data.location ?? "—",
+              officer: data.officer ?? "—",
+              recordedAt: (data.recordedAt as Timestamp) ?? null,
+              status: deriveLogStatus(data.releaseStatus),
+            };
+          })
+          .sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
+
         setRows(fetched);
         setLoading(false);
       },
       (err) => {
-        console.warn("Impounding records fetch failed:", err.code);
+        console.warn("Impounding log fetch failed:", err.code);
         setLoading(false);
       }
     );
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Click-outside for dropdown
-  // -----------------------------------------------------------------------
+  /* Click outside */
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsMenuOpen(false);
       }
     }
@@ -258,9 +270,6 @@ export default function ImpoundingLog() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // -----------------------------------------------------------------------
-  // HANDLERS
-  // -----------------------------------------------------------------------
   const handleLogout = async () => {
     try {
       await firebaseSignOut(auth);
@@ -268,63 +277,66 @@ export default function ImpoundingLog() {
       localStorage.removeItem("user");
       sessionStorage.clear();
       setIsMenuOpen(false);
-      navigate("/");
+      navigate("/", { replace: true });
     } catch (err) {
       console.error("Logout error:", err);
       setIsMenuOpen(false);
-      navigate("/");
+      navigate("/", { replace: true });
     }
   };
 
-  const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
-    setIsMenuOpen(false);
-  };
-
-  const handleOpenEditModal = (row: ImpoundingRow) => {
-    setSelectedRow(row);
-    setFormData({
-      plateNo: row.plateNo,
-      vehicleType: row.vehicleType,
-      fineAmount: "₱500",
-      violationType: "Expired OVR/TOP",
-      towedBy: row.towedBy,
-      location: row.location,
-      time: formatDateTime(row.towedAt),
-      status: row.status,
+  /* Violation filter options come from the data itself */
+  const violationOptions = useMemo(() => {
+    const unique = new Set<string>();
+    rows.forEach((row) => {
+      if (row.violation && row.violation !== "—") unique.add(row.violation);
     });
-    setIsEditModalOpen(true);
-  };
+    return [ALL_VIOLATIONS, ...Array.from(unique).sort()];
+  }, [rows]);
 
-  const handleCloseEditModal = () => {
-    setIsEditModalOpen(false);
-    setSelectedRow(null);
-  };
+  /* Search + filter */
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    return rows.filter((row) => {
+      const matchesSearch =
+        !q ||
+        row.cin.toLowerCase().includes(q) ||
+        row.plateNo.toLowerCase().includes(q) ||
+        row.location.toLowerCase().includes(q) ||
+        row.violation.toLowerCase().includes(q);
+      const matchesViolation =
+        violationFilter === ALL_VIOLATIONS || row.violation === violationFilter;
+      return matchesSearch && matchesViolation;
+    });
+  }, [rows, searchQuery, violationFilter]);
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
+  const impoundedCount = useMemo(
+    () => rows.filter((r) => r.status === "Impounded").length,
+    [rows]
+  );
 
-  const handleSaveChanges = () => {
-    console.log("Saving changes for CIN:", selectedRow?.cin, formData);
-    // TODO: Implement Firebase update logic here
-    handleCloseEditModal();
-  };
+  /* Pagination */
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+  const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  // -----------------------------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------------------------
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, violationFilter]);
+
   return (
-    <div className="record-page">
+    <div className="record-page impound-log-page">
       <div className="dashboard">
         {/* SIDEBAR */}
         <aside className="sidebar">
           <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
+            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
             <div>
               <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Record Officer</p>
+              <p className="sidebar-brand-role">
+                {ROLE_LABELS[currentUser.role]}
+              </p>
             </div>
           </div>
 
@@ -337,11 +349,13 @@ export default function ImpoundingLog() {
                     <li key={item.label}>
                       <button
                         type="button"
-                        className={`nav-item ${item.active ? "nav-item-active" : ""}`}
+                        className={`nav-item ${
+                          item.active ? "nav-item-active" : ""
+                        }`}
                         onClick={() => navigate(item.path)}
                       >
                         <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
+                        <span>{item.label}</span>
                       </button>
                     </li>
                   ))}
@@ -351,7 +365,7 @@ export default function ImpoundingLog() {
           </nav>
         </aside>
 
-        {/* MAIN CONTENT */}
+        {/* MAIN */}
         <div className="main">
           <header className="main-header">
             <div>
@@ -367,12 +381,11 @@ export default function ImpoundingLog() {
 
             <div className="avatar-container" ref={dropdownRef}>
               <img
-                src={officerAvatar}
-                alt="Officer Profile"
+                src={avatarImg}
+                alt="Account menu"
                 className="avatar-img"
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
               />
-
               {isMenuOpen && (
                 <div className="profile-dropdown">
                   <div className="dropdown-header">
@@ -381,11 +394,14 @@ export default function ImpoundingLog() {
                       {ROLE_LABELS[currentUser.role]}
                     </p>
                   </div>
-                  <button className="dropdown-item" onClick={handleChangePassword}>
+                  <button className="dropdown-item">
                     <KeyRound size={18} />
                     <span>Change Password</span>
                   </button>
-                  <button className="dropdown-item logout" onClick={handleLogout}>
+                  <button
+                    className="dropdown-item logout"
+                    onClick={handleLogout}
+                  >
                     <img src={logoutIcon} alt="" className="dropdown-icon" />
                     <span>Log Out</span>
                   </button>
@@ -394,59 +410,98 @@ export default function ImpoundingLog() {
             </div>
           </header>
 
-          <main className="main-content">
-            <div className="card">
-              <p className="card-eyebrow">Sector 3 · Impounding history</p>
-              <h2 className="card-title">Impounding Log</h2>
+          <main className="main-content impounding-body">
+            {/* SEARCH + FILTER */}
+            <div className="search-filter-row">
+              <div className="search-bar-container">
+                <Search size={18} className="search-bar-icon" />
+                <input
+                  type="text"
+                  className="search-bar-input"
+                  placeholder="Search CIN, Plate No..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+
+              <div className="filter-select-wrap">
+                <select
+                  className="filter-select"
+                  value={violationFilter}
+                  onChange={(e) => setViolationFilter(e.target.value)}
+                  aria-label="Filter by violation"
+                >
+                  {violationOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={18} className="filter-select-icon" />
+              </div>
+            </div>
+
+            {/* TABLE */}
+            <div className="card impounding-card">
+              <div className="log-header">
+                <p className="card-eyebrow">Sector 3</p>
+                <div className="log-header-meta">
+                  Impounded vehicles: {impoundedCount} total
+                </div>
+              </div>
+              <h2 className="card-title" style={{ marginBottom: 16 }}>
+                Impounding Log
+              </h2>
 
               {loading ? (
                 <div className="table-loading">
-                  <p>Loading impounding records...</p>
+                  <p>Loading impounding log...</p>
                 </div>
-              ) : rows.length === 0 ? (
-                <div className="table-empty">
-                  <p>No impounding records found.</p>
+              ) : paginatedRows.length === 0 ? (
+                <div className="impounding-empty">
+                  {rows.length === 0
+                    ? "No impounding records found."
+                    : "No records match your search or filter."}
                 </div>
               ) : (
-                <div className="table-wrapper">
+                <div className="impounding-table-wrap">
                   <table className="data-table">
                     <thead>
                       <tr>
+                        <th>Reference</th>
                         <th>CIN</th>
                         <th>Plate No.</th>
-                        <th>Vehicle Type</th>
+                        <th>Violation</th>
                         <th>Location</th>
-                        <th>Towed by</th>
+                        <th>Impounded by</th>
                         <th>Time</th>
                         <th>Status</th>
-                        <th aria-label="Actions"></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((row) => (
+                      {paginatedRows.map((row) => (
                         <tr key={row.id}>
+                          <td className="cell-reference">
+                            {row.reference ?? "—"}
+                          </td>
                           <td>
                             <span className="cin-pill">{row.cin}</span>
                           </td>
                           <td className="cell-plate">{row.plateNo}</td>
-                          <td className="cell-vehicle-type">{row.vehicleType}</td>
+                          <td className="cell-violation">{row.violation}</td>
                           <td className="cell-location">{row.location}</td>
-                          <td className="cell-towed-by">{row.towedBy}</td>
-                          <td className="cell-datetime">{formatDateTime(row.towedAt)}</td>
+                          <td className="cell-officer">{row.officer}</td>
+                          <td className="cell-time">
+                            {formatDateTime(row.recordedAt)}
+                          </td>
                           <td>
-                            <span className={`status-pill ${getStatusClass(row.status)}`}>
+                            <span
+                              className={`status-pill ${getStatusClass(
+                                row.status
+                              )}`}
+                            >
                               {row.status}
                             </span>
-                          </td>
-                          <td className="cell-more">
-                            <button
-                              type="button"
-                              className="row-more-btn"
-                              aria-label="More options"
-                              onClick={() => handleOpenEditModal(row)}
-                            >
-                              <MoreHorizontal size={16} />
-                            </button>
                           </td>
                         </tr>
                       ))}
@@ -454,133 +509,42 @@ export default function ImpoundingLog() {
                   </table>
                 </div>
               )}
+
+              {/* PAGINATION */}
+              {!loading && paginatedRows.length > 0 && (
+                <div className="pagination">
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={safePage === 1}
+                  >
+                    <ChevronLeft size={16} />
+                    Previous
+                  </button>
+
+                  <div className="pagination-info">
+                    <span className="pagination-page">{safePage}</span>
+                    <span className="pagination-sep">of {totalPages} pages</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                    disabled={safePage === totalPages}
+                  >
+                    Next
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              )}
             </div>
           </main>
         </div>
       </div>
-
-      {/* EDIT MODAL */}
-      {isEditModalOpen && selectedRow && (
-        <div className="modal-overlay" onClick={handleCloseEditModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">{selectedRow.cin}</h3>
-              <button className="modal-close-btn" onClick={handleCloseEditModal}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="modal-grid">
-              <div className="form-group">
-                <label htmlFor="plateNo">Plate Number</label>
-                <input
-                  id="plateNo"
-                  name="plateNo"
-                  type="text"
-                  className="form-input"
-                  value={formData.plateNo}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="vehicleType">Vehicle Type</label>
-                <input
-                  id="vehicleType"
-                  name="vehicleType"
-                  type="text"
-                  className="form-input"
-                  value={formData.vehicleType}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="fineAmount">Fine Amount (₱)</label>
-                <input
-                  id="fineAmount"
-                  name="fineAmount"
-                  type="text"
-                  className="form-input"
-                  value={formData.fineAmount}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="violationType">Violation Type</label>
-                <input
-                  id="violationType"
-                  name="violationType"
-                  type="text"
-                  className="form-input"
-                  value={formData.violationType}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="towedBy">Towed by</label>
-                <input
-                  id="towedBy"
-                  name="towedBy"
-                  type="text"
-                  className="form-input"
-                  value={formData.towedBy}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="location">Location</label>
-                <input
-                  id="location"
-                  name="location"
-                  type="text"
-                  className="form-input"
-                  value={formData.location}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="time">Time</label>
-                <input
-                  id="time"
-                  name="time"
-                  type="text"
-                  className="form-input"
-                  value={formData.time}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="status">Status</label>
-                <select
-                  id="status"
-                  name="status"
-                  className="form-select"
-                  value={formData.status}
-                  onChange={handleFormChange}
-                >
-                  <option value="Impounded">Impounded</option>
-                  <option value="Released">Released</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={handleCloseEditModal}>
-                Cancel
-              </button>
-              <button className="btn-primary" onClick={handleSaveChanges}>
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

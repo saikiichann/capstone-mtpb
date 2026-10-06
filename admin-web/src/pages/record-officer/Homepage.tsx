@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, MoreHorizontal, ChevronDown, X } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -12,16 +12,13 @@ import {
 } from "recharts";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
   onSnapshot,
   orderBy,
   query,
-  serverTimestamp,
   Timestamp,
-  updateDoc,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./Homepage.css";
@@ -30,13 +27,9 @@ import "./Homepage.css";
 import mtpbLogo from "../../assets/mtpb-logo.png";
 import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
-import queueMonitorIcon from "../../assets/queue.png";
 import allViolationsIcon from "../../assets/allviolations.png";
 import clampingIcon from "../../assets/clamping.png";
 import impoundingIcon from "../../assets/impounding.png";
-import historyIcon from "../../assets/history.png";
-import releaseRequestsIcon from "../../assets/releaserequest.png";
-import releaseOrdersIcon from "../../assets/releaseorder.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
@@ -60,7 +53,21 @@ type CurrentUser = {
   role: RoleSlug;
 };
 
-type ViolationStatus = "Disputed" | "Settled" | "Pending Settlement" | "For Release";
+// Matches pages/record-officer/AllViolations.tsx exactly — status is
+// derived from paymentStatus + releaseStatus, not a stored `status`
+// field. The old 4-state Pending Settlement/Settled/For Release/Disputed
+// vocabulary and its editable-status modal are gone: there's no
+// standalone status field for a Record Officer to hand-set anymore: the
+// real system moves a violation through this flow via Payment
+// Verification (Finance), approval (OIC), and release (Release Officer),
+// each writing paymentStatus/releaseStatus — not via a dropdown here.
+type ViolationStatus =
+  | "Unpaid"
+  | "Pending Verification"
+  | "Awaiting OIC Approval"
+  | "Approved — For Release"
+  | "Released"
+  | "Payment Rejected";
 
 type ViolationRow = {
   id: string;
@@ -74,9 +81,9 @@ type ViolationRow = {
 
 type Metrics = {
   totalRecords: number;
-  pendingSettlement: number;
-  disputedRecords: number;
-  settledRecords: number;
+  unpaid: number;
+  paymentRejected: number;
+  released: number;
 };
 
 type ViolationStat = {
@@ -110,36 +117,45 @@ const ROLE_LABELS: Record<RoleSlug, string> = {
   "impounding-staff": "Impounding Staff",
 };
 
-const STATUS_OPTIONS: ViolationStatus[] = [
-  "Pending Settlement",
-  "Settled",
-  "For Release",
-  "Disputed",
-];
-
+// Trimmed to match the Figma design — Queue Monitor, Vehicle History,
+// Release Requests, and Release Orders removed, same as
+// pages/record-officer/ClampingLog.tsx. All Violations is kept.
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
     items: [
-      { label: "Overview", icon: overviewIcon, path: "/record-officer", active: true },
-      { label: "Queue Monitor", icon: queueMonitorIcon, path: "/record-officer/queue" },
+      {
+        label: "Overview",
+        icon: overviewIcon,
+        path: "/record-officer",
+        active: true,
+      },
     ],
   },
   {
     label: "Enforcement",
     items: [
-      { label: "All Violations", icon: allViolationsIcon, path: "/record-officer/violations" },
+      {
+        label: "All Violations",
+        icon: allViolationsIcon,
+        path: "/record-officer/violations",
+      },
       { label: "Clamping Log", icon: clampingIcon, path: "/record-officer/clamping" },
-      { label: "Impounding Log", icon: impoundingIcon, path: "/record-officer/impounding" },
-      { label: "Vehicle History", icon: historyIcon, path: "/record-officer/history" },
+      {
+        label: "Impounding Log",
+        icon: impoundingIcon,
+        path: "/record-officer/impounding",
+      },
     ],
   },
   {
     label: "Vehicle Release",
     items: [
-      { label: "Release Requests", icon: releaseRequestsIcon, path: "/record-officer/release-requests" },
-      { label: "Release Orders", icon: releaseOrdersIcon, path: "/record-officer/release-orders" },
-      { label: "Release Log", icon: releaseLogIcon, path: "/record-officer/release-log" },
+      {
+        label: "Release Log",
+        icon: releaseLogIcon,
+        path: "/record-officer/release-log",
+      },
     ],
   },
   {
@@ -153,9 +169,9 @@ const NAV_GROUPS: NavGroup[] = [
 
 const INITIAL_METRICS: Metrics = {
   totalRecords: 0,
-  pendingSettlement: 0,
-  disputedRecords: 0,
-  settledRecords: 0,
+  unpaid: 0,
+  paymentRejected: 0,
+  released: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -178,167 +194,52 @@ const formatDateTime = (ts: Timestamp | null): string => {
 
 const getStatusClass = (status: ViolationStatus): string => {
   const map: Record<ViolationStatus, string> = {
-    "Settled": "status-settled",
-    "Pending Settlement": "status-pending",
-    "For Release": "status-release",
-    "Disputed": "status-disputed",
+    Unpaid: "status-unpaid",
+    "Pending Verification": "status-pending-verification",
+    "Awaiting OIC Approval": "status-awaiting-oic",
+    "Approved — For Release": "status-approved",
+    Released: "status-released",
+    "Payment Rejected": "status-rejected",
   };
   return map[status] ?? "";
 };
 
-// ---------------------------------------------------------------------------
-// EDIT MODAL
-// ---------------------------------------------------------------------------
-type EditModalProps = {
-  row: ViolationRow;
-  currentUser: CurrentUser;
-  onClose: () => void;
-  onSave: () => void;
+/**
+ * Derive the violation status from payment + release fields — copied
+ * verbatim from pages/record-officer/AllViolations.tsx so the two pages
+ * can't drift out of sync. See that file for the detection-order
+ * comment.
+ */
+const deriveStatus = (data: any): ViolationStatus => {
+  const paymentStatus = String(data.paymentStatus ?? "").toLowerCase();
+  const releaseStatus = String(data.releaseStatus ?? "").toLowerCase();
+
+  if (paymentStatus === "rejected") {
+    return "Payment Rejected";
+  }
+
+  if (data.rejectionReason && data.rejectedAt) {
+    return "Payment Rejected";
+  }
+
+  if (releaseStatus === "released") {
+    return "Released";
+  }
+
+  if (releaseStatus === "approved by oic") {
+    return "Approved — For Release";
+  }
+
+  if (releaseStatus === "awaiting oic approval") {
+    return "Awaiting OIC Approval";
+  }
+
+  if (paymentStatus === "pending verification") {
+    return "Pending Verification";
+  }
+
+  return "Unpaid";
 };
-
-function EditViolationModal({ row, currentUser, onClose, onSave }: EditModalProps) {
-  const [status, setStatus] = useState<ViolationStatus>(row.status);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSave = async () => {
-    setError("");
-
-    if (status === row.status) {
-      onClose();
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      const rowRef = doc(db, "violations", row.id);
-      await updateDoc(rowRef, {
-        status,
-        updatedAt: serverTimestamp(),
-        updatedBy: currentUser.name,
-      });
-
-      await addDoc(collection(db, "auditLogs"), {
-        userName: currentUser.name,
-        action: `updated violation ${row.cin} (${row.status} → ${status})`,
-        record: row.cin,
-        type: "violation",
-        metadata: {
-          cin: row.cin,
-          oldStatus: row.status,
-          newStatus: status,
-        },
-        timestamp: serverTimestamp(),
-      });
-
-      console.log(`Violation ${row.cin} updated.`);
-      onSave();
-    } catch (err: any) {
-      console.error("Error updating violation:", err);
-      if (err.code === "permission-denied") {
-        setError("Permission denied. Please check your Firestore rules.");
-      } else {
-        setError(err.message || "Failed to update violation.");
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">{row.cin}</h2>
-          <button
-            type="button"
-            className="modal-close"
-            onClick={onClose}
-            disabled={saving}
-            aria-label="Close"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <div className="form-row">
-            <div className="form-field">
-              <label htmlFor="edit-plate">Plate Number</label>
-              <input
-                id="edit-plate"
-                type="text"
-                value={row.plateNo}
-                readOnly
-                style={{ background: "#F3F4F6", cursor: "not-allowed", color: "#6B7280" }}
-              />
-            </div>
-            <div className="form-field">
-              <label htmlFor="edit-violation">Violation</label>
-              <input
-                id="edit-violation"
-                type="text"
-                value={row.violationType}
-                readOnly
-                style={{ background: "#F3F4F6", cursor: "not-allowed", color: "#6B7280" }}
-              />
-            </div>
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="edit-location">Location</label>
-            <input
-              id="edit-location"
-              type="text"
-              value={row.location}
-              readOnly
-              style={{ background: "#F3F4F6", cursor: "not-allowed", color: "#6B7280" }}
-            />
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="edit-status">Status</label>
-            <div className="select-wrap">
-              <select
-                id="edit-status"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as ViolationStatus)}
-                disabled={saving}
-              >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-              <ChevronDown size={16} className="select-icon" />
-            </div>
-          </div>
-
-          {error && <p className="modal-error">{error}</p>}
-        </div>
-
-        <div className="modal-footer">
-          <button
-            type="button"
-            className="btn-cancel"
-            onClick={onClose}
-            disabled={saving}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn-save"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? "Saving..." : "Save Changes"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // COMPONENT
@@ -357,7 +258,6 @@ export default function RecordOfficerHomepage() {
   const [recentRows, setRecentRows] = useState<ViolationRow[]>([]);
   const [topViolations, setTopViolations] = useState<ViolationStat[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedRow, setSelectedRow] = useState<ViolationRow | null>(null);
 
   // -----------------------------------------------------------------------
   // EFFECT: Fetch current user
@@ -408,7 +308,7 @@ export default function RecordOfficerHomepage() {
             plateNo: data.plateNo ?? "—",
             violationType: data.violationType ?? "—",
             location: data.location ?? "—",
-            status: (data.status ?? "Pending Settlement") as ViolationStatus,
+            status: deriveStatus(data),
             recordedAt: data.recordedAt ?? null,
           };
         });
@@ -416,24 +316,19 @@ export default function RecordOfficerHomepage() {
         // Recent 5 for table
         setRecentRows(allRows.slice(0, 5));
 
-        // Compute metrics
+        // Compute metrics — four of the six states: Total, Unpaid (needs
+        // payment), Payment Rejected (needs attention), Released (done).
+        // Pending Verification / Awaiting OIC Approval / Approved — For
+        // Release aren't on their own card here; use All Violations'
+        // filter for those.
         const totalRecords = allRows.length;
-        const pendingSettlement = allRows.filter(
-          (r) => r.status === "Pending Settlement"
+        const unpaid = allRows.filter((r) => r.status === "Unpaid").length;
+        const paymentRejected = allRows.filter(
+          (r) => r.status === "Payment Rejected"
         ).length;
-        const disputedRecords = allRows.filter(
-          (r) => r.status === "Disputed"
-        ).length;
-        const settledRecords = allRows.filter(
-          (r) => r.status === "Settled"
-        ).length;
+        const released = allRows.filter((r) => r.status === "Released").length;
 
-        setMetrics({
-          totalRecords,
-          pendingSettlement,
-          disputedRecords,
-          settledRecords,
-        });
+        setMetrics({ totalRecords, unpaid, paymentRejected, released });
 
         // Compute top violations by type
         const typeMap: Record<string, number> = {};
@@ -471,19 +366,6 @@ export default function RecordOfficerHomepage() {
   }, []);
 
   // -----------------------------------------------------------------------
-  // EFFECT: Escape key for modal
-  // -----------------------------------------------------------------------
-  useEffect(() => {
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && selectedRow) {
-        setSelectedRow(null);
-      }
-    }
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [selectedRow]);
-
-  // -----------------------------------------------------------------------
   // HANDLERS
   // -----------------------------------------------------------------------
   const handleLogout = async () => {
@@ -513,18 +395,18 @@ export default function RecordOfficerHomepage() {
       subtitle: "Sector 3, on file",
     },
     {
-      title: "Pending Settlement",
-      value: String(metrics.pendingSettlement),
+      title: "Unpaid",
+      value: String(metrics.unpaid),
       subtitle: "Awaiting owner payment",
     },
     {
-      title: "Disputed Records",
-      value: String(metrics.disputedRecords),
-      subtitle: "Flagged for review",
+      title: "Payment Rejected",
+      value: String(metrics.paymentRejected),
+      subtitle: "Needs owner follow-up",
     },
     {
-      title: "Settled Records",
-      value: String(metrics.settledRecords),
+      title: "Released",
+      value: String(metrics.released),
       subtitle: "Closed, on file",
     },
   ];
@@ -684,7 +566,13 @@ export default function RecordOfficerHomepage() {
                   <p className="card-eyebrow">Sector 3 · Most recently logged</p>
                   <h2 className="card-title">Recent Violation Records</h2>
                 </div>
-                <a href="#view-all" className="card-link">View All</a>
+                <button
+                  type="button"
+                  className="card-link"
+                  onClick={() => navigate("/record-officer/violations")}
+                >
+                  View All
+                </button>
               </div>
 
               {loading ? (
@@ -706,16 +594,11 @@ export default function RecordOfficerHomepage() {
                         <th>Location</th>
                         <th>Status</th>
                         <th>Recorded</th>
-                        <th aria-label="Actions"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {recentRows.map((row) => (
-                        <tr
-                          key={row.id}
-                          onClick={() => setSelectedRow(row)}
-                          className="violation-row-clickable"
-                        >
+                        <tr key={row.id}>
                           <td>
                             <span className="cin-pill">{row.cin}</span>
                           </td>
@@ -728,15 +611,6 @@ export default function RecordOfficerHomepage() {
                             </span>
                           </td>
                           <td className="cell-recorded">{formatDateTime(row.recordedAt)}</td>
-                          <td className="cell-more">
-                            <button
-                              type="button"
-                              className="row-more-btn"
-                              aria-label="More options"
-                            >
-                              <MoreHorizontal size={16} />
-                            </button>
-                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -747,16 +621,6 @@ export default function RecordOfficerHomepage() {
           </main>
         </div>
       </div>
-
-      {/* EDIT MODAL */}
-      {selectedRow && (
-        <EditViolationModal
-          row={selectedRow}
-          currentUser={currentUser}
-          onClose={() => setSelectedRow(null)}
-          onSave={() => setSelectedRow(null)}
-        />
-      )}
     </div>
   );
 }

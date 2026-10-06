@@ -20,6 +20,8 @@ import OICRevenueReports from "./pages/oic/RevenueReports";
 import OICReleaseQueue from "./pages/oic/ReleaseQueue";
 import OICReleaseLog from "./pages/oic/ReleaseLog";
 import OICActiveClampingTeams from "./pages/oic/ActiveClampingTeams";
+import OICFieldUpdates from "./pages/oic/FieldUpdates";
+import OICOperationScheduler from "./pages/oic/OperationScheduler";
 
 // Impounding Staff
 import ImpoundingStaffHomepage from "./pages/impounding-staff/Homepage";
@@ -41,15 +43,14 @@ import RevenueReports from "./pages/finance/RevenueReports";
 import FinanceAllReports from "./pages/finance/AllReports";
 import FinanceExportCenter from "./pages/finance/ExportCenter";
 
-// Record Officer
+// Record Officer — trimmed to match the new sidebar design.
+// Queue Monitor, Vehicle History, Release Requests, and Release Orders
+// have been removed from the sidebar and their routes removed here so
+// navigating directly to those URLs now falls through to the fallback.
 import RecordOfficerHomepage from "./pages/record-officer/Homepage";
-import RecordOfficerQueueMonitor from "./pages/record-officer/QueueMonitor";
 import RecordOfficerAllViolations from "./pages/record-officer/AllViolations";
 import RecordOfficerClampingLog from "./pages/record-officer/ClampingLog";
 import RecordOfficerImpoundingLog from "./pages/record-officer/ImpoundingLog";
-import RecordOfficerVehicleHistory from "./pages/record-officer/VehicleHistory";
-import RecordOfficerReleaseRequests from "./pages/record-officer/ReleaseRequests";
-import RecordOfficerReleaseOrders from "./pages/record-officer/ReleaseOrders";
 import RecordOfficerReleaseLog from "./pages/record-officer/ReleaseLog";
 import RecordOfficerAllReports from "./pages/record-officer/AllReports";
 import RecordOfficerExportCenter from "./pages/record-officer/ExportCenter";
@@ -70,10 +71,41 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Authentication */}
+        {/* Authentication - Public */}
         <Route path="/" element={<LoginPage />} />
 
-        {/* OIC Dashboard */}
+        {/* ================================================================
+            OIC DASHBOARD (shared with Supervisor)
+
+            Supervisors use the same pages as the OIC. Their Payment/Finance
+            menu is hidden inside each page, and the Finance routes further
+            below do NOT include "supervisor", so typing those URLs
+            directly is still blocked.
+
+            Clamping Log and Active Impounding are also shared with
+            Supervisor for VIEWING — but the "Subject to Impound" action on
+            Clamping Log is OIC-only. That is enforced two ways: the button
+            itself is hidden for anyone whose role isn't "oic" (see
+            ClampingLog.tsx), and the write is additionally guarded in the
+            handler as a safety net. Neither of those is the real security
+            boundary — a Firestore rule restricting writes to
+            `violations.impoundStatus` and to the `impoundRecords`
+            collection (create) to role == "oic" still needs to be added,
+            or a Supervisor could trigger the same write straight from the
+            browser console.
+
+            All four Payment/Finance pages (Pending Payments, Payment
+            Verification, Transaction History, Revenue Reports) are
+            OIC-only — NOT shared with Supervisor — for consistency with
+            the Payment/Finance group being hidden from Supervisor's
+            sidebar on every OIC page. Transaction History and Revenue
+            Reports have no write actions at all; they're OIC-only purely
+            for that consistency, not because viewing them is risky.
+
+            Sidebar items without a route here send the user back to the
+            login page through the catch-all at the bottom, so add a route
+            for each one as its page is finished.
+        ================================================================ */}
         <Route
           path="/dashboard"
           element={
@@ -114,6 +146,10 @@ function App() {
             </ProtectedRoute>
           }
         />
+        {/* OIC-only, NOT shared with Supervisor — unlike every other
+            route in this block. Payment/Finance is hidden from Supervisor's
+            sidebar on every OIC page, and this route enforces that same
+            boundary at the routing level, not just in the nav. */}
         <Route
           path="/dashboard/pending-payments"
           element={
@@ -122,6 +158,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+        {/* OIC-only, NOT shared with Supervisor — same reasoning as
+            Pending Payments above. */}
         <Route
           path="/dashboard/verification"
           element={
@@ -130,6 +168,10 @@ function App() {
             </ProtectedRoute>
           }
         />
+        {/* Read-only, no write actions on this page at all — still kept
+            OIC-only (not supervisor) for consistency with the rest of
+            Payment/Finance, which is hidden from Supervisor's sidebar on
+            every OIC page. */}
         <Route
           path="/dashboard/transactions"
           element={
@@ -138,6 +180,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+        {/* Read-only, same reasoning as Transaction History above — OIC-only
+            for consistency with the rest of Payment/Finance. */}
         <Route
           path="/dashboard/revenue"
           element={
@@ -195,6 +239,24 @@ function App() {
           }
         />
 
+        <Route
+          path="/dashboard/field-updates"
+          element={
+            <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <OICFieldUpdates />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/dashboard/operation-scheduler"
+          element={
+            <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <OICOperationScheduler />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Impounding Staff */}
         <Route
           path="/impounding-staff"
@@ -229,7 +291,7 @@ function App() {
           }
         />
 
-        {/* Release Officer */}
+        {/* Release Officer — 3 pages only */}
         <Route
           path="/release-officer"
           element={
@@ -255,7 +317,7 @@ function App() {
           }
         />
 
-        {/* Finance Staff */}
+        {/* Finance Staff — 7 pages only */}
         <Route
           path="/finance"
           element={
@@ -313,20 +375,25 @@ function App() {
           }
         />
 
-        {/* Record Officer */}
+        {/* ================================================================
+            Record Officer — 7 pages only (trimmed to match sidebar)
+
+            Sidebar groups (see NAV_GROUPS in each page):
+              Dashboard:  Overview
+              Enforcement: All Violations, Clamping Log, Impounding Log
+              Vehicle Release: Release Log
+              Reports: All Reports, Export Center
+
+            Removed: Queue Monitor, Vehicle History, Release Requests,
+            Release Orders. These have no sidebar link anymore, so their
+            routes have been removed too. Navigating directly to those
+            URLs now falls through to the catch-all at the bottom.
+        ================================================================ */}
         <Route
           path="/record-officer"
           element={
             <ProtectedRoute allowedRoles={["record-officer", "it-admin"]}>
               <RecordOfficerHomepage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/record-officer/queue"
-          element={
-            <ProtectedRoute allowedRoles={["record-officer", "it-admin"]}>
-              <RecordOfficerQueueMonitor />
             </ProtectedRoute>
           }
         />
@@ -355,30 +422,6 @@ function App() {
           }
         />
         <Route
-          path="/record-officer/vehicle-history"
-          element={
-            <ProtectedRoute allowedRoles={["record-officer", "it-admin"]}>
-              <RecordOfficerVehicleHistory />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/record-officer/release-requests"
-          element={
-            <ProtectedRoute allowedRoles={["record-officer", "it-admin"]}>
-              <RecordOfficerReleaseRequests />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/record-officer/release-orders"
-          element={
-            <ProtectedRoute allowedRoles={["record-officer", "it-admin"]}>
-              <RecordOfficerReleaseOrders />
-            </ProtectedRoute>
-          }
-        />
-        <Route
           path="/record-officer/release-log"
           element={
             <ProtectedRoute allowedRoles={["record-officer", "it-admin"]}>
@@ -403,7 +446,7 @@ function App() {
           }
         />
 
-        {/* IT Admin Dashboard */}
+        {/* IT Admin Dashboard — strictly it-admin only */}
         <Route
           path="/it-admin"
           element={
@@ -485,7 +528,11 @@ function App() {
           }
         />
 
-        {/* Fallback */}
+        {/* Fallback
+            BABALA: pinapabalik nito sa login ang bawat hindi kilalang URL.
+            Sa gumagamit, mukhang biglang nag-log out ang sistema. Bago ang
+            defense, palitan ito ng simpleng "Page not found" na may balik
+            na button — mas malinaw at hindi nakakatakot. */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

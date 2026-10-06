@@ -57,7 +57,7 @@ type RoleSlug =
 
 type CurrentUser = { name: string; role: RoleSlug };
 
-type LogStatus = "Clamped" | "Removed";
+type LogStatus = "Impounded" | "Released";
 
 type ImpoundLogRow = {
   id: string;
@@ -219,20 +219,18 @@ const millis = (ts: Timestamp | null): number => {
 };
 
 /**
- * Same two-state mapping as oic/ClampingLog.tsx, since this page reads the
- * same `violations` collection — just filtered to enforcementType ==
- * "impounded" instead of "clamped". "Removed" once the release flow has
- * actually released it (releaseStatus === "Released"); "Clamped" for
- * everything before that, matching the vocabulary the design uses (the
- * vehicle is still physically immobilized/ticketed on-site — this system
- * has no towing, so "impounded" here means ticketed at the unit, not
- * hauled to a yard).
+ * This page reads the same `violations` collection as oic/ClampingLog.tsx,
+ * just filtered to enforcementType == "impounded" instead of "clamped" —
+ * but unlike that page, the status word here is "Impounded", not
+ * "Clamped", confirmed against the Figma design. "Released" once the
+ * release flow has actually released it (releaseStatus === "Released");
+ * "Impounded" for everything before that.
  */
 const deriveLogStatus = (releaseStatus: unknown): LogStatus =>
-  releaseStatus === "Released" ? "Removed" : "Clamped";
+  releaseStatus === "Released" ? "Released" : "Impounded";
 
 const getStatusClass = (status: LogStatus): string =>
-  status === "Removed" ? "status-removed" : "status-clamped";
+  status === "Released" ? "status-released" : "status-impounded";
 
 /* ------------------------------------------------------------------
    COMPONENT
@@ -389,7 +387,7 @@ export default function ImpoundingLog() {
   }, [rows, searchQuery, violationFilter]);
 
   const impoundedCount = useMemo(
-    () => rows.filter((r) => r.status === "Clamped").length,
+    () => rows.filter((r) => r.status === "Impounded").length,
     [rows]
   );
 
@@ -492,31 +490,33 @@ export default function ImpoundingLog() {
 
           <main className="main-content impounding-body">
             {/* SEARCH + FILTER */}
-            <div className="search-bar-container">
-              <Search size={18} className="search-bar-icon" />
-              <input
-                type="text"
-                className="search-bar-input"
-                placeholder="Search CIN, Plate No..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+            <div className="search-filter-row">
+              <div className="search-bar-container">
+                <Search size={18} className="search-bar-icon" />
+                <input
+                  type="text"
+                  className="search-bar-input"
+                  placeholder="Search CIN, Plate No..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
 
-            <div className="filter-select-wrap">
-              <select
-                className="filter-select"
-                value={violationFilter}
-                onChange={(e) => setViolationFilter(e.target.value)}
-                aria-label="Filter by violation"
-              >
-                {violationOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={18} className="filter-select-icon" />
+              <div className="filter-select-wrap">
+                <select
+                  className="filter-select"
+                  value={violationFilter}
+                  onChange={(e) => setViolationFilter(e.target.value)}
+                  aria-label="Filter by violation"
+                >
+                  {violationOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={18} className="filter-select-icon" />
+              </div>
             </div>
 
             {/* TABLE */}
@@ -551,7 +551,7 @@ export default function ImpoundingLog() {
                         <th>Plate No.</th>
                         <th>Violation</th>
                         <th>Location</th>
-                        <th>Towed by</th>
+                        <th>Impounded by</th>
                         <th>Time</th>
                         <th>Status</th>
                       </tr>

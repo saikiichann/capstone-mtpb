@@ -357,6 +357,10 @@
 /* ==================================================================
    TABLE
 ================================================================== */
+.release-log-pae .table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
 .release-log-page .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -377,7 +381,7 @@
 }
 
 .release-log-page .data-table td {
-  padding: 14px 8px;
+  padding: 16px 8px;
   color: #374151;
   vertical-align: middle;
   border-bottom: 1px solid #F3F4F6;
@@ -406,6 +410,7 @@
 .release-log-page .cell-location {
   color: #374151;
   white-space: nowrap;
+  min-width: 180px;
 }
 
 .release-log-page .cell-time {
@@ -418,13 +423,14 @@
   color: #111827;
   font-weight: 600;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- Empty state (as supplied) ---- */
 .release-log-page .release-log-empty {
   padding: 32px 0;
   text-align: center;
-  color: #94A3B8;
+  color: #6B7280;
   font-size: 13px;
   font-style: italic;
 }
