@@ -1,0 +1,97 @@
+/*
+ * Design tokens taken from the MTPB Figma file (page "Owner Mobile").
+ * Figma frames are 1223px wide (a 402px phone at ~3.04x), so every size
+ * below is the Figma value divided by ~3.04.
+ */
+:root {
+  /* Colors */
+  --color-bg: #f8f8ff;
+  --color-surface: #fefefe;
+  --color-ink: #000000;
+  --color-on-ink: #ffffff;
+  --color-border-strong: #434343;
+  --color-border-muted: #aaa8b8;
+  --color-icon-bg: #eeeeee;
+  --color-danger: #f61a28;
+  --color-info-bg: #e0f1ff;
+  --color-button-secondary-bg: #fcfcfe;
+  --color-placeholder: #676673;
+  --color-link: #3760b4;
+  /* Resend Email button. Picked from a screenshot (the Figma call limit was
+     reached), so double-check it against the file. */
+  --color-button-muted-bg: #dcdbf2;
+  /* Payment screens (colors sampled from the design screenshots) */
+  --color-tab-active: #0c1d3e;
+  --color-badge-danger-bg: #fde4e6;
+  --color-badge-danger-border: #fbb1b6;
+  --color-badge-danger-text: #f73340;
+  --color-badge-warning-bg: #feefce;
+  --color-badge-warning-border: #f7d3a6;
+  --color-badge-warning-text: #e87f1a;
+  --color-success-bg: #d3ffdf;
+  --color-success-border: #8ed3a1;
+  --color-success-text: #2e7d44;
+  --color-hairline: #e3e3e6;
+
+  /* Shape */
+  --radius-header: 28px; /* design: 120, softened */
+  --radius-card: 10px; /* 30 */
+  --radius-button: 7px; /* 20 */
+  --radius-control: 10px; /* 30: inputs and large buttons */
+
+  /* Elevation */
+  /* Centered, softer than the Figma drop shadows (which point down-left). */
+  --shadow-card: 0 0 6px rgba(0, 0, 0, 0.12);
+  --shadow-card-lg: 0 0 10px rgba(0, 0, 0, 0.16);
+
+  /* Layout */
+  --app-max-width: 430px;
+  --page-gutter: 17px; /* 52 */
+  --header-height: 141px; /* 429 */
+
+  --font-sans: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  color-scheme: light;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--color-bg);
+}
+
+body {
+  min-height: 100dvh;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}

@@ -1,0 +1,4484 @@
+/* ---------- App shell ---------- */
+
+.app-shell {
+  max-width: var(--app-max-width);
+  min-height: 100dvh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+}
+
+.app-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.page__body {
+  flex: 1;
+  padding: 16px var(--page-gutter) 28px;
+}
+
+/* ---------- Header ---------- */
+
+.page-header {
+  min-height: calc(var(--header-height) + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) 22px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  background: var(--color-ink);
+  color: var(--color-on-ink);
+  border-radius: 0 0 var(--radius-header) var(--radius-header);
+}
+
+.page-header__title {
+  font-size: 23px; /* 70 */
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.page-header--greeting {
+  align-items: flex-start;
+  padding-bottom: 15px;
+}
+
+.page-header__greeting {
+  font-size: 18px; /* 55 */
+  font-weight: 400;
+  line-height: 31px;
+}
+
+.page-header__name {
+  font-size: 25px; /* 75 */
+  font-weight: 700;
+  line-height: 39px;
+}
+
+/* ---------- Section headings ---------- */
+
+.section-title {
+  margin: 0 5px 10px;
+  font-size: 18px; /* 55 */
+  font-weight: 700;
+  line-height: 39px;
+}
+
+.screen-title {
+  font-size: 20px; /* 60 */
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.screen-subtitle {
+  font-size: 13px; /* 40 */
+  line-height: 1.5;
+}
+
+/* ---------- Cards ---------- */
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card-lg);
+}
+
+/* ---------- Quick access list ---------- */
+
+.quick-access-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px; /* 50 */
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quick-access-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 68px; /* 206 */
+  padding: 7px 12px 7px 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.quick-access-item:active {
+  transform: translate(-1px, 1px);
+  box-shadow: none;
+}
+
+.quick-access-item__icon {
+  flex: none;
+  width: 52px; /* 158 */
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-icon-bg);
+}
+
+.quick-access-item__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 6px;
+}
+
+.quick-access-item__title {
+  font-size: 18px; /* 55 */
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.quick-access-item__description {
+  font-size: 13px; /* 40 */
+  line-height: 1.3;
+}
+
+.quick-access-item__chevron {
+  flex: none;
+  font-size: 33px; /* 100 */
+  line-height: 1;
+}
+
+/* ---------- Bottom nav ---------- */
+
+.bottom-nav {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 17px 25px max(22px, env(safe-area-inset-bottom));
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-ink);
+}
+
+.bottom-nav__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.bottom-nav__icon {
+  flex: none;
+}
+
+.bottom-nav__label {
+  font-size: 13px; /* 40 */
+  line-height: 1.5;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 41px; /* 124 */
+  padding: 8px 16px;
+  border-radius: var(--radius-button);
+  font-size: 16px; /* 50 */
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn--primary {
+  background: var(--color-ink);
+  color: var(--color-on-ink);
+  border: none;
+}
+
+.btn--secondary {
+  background: var(--color-button-secondary-bg);
+  color: var(--color-ink);
+  border: 1.5px solid var(--color-border-muted); /* 5 */
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px; /* 29 */
+}
+
+/* ---------- Violation details ---------- */
+
+.violation-page .page__body {
+  padding-inline: 23px 24px;
+  padding-top: 28px;
+}
+
+.violation-page .screen-subtitle {
+  margin-bottom: 18px;
+}
+
+.violation-card {
+  padding: 22px 0 21px;
+  overflow: hidden;
+}
+
+.violation-card__head {
+  padding: 0 24px 0 26px;
+}
+
+.violation-card__cin {
+  font-size: 20px; /* 60 */
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.violation-card__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-left: -2px;
+  font-size: 13px; /* 40 */
+  line-height: 1.5;
+}
+
+.violation-card__status {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.detail-list {
+  margin: 30px 0 18px;
+  padding: 0 16px 0 26px;
+}
+
+.detail-list__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  min-height: 34px; /* 104 */
+  font-size: 16px; /* 50 */
+  line-height: 34px;
+}
+
+.detail-list dt {
+  flex: none;
+}
+
+.detail-list dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+  line-height: 1.3;
+}
+
+.detail-list__value--danger {
+  color: var(--color-danger);
+}
+
+.notice {
+  padding: 8px 24px 8px 25px;
+  background: var(--color-info-bg);
+  border-block: 1px solid var(--color-border-muted);
+  font-size: 13px; /* 40 */
+  line-height: 1.5;
+}
+
+.violation-card .btn-stack {
+  margin-top: 23px;
+  padding-inline: 23px 22px;
+}
+
+/* ---------- Generic states ---------- */
+
+.state-card {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.state-card .screen-title {
+  font-size: 18px;
+}
+
+.text-link {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+/* ---------- FAQ (Figma "FAQS 1") ---------- */
+
+.faq-page {
+  padding-bottom: 28px;
+}
+
+.faq-page__intro {
+  margin-bottom: 14px;
+  color: var(--color-placeholder);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.faq-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: 21px;
+  box-shadow: var(--shadow-card);
+}
+
+/* The pill shows the focus ring, not the bare input inside it. */
+.faq-search:focus-within {
+  border-color: var(--color-ink);
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.faq-search__input:focus-visible {
+  outline: none;
+}
+
+.faq-search__icon {
+  flex: none;
+  color: var(--color-placeholder);
+}
+
+.faq-search__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--color-ink);
+  font-family: inherit;
+  font-size: 13.5px;
+}
+
+.faq-search__input::placeholder {
+  color: var(--color-placeholder);
+}
+
+.faq-search__input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.faq-search__clear {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: var(--color-icon-bg);
+  border: none;
+  border-radius: 50%;
+  color: var(--color-placeholder);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.faq-chips {
+  display: flex;
+  gap: 6px;
+  margin: 14px 0 4px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.faq-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.faq-chip {
+  flex: none;
+  min-height: 31px;
+  padding: 0 11px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: 16px;
+  color: var(--color-ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.faq-chip[aria-pressed='true'] {
+  background: var(--color-ink);
+  border-color: var(--color-ink);
+  color: var(--color-on-ink);
+}
+
+.faq-page__count {
+  margin: 12px 0 0;
+  color: var(--color-placeholder);
+  font-size: 12px;
+}
+
+.faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.faq-item {
+  background: #101014;
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.faq-item__question {
+  display: grid;
+  grid-template-columns: 26px 1fr 14px;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 14px 15px;
+  background: none;
+  border: none;
+  color: var(--color-on-ink);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.faq-item__badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1.4px solid rgba(255, 255, 255, 0.65);
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.faq-item__chevron {
+  color: rgba(255, 255, 255, 0.85);
+  transition: transform 0.18s ease;
+}
+
+.faq-item--open .faq-item__chevron {
+  transform: rotate(180deg);
+}
+
+.faq-item__answer {
+  padding: 0 15px 15px 52px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.faq-item__answer strong {
+  color: var(--color-on-ink);
+  font-weight: 700;
+}
+
+.faq-item__link {
+  display: inline-block;
+  margin-top: 10px;
+  color: #8fb4ff;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.faq-empty {
+  margin-top: 28px;
+  padding: 20px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.faq-empty__title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.faq-empty__text {
+  margin: 6px 0 12px;
+  color: var(--color-placeholder);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.faq-office {
+  margin-top: 22px;
+  padding: 16px;
+  background: var(--color-info-bg);
+  border-radius: var(--radius-card);
+}
+
+.faq-office__title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.faq-office__address,
+.faq-office__hours {
+  margin-top: 5px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.faq-office__hours {
+  color: var(--color-placeholder);
+}
+
+.faq-office__link {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--color-link);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.faq-page__footer {
+  margin-top: 18px;
+  color: var(--color-placeholder);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ---------- Loading splash ---------- */
+
+.splash {
+  flex: 1;
+  min-height: 100dvh;
+  background: var(--color-bg);
+}
+
+/* ---------- Header variants (Login / Create Account) ---------- */
+
+.page-header--with-subtitle {
+  padding-bottom: 17px;
+}
+
+.page-header--lg {
+  min-height: calc(209px + env(safe-area-inset-top)); /* 643 */
+}
+
+.page-header--with-subtitle .page-header__title {
+  font-size: 24px; /* 75 */
+  line-height: 1.3;
+}
+
+.page-header__subtitle {
+  font-size: 18px; /* 55 */
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* ---------- Links and small buttons ---------- */
+
+.link-accent {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-link);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.link-accent:hover {
+  text-decoration: underline;
+}
+
+.text-button {
+  align-self: center;
+  padding: 6px;
+  background: none;
+  border: none;
+  color: var(--color-placeholder);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ---------- Large buttons (Login screen spec) ---------- */
+
+.btn--lg {
+  min-height: 53px; /* 163 */
+  border-radius: var(--radius-control);
+  font-size: 20px; /* 60 */
+}
+
+.btn--outline {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border: 1.6px solid var(--color-border-muted); /* 5 */
+}
+
+.btn--lg.btn--outline {
+  font-size: 16px; /* 50 */
+}
+
+.btn--muted {
+  background: var(--color-button-muted-bg);
+  color: var(--color-ink);
+  border: none;
+  font-size: 15px;
+}
+
+a.btn {
+  color: inherit;
+}
+
+a.btn--primary {
+  color: var(--color-on-ink);
+}
+
+/* ---------- Form fields ---------- */
+
+.auth-body {
+  padding: 0 14px 28px; /* 44 */
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.field__label {
+  padding-left: 1px;
+  font-size: 16px; /* 50 */
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.field__input {
+  width: 100%;
+  min-height: 53px; /* 163 */
+  padding: 0 12px;
+  background: var(--color-surface);
+  border: 1.6px solid var(--color-border-muted); /* 5 */
+  border-radius: var(--radius-control);
+  color: var(--color-ink);
+  font: inherit;
+  font-size: 16px; /* 16px also stops iOS from zooming in */
+  font-weight: 700;
+}
+
+.field__input::placeholder {
+  color: var(--color-placeholder);
+  opacity: 1;
+}
+
+.field__input:focus {
+  outline: none;
+  border-color: var(--color-ink);
+}
+
+.field__input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.field__error,
+.field__hint {
+  margin-top: -4px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.field__error {
+  color: var(--color-danger);
+}
+
+.form-message {
+  padding: 10px 12px;
+  border-radius: var(--radius-button);
+  background: var(--color-info-bg);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.form-message--error {
+  background: #fde8ea;
+  color: #a0101a;
+}
+
+.demo-banner {
+  margin: 16px 0 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--color-border-muted);
+  border-radius: var(--radius-button);
+  color: var(--color-placeholder);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Login screen spacing (536:424) */
+.auth-body .auth-form {
+  padding-top: 56px;
+}
+
+.auth-body .demo-banner + .auth-form {
+  padding-top: 24px;
+}
+
+.auth-form__forgot {
+  align-self: flex-end;
+  margin: -2px 3px 0 0;
+  font-size: 15px; /* 45 */
+  line-height: 22px;
+}
+
+.auth-form__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 21px;
+}
+
+.auth-form__or {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 24px;
+  text-align: center;
+}
+
+.auth-form__switch {
+  margin-top: 6px;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ---------- Create Account (527:869, from screenshot) ---------- */
+
+.signup-body .signup-avatar {
+  display: block;
+  margin: 8px auto 0;
+}
+
+.signup-body .auth-form {
+  padding-top: 26px;
+  gap: 14px;
+}
+
+.signup-body .field {
+  gap: 8px;
+}
+
+.signup-actions {
+  margin-top: 16px;
+}
+
+/* ---------- Verify Email (536:492, from screenshot) ---------- */
+
+.verify-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0 14px max(28px, env(safe-area-inset-bottom));
+}
+
+.verify-illustration {
+  display: block;
+  margin: 83px auto 0;
+}
+
+.verify-text {
+  margin-top: 60px;
+  font-size: 14.5px;
+  line-height: 28px;
+  text-align: center;
+}
+
+.verify-text__email {
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.verify-text__instructions {
+  margin: 20px auto 0;
+  max-width: 300px;
+}
+
+.verify-text__spam {
+  margin: 10px auto 0;
+  max-width: 300px;
+  color: var(--color-placeholder);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.verify-body .form-message {
+  margin-top: 20px;
+}
+
+.verify-actions {
+  margin-top: auto;
+  padding-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.verify-actions .text-button {
+  margin-top: -14px;
+}
+
+/* ---------- Welcome (527:844, from screenshot) ---------- */
+
+.welcome {
+  position: relative;
+  flex: 1;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+}
+
+.welcome__car {
+  position: absolute;
+  top: 225px;
+  left: 0;
+  width: 100%;
+  height: auto;
+}
+
+.welcome__fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 300px;
+  background: linear-gradient(to bottom, rgba(248, 248, 255, 0) 0, var(--color-bg) 140px);
+}
+
+.welcome__brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: calc(56px + env(safe-area-inset-top));
+  text-align: center;
+}
+
+.welcome__title {
+  margin-top: 18px;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.welcome__subtitle {
+  margin-top: 6px;
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.welcome__actions {
+  position: relative;
+  margin-top: auto;
+  padding: 0 27px max(40px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 21px;
+  color: var(--color-ink);
+}
+
+.welcome__cta {
+  min-height: 57px;
+  font-weight: 400;
+}
+
+.welcome__login {
+  font-size: 13px; /* 40 */
+  text-align: center;
+}
+
+/* The design shows the countdown state at full color. */
+.btn--muted:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+/* ---------- Dashboard vehicle card (547:635 / 547:637) ---------- */
+
+.home-body .section-title {
+  margin-top: 21px;
+}
+
+.vehicle-card {
+  display: flex;
+  align-items: center;
+  gap: 21px;
+  min-height: 137px; /* 418 */
+  padding: 0 12px 0 14px;
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.vehicle-card--empty {
+  padding: 16px 20px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.vehicle-card__photo-box {
+  position: relative;
+  flex: none;
+  width: 122px; /* 372 */
+  height: 122px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.vehicle-card__photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Stock photos: mirrored like the design, but kept a little smaller and
+   centered in the box so the whole vehicle shows. */
+.vehicle-card__photo-box--stock {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  transform: scaleX(-1);
+}
+
+.vehicle-card__photo-box--stock .vehicle-card__photo {
+  width: 112px;
+  height: 112px;
+  max-width: none;
+  object-fit: contain;
+}
+
+.vehicle-card__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.vehicle-card__plate {
+  display: block;
+  font-size: 21px; /* 65 */
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.vehicle-card__model {
+  display: block;
+  font-size: 15px; /* 45 */
+  line-height: 1.4;
+}
+
+/* ---------- Map ---------- */
+
+.map-card {
+  overflow: hidden;
+}
+
+.location-map {
+  position: relative;
+  z-index: 0; /* keeps Leaflet's panes under the sticky nav */
+  background: #e8e8ee;
+}
+
+.location-map--loading {
+  animation: pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  from {
+    opacity: 0.6;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.map-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--color-border-strong);
+}
+
+.map-card__body .btn {
+  margin-top: 12px;
+}
+
+.leaflet-container {
+  font-family: var(--font-sans);
+}
+
+/* ---------- Header buttons (back / download) ---------- */
+
+.page-header {
+  position: relative;
+}
+
+.header-icon-btn {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-on-ink);
+  cursor: pointer;
+}
+
+.header-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.header-icon-btn__glyph {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.page-header__back,
+.page-header__action {
+  position: absolute;
+  bottom: 17px;
+}
+
+.page-header__back {
+  left: 15px;
+}
+
+.page-header__action {
+  right: 12px;
+}
+
+/* ---------- Status badges ---------- */
+
+.status-badge {
+  display: inline-block;
+  min-width: 84px;
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.status-badge--danger {
+  background: var(--color-badge-danger-bg);
+  border-color: var(--color-badge-danger-border);
+  color: var(--color-badge-danger-text);
+}
+
+.status-badge--warning {
+  background: var(--color-badge-warning-bg);
+  border-color: var(--color-badge-warning-border);
+  color: var(--color-badge-warning-text);
+}
+
+.status-badge--success {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success-text);
+}
+
+.status-badge--neutral {
+  background: var(--color-surface);
+  border-color: var(--color-hairline);
+}
+
+/* ---------- Violation History ---------- */
+
+.history-body {
+  padding: 9px 22px 28px 20px;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-left: 5px;
+}
+
+.segmented__option {
+  min-height: 35px;
+  padding: 0 4px;
+  background: var(--color-surface);
+  border: 1px solid #dfdfdf;
+  border-radius: 2px;
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.segmented__option[aria-pressed='true'] {
+  background: var(--color-tab-active);
+  border-color: var(--color-tab-active);
+  color: #fff;
+}
+
+.empty-text {
+  margin-top: 40px;
+  color: var(--color-placeholder);
+  font-size: 13px;
+  text-align: center;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 30px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-card {
+  display: grid;
+  grid-template-columns: 1fr auto 22px;
+  align-items: center;
+  gap: 6px;
+  min-height: 120px;
+  padding: 12px 6px 12px 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card);
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.history-card__main,
+.history-card__side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.history-card__cin {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.history-card__date {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.history-card__type {
+  margin-top: 16px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.history-card__side {
+  align-items: flex-end;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.history-card__amount {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.history-card__chevron {
+  font-size: 24px;
+  line-height: 1;
+  text-align: center;
+}
+
+/* ---------- Violation Details 2 (signed in) ---------- */
+
+.violation-page--owner .page__body {
+  padding-top: 11px;
+}
+
+.violation-card__title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.violation-card__title-row .status-badge {
+  min-width: 76px;
+  margin-right: -6px;
+}
+
+.violation-page--owner .violation-card {
+  min-height: 645px;
+  display: flex;
+  flex-direction: column;
+  padding-top: 24px;
+}
+
+.violation-card__divider,
+.summary-card__divider,
+.receipt-card__divider {
+  height: 0;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid #c9c9cf;
+}
+
+.violation-page--owner .violation-card__divider {
+  margin: 22px 18px 0 23px;
+}
+
+.violation-page--owner .detail-list {
+  margin: 18px 0 0;
+  padding: 0 18px 0 23px;
+}
+
+.violation-page--owner .detail-list__row {
+  min-height: 41px;
+  font-size: 14px;
+  line-height: 41px;
+}
+
+.violation-card__pay {
+  margin-top: auto;
+  padding-top: 30px;
+}
+
+.violation-card__pay .btn {
+  width: auto;
+  min-height: 47px;
+  margin: 33px 24px 0 25px;
+}
+
+/* ---------- Pay Now steps ---------- */
+
+.btn--pay {
+  min-height: 40px;
+  border-radius: 5px;
+  font-size: 15px;
+}
+
+.pay-body {
+  display: flex;
+  flex-direction: column;
+  padding: 3px 18px 28px;
+}
+
+.step-intro {
+  padding-left: 7px;
+}
+
+.step-intro__step {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.step-intro__title {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 29px;
+}
+
+.step-intro__text {
+  max-width: 330px;
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.method-list {
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.method-card {
+  display: flex;
+  align-items: center;
+  gap: 19px;
+  width: 100%;
+  min-height: 140px;
+  padding: 0 14px 0 21px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card);
+  color: var(--color-ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.method-card:active {
+  transform: translate(-1px, 1px);
+  box-shadow: none;
+}
+
+.method-card__logo {
+  flex: none;
+  width: 98px;
+  height: 98px;
+  border-radius: 14px;
+}
+
+.method-card__logo--icon {
+  display: grid;
+  place-items: center;
+}
+
+.method-card__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.method-card__title {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.method-card__desc {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.method-card__chevron {
+  flex: none;
+  font-size: 33px;
+  line-height: 1;
+}
+
+/* Step 2 form */
+
+.pay-form {
+  margin: 17px 5px 0 7px;
+  padding: 18px 23px 22px 18px;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+.pay-form__method {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pay-form__method img {
+  border-radius: 8px;
+}
+
+.pay-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.pay-field + .pay-field {
+  margin-top: 21px;
+}
+
+.pay-field label {
+  padding-left: 2px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pay-field input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  background: var(--color-surface);
+  border: 1px solid #dcdce2;
+  border-radius: 4px;
+  color: var(--color-ink);
+  font: inherit;
+  font-size: 16px; /* 16px stops iOS zooming; design shows ~13px */
+  font-weight: 700;
+}
+
+.pay-field input::placeholder {
+  color: var(--color-ink);
+  opacity: 0.85;
+}
+
+.pay-field input:focus {
+  outline: none;
+  border-color: var(--color-ink);
+}
+
+.pay-field input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.pay-field__note {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.pay-form__banner {
+  margin: 20px -23px 0 -18px;
+  padding: 10px 23px 10px 20px;
+  background: var(--color-info-bg);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pay-form__actions {
+  margin-top: 55px;
+  padding-left: 5px;
+}
+
+/* Step 3 */
+
+.confirm-body {
+  text-align: left;
+}
+
+.confirm-body__icon {
+  display: block;
+  margin: 40px auto 0;
+}
+
+.confirm-body__label {
+  margin-top: 30px;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.confirm-body__amount {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.confirm-body__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: auto;
+  padding: 60px 11px 0;
+}
+
+.confirm-body__terms {
+  margin-bottom: 8px;
+  font-size: 11px;
+  line-height: 19px;
+  text-align: center;
+}
+
+/* Loading */
+
+.processing-page {
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 100dvh;
+  padding: 0 24px;
+}
+
+.processing-ring {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  margin-top: calc(250px + env(safe-area-inset-top));
+  border-radius: 50%;
+  background: conic-gradient(from 20deg, rgba(0, 0, 0, 0) 0deg, #e9e9eb 30deg, #8d8d90 180deg, #000 340deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 28px), #000 calc(100% - 27px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 28px), #000 calc(100% - 27px));
+  animation: spin 1.1s linear infinite;
+}
+
+.processing-ring::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: calc(50% + 12px);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #000;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .processing-ring {
+    animation-duration: 4s;
+  }
+}
+
+.processing-page__text {
+  margin-top: 145px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 34px;
+  text-align: center;
+}
+
+/* Payment Successful */
+
+.success-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(103px + env(safe-area-inset-top)) 24px 28px 25px;
+  text-align: center;
+}
+
+.success-body__icon {
+  display: block;
+}
+
+.success-body__title {
+  margin-top: 27px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.success-body__text {
+  max-width: 330px;
+  margin-top: 4px;
+  font-size: 16px;
+  line-height: 28px;
+}
+
+.summary-card {
+  align-self: stretch;
+  margin-top: 40px;
+  padding: 11px 17px 15px 23px;
+  box-shadow: var(--shadow-card-lg);
+  text-align: left;
+}
+
+.summary-list {
+  margin: 0 0 12px;
+}
+
+.summary-list__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 34px;
+  font-size: 14px;
+  line-height: 34px;
+}
+
+.summary-list dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+  line-height: 1.3;
+}
+
+.summary-list__row--total {
+  margin-top: 10px;
+}
+
+.summary-list__row--total strong {
+  font-size: 15px;
+}
+
+.success-body__email {
+  align-self: stretch;
+  margin-top: 25px;
+  padding: 6px 18px 10px;
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.success-body__cta {
+  margin-top: 35px;
+}
+
+/* While the email note is hidden, keep the button where the design has it. */
+.summary-card + .success-body__cta {
+  margin-top: 113px;
+}
+
+/* Receipt */
+
+.receipt-body {
+  padding: 9px 24px 28px 25px;
+}
+
+.receipt-card {
+  padding: 15px 16px 25px 25px;
+  text-align: center;
+}
+
+.receipt-card__logo {
+  display: block;
+  margin: 0 auto;
+}
+
+.receipt-card__org {
+  margin-top: 8px;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.receipt-card__org-full {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.receipt-card__title {
+  margin-top: 22px;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.receipt-card__sandbox {
+  margin-top: 2px;
+  color: var(--color-placeholder);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.receipt-list {
+  margin: 16px 0 0;
+  text-align: left;
+}
+
+.receipt-list__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 34.5px;
+  font-size: 14px;
+  line-height: 34.5px;
+}
+
+.receipt-list dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+  line-height: 1.3;
+}
+
+.receipt-card__divider {
+  margin: 13px 5px 0 -5px;
+}
+
+.receipt-card__total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 20px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.receipt-card__total strong {
+  color: var(--color-danger);
+  font-size: 20px;
+}
+
+.receipt-body__thanks {
+  margin-top: 15px;
+  font-size: 14px;
+  line-height: 26px;
+  text-align: center;
+}
+
+/* ---------- Modals ---------- */
+
+.modal {
+  width: calc(100% - 72px);
+  max-width: 329px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  overflow: visible;
+}
+
+.modal::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.modal__box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 22px 18px 24px;
+  background: var(--color-surface);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card-lg);
+  color: var(--color-ink);
+  text-align: center;
+}
+
+.onsite-modal__title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.onsite-modal__logo {
+  margin-top: 18px;
+}
+
+.onsite-modal__lead {
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.onsite-modal__place {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.onsite-modal__address {
+  margin-top: 18px;
+  color: var(--color-ink);
+  font-size: 11px;
+  text-decoration: underline;
+}
+
+.onsite-modal__map {
+  align-self: stretch;
+  margin-top: 16px;
+  border: 1px solid #9a9a9a;
+}
+
+.onsite-modal__close {
+  width: 170px;
+  min-height: 30px;
+  margin-top: 17px;
+  padding: 4px 12px;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.notice-modal {
+  max-width: 250px;
+}
+
+.notice-modal .modal__box {
+  padding: 32px 20px 30px;
+  border-radius: 14px;
+}
+
+.notice-modal__text {
+  font-size: 14px;
+}
+
+.notice-modal__ok {
+  width: 106px;
+  min-height: 26px;
+  margin-top: 12px;
+  padding: 2px 10px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+/* ---------- Payment breakdown / problems ---------- */
+
+.confirm-body__breakdown {
+  margin-top: 4px;
+  color: var(--color-placeholder);
+  font-size: 12px;
+  text-align: center;
+}
+
+.problem-body {
+  padding-top: calc(80px + env(safe-area-inset-top));
+}
+
+.problem-body__text {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.summary-list dt,
+.receipt-list dt {
+  white-space: nowrap;
+}
+
+/* ---------- Shared helpers ---------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.info-note {
+  padding: 10px 14px;
+  background: var(--color-info-bg);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.history-body__pending {
+  margin-top: 16px;
+}
+
+/* Small label + input/select (Add Vehicle). Same look as the Pay Now fields. */
+.compact-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.compact-field > label {
+  padding-left: 2px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.compact-field input,
+.compact-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  background-color: var(--color-surface);
+  border: 1px solid #dcdce2;
+  border-radius: 4px;
+  color: var(--color-ink);
+  font: inherit;
+  font-size: 16px; /* 16px stops iOS zooming; design shows ~13px */
+  font-weight: 700;
+}
+
+.compact-field select {
+  appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1.5 1.5 7 7l5.5-5.5' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  cursor: pointer;
+}
+
+.compact-field select:has(option[value='']:checked) {
+  color: var(--color-placeholder);
+  font-weight: 400;
+}
+
+.compact-field option {
+  color: var(--color-ink);
+}
+
+.compact-field input::placeholder {
+  color: var(--color-placeholder);
+  font-weight: 400;
+  opacity: 1;
+  text-transform: none;
+}
+
+.compact-field input.is-uppercase {
+  text-transform: uppercase;
+}
+
+.compact-field input:focus,
+.compact-field select:focus {
+  outline: none;
+  border-color: var(--color-ink);
+}
+
+.compact-field [aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.compact-field .field__error {
+  margin-top: -2px;
+}
+
+.compact-field__hint {
+  font-size: 11px;
+  color: var(--color-placeholder);
+}
+
+/* ---------- My Vehicles ---------- */
+
+.vehicles-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px 18px 20px;
+}
+
+.vehicles-body__intro {
+  font-size: 13px;
+  text-align: center;
+}
+
+.vehicle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0 2px 0 6px;
+  list-style: none;
+}
+
+.vehicle-row {
+  display: flex;
+  color: var(--color-ink);
+  text-decoration: none;
+  align-items: center;
+  gap: 14px;
+  min-height: 112px;
+  padding: 8px 12px 10px 8px;
+  box-shadow: var(--shadow-card);
+  border-color: #d6d6dc;
+}
+
+.vehicle-row__photo {
+  flex: none;
+  width: 92px;
+  height: 80px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.vehicle-row__photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Stock photos are cut-outs with empty space around them: show the whole
+   vehicle, a bit smaller and centered, mirrored like the dashboard card. */
+.vehicle-row__photo--stock img {
+  width: 88px;
+  height: 88px;
+  max-width: none;
+  object-fit: contain;
+  transform: scaleX(-1);
+}
+
+.vehicle-row__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.vehicle-row__plate {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.vehicle-row__type {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.vehicle-row__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.vehicle-row__color {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vehicle-row__chevron {
+  flex: none;
+  align-self: center;
+  margin-left: -4px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.vehicle-row:active {
+  transform: translateY(1px);
+}
+
+.vehicle-row__badge {
+  min-width: 72px;
+  flex: none;
+}
+
+.vehicle-card__badge {
+  align-self: flex-start;
+  min-width: 72px;
+  margin-top: 6px;
+}
+
+.vehicles-empty {
+  margin-top: 24px;
+  padding: 24px 20px;
+  border: 1.5px dashed var(--color-border-muted);
+  border-radius: var(--radius-card);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.vehicles-empty__title {
+  margin-bottom: 4px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* The button sits at the bottom of the screen, just above the tab bar
+   (the tab bar is 72.5px plus its bottom padding). */
+.vehicles-body__footer {
+  position: sticky;
+  bottom: calc(72.5px + max(22px, env(safe-area-inset-bottom)));
+  margin: auto 0 -20px;
+  padding: 12px 0 10px;
+  background: linear-gradient(to bottom, transparent, var(--color-bg) 12px);
+}
+
+/* ---------- Add Vehicle ---------- */
+
+.vehicle-form-body {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 18px 24px;
+}
+
+.vehicle-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.vehicle-form__row {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.vehicle-form__actions {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  padding: 16px 0 max(8px, env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--color-bg) 16px);
+}
+
+.vehicle-form__actions--split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.btn--pay.btn--outline {
+  font-size: 15px;
+}
+
+.upload-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 132px;
+  padding: 16px;
+  background: var(--color-surface);
+  border: 1.5px dashed #c9c9d1;
+  border-radius: 6px;
+  color: var(--color-placeholder);
+  text-align: center;
+  cursor: pointer;
+}
+
+.upload-box:hover {
+  border-color: var(--color-border-strong);
+}
+
+.compact-field:has(.visually-hidden:focus-visible) .upload-box {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.compact-field:has([aria-invalid='true']) .upload-box {
+  border-color: var(--color-danger);
+}
+
+.upload-box__icon {
+  margin-bottom: 6px;
+  color: #8a8a94;
+}
+
+.upload-box__title {
+  font-size: 12px;
+}
+
+.upload-box__meta {
+  font-size: 11px;
+  color: var(--color-placeholder);
+}
+
+.upload-box--filled {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 80px;
+  border-style: solid;
+  color: var(--color-ink);
+  text-align: left;
+  cursor: default;
+}
+
+.upload-box__thumb,
+.upload-box__pdf {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.upload-box__pdf {
+  display: grid;
+  place-items: center;
+  background: var(--color-badge-danger-bg);
+  color: var(--color-badge-danger-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.upload-box__file {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.upload-box__name {
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-box__remove {
+  flex: none;
+  color: var(--color-danger);
+}
+
+/* ---------- Vehicle Added ---------- */
+
+.vehicle-added .success-body__title {
+  margin-top: 24px;
+}
+
+.vehicle-added .success-body__text {
+  margin-top: 28px;
+}
+
+.vehicle-added__note {
+  align-self: stretch;
+  margin-top: 24px;
+  text-align: left;
+}
+
+.vehicle-added__actions {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 40px;
+}
+
+/* ---------- Danger buttons, confirm dialog ---------- */
+
+.btn--danger {
+  background: var(--color-danger);
+  color: #fff;
+  border: none;
+}
+
+.btn--danger-outline {
+  background: var(--color-surface);
+  color: var(--color-danger);
+  border: 1.6px solid var(--color-badge-danger-border);
+  font-size: 15px;
+}
+
+.confirm-modal .modal__box {
+  align-items: stretch;
+  gap: 12px;
+  padding: 24px 20px 20px;
+  text-align: left;
+}
+
+.confirm-modal__title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.confirm-modal__text {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.confirm-modal__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+/* ---------- Vehicle Details ---------- */
+
+.vehicle-details {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 18px 28px;
+}
+
+.vehicle-details__saved {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.vehicle-details__hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 16px 18px;
+  box-shadow: var(--shadow-card);
+  border-color: #d6d6dc;
+  text-align: center;
+}
+
+.vehicle-details__photo {
+  width: 180px;
+  height: 120px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.vehicle-details__photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vehicle-details__photo--stock img {
+  width: 150px;
+  height: 150px;
+  max-width: none;
+  object-fit: contain;
+  transform: scaleX(-1);
+}
+
+.vehicle-details__plate {
+  margin-top: 2px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.vehicle-details__model {
+  font-size: 14px;
+}
+
+.vehicle-details__badge {
+  margin-top: 10px;
+}
+
+.vehicle-details__status p + p {
+  margin-top: 4px;
+}
+
+.vehicle-details__status--active {
+  background: var(--color-success-bg);
+}
+
+.vehicle-details__status--pending {
+  background: var(--color-badge-warning-bg);
+}
+
+.vehicle-details__status--rejected {
+  background: var(--color-badge-danger-bg);
+}
+
+.vehicle-details__section {
+  padding: 14px 16px 8px;
+  box-shadow: var(--shadow-card);
+  border-color: #d6d6dc;
+}
+
+.vehicle-details__section-title {
+  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.vehicle-details__list {
+  margin: 0;
+}
+
+.vehicle-details__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 8px 0;
+  border-top: 1px solid var(--color-hairline);
+  font-size: 13px;
+}
+
+.vehicle-details__row:first-child {
+  border-top: none;
+}
+
+.vehicle-details__row dt {
+  flex: none;
+  color: var(--color-placeholder);
+}
+
+.vehicle-details__row dd {
+  min-width: 0;
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.vehicle-details__muted {
+  color: var(--color-placeholder);
+  font-weight: 400;
+}
+
+.vehicle-details__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+/* ---------- Edit Vehicle ---------- */
+
+.compact-field__label {
+  padding-left: 2px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.locked-value {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  background: #efeff3;
+  border: 1px solid #dcdce2;
+  border-radius: 4px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.compact-field input:disabled {
+  background-color: #efeff3;
+  color: #6b6b75;
+  cursor: not-allowed;
+}
+
+.vehicle-form__heading {
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-hairline);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* ---------- Violation History: Paid tab, plate filter ---------- */
+
+.segmented--4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.segmented--4 .segmented__option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 2px;
+  font-size: 12px;
+}
+
+.segmented__count {
+  min-width: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #ececf1;
+  color: var(--color-ink);
+  font-size: 10px;
+  line-height: 17px;
+}
+
+.segmented__option[aria-pressed='true'] .segmented__count {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.history-body__plate-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 14px 0 0 5px;
+  font-size: 13px;
+}
+
+.history-body__plate-filter .text-button {
+  align-self: auto;
+  padding: 2px 0;
+}
+
+.history-card__plate {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.history-card__plate + .history-card__type {
+  margin-top: 0;
+  font-weight: 400;
+}
+
+/* ---------- History tab (categories) ---------- */
+
+.history-home {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px 18px 24px;
+}
+
+.history-home__intro {
+  font-size: 13px;
+  text-align: center;
+}
+
+.history-home__list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.category-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 16px;
+  border-color: #dcdce2;
+  box-shadow: var(--shadow-card);
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.category-card:active {
+  transform: translateY(1px);
+}
+
+.category-card__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  color: #fff;
+}
+
+.category-card--green .category-card__icon {
+  background: #17a05a;
+}
+
+.category-card--amber .category-card__icon {
+  background: #f0a52c;
+}
+
+.category-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.category-card__title {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.category-card__description {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ---------- History tab: amount due, recent activity ---------- */
+
+.due-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 18px 18px 20px;
+  border-color: #dcdce2;
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.due-card--owing {
+  background: linear-gradient(180deg, #fff6f6 0%, var(--color-surface) 62%);
+}
+
+.due-card--clear {
+  background: linear-gradient(180deg, #f1fff5 0%, var(--color-surface) 70%);
+  padding: 20px 18px;
+}
+
+.due-card__label {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.due-card__amount {
+  margin-top: 2px;
+  color: var(--color-danger);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.due-card__clear-title {
+  color: var(--color-success-text);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.due-card__meta {
+  margin-top: 2px;
+  color: var(--color-placeholder);
+  font-size: 12px;
+}
+
+.due-card__cta {
+  width: 190px;
+  margin-top: 14px;
+}
+
+.category-card__meta {
+  margin-top: 6px;
+  color: var(--color-placeholder);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.recent__title,
+.section-heading {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.recent__list {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent__item {
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 10px 2px;
+  border-top: 1px solid var(--color-hairline);
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.recent__list li:first-child .recent__item {
+  border-top: none;
+}
+
+.recent__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  align-self: start;
+  margin-top: 6px;
+}
+
+.recent__dot--green {
+  background: #17a05a;
+}
+
+.recent__dot--amber {
+  background: var(--color-badge-warning-text);
+}
+
+.recent__dot--red {
+  background: var(--color-badge-danger-text);
+}
+
+.recent__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.recent__label {
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent__date {
+  color: var(--color-placeholder);
+  font-size: 11px;
+}
+
+.recent__amount {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.recent__badge {
+  grid-column: 3;
+  min-width: 76px;
+  justify-self: end;
+}
+
+.year-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 8px;
+  text-align: center;
+}
+
+.year-summary__value {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.year-summary__label {
+  color: var(--color-placeholder);
+  font-size: 11px;
+}
+
+/* ---------- Profile / settings screens ---------- */
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px 18px 28px;
+}
+
+.account-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-color: #dcdce2;
+  box-shadow: var(--shadow-card);
+}
+
+.account-card__text {
+  min-width: 0;
+}
+
+.account-card__name {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.account-card__line {
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.account-card__since {
+  margin-top: 4px;
+  color: var(--color-placeholder);
+  font-size: 11px;
+}
+
+.profile-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-ink);
+  color: var(--color-on-ink);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 2px 2px 4px;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-group__title {
+  padding-left: 2px;
+  color: var(--color-placeholder);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.settings-group__title--lg {
+  color: var(--color-ink);
+  font-size: 16px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.settings-hint {
+  margin-top: -4px;
+  color: var(--color-placeholder);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-group__list {
+  overflow: hidden;
+  border-color: #dcdce2;
+  box-shadow: var(--shadow-card);
+}
+
+.settings-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border: none;
+  border-bottom: 1px solid var(--color-hairline);
+  background: none;
+  color: var(--color-ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.settings-row--last {
+  border-bottom: none;
+}
+
+div.settings-row {
+  cursor: default;
+}
+
+.settings-row:active {
+  background: #f4f4f8;
+}
+
+.settings-row--stacked {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 6px 12px;
+}
+
+/* The status chip sits under the text, so the description keeps the full
+   width of the card. */
+.settings-row--stacked .permission-chip {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.settings-row__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--color-icon-bg);
+}
+
+.settings-row__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.settings-row__title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.settings-row__description {
+  color: var(--color-placeholder);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.settings-row__value {
+  flex: none;
+  max-width: 56%;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.settings-row__empty {
+  color: var(--color-placeholder);
+  font-weight: 400;
+}
+
+.settings-row__chevron {
+  flex: none;
+  color: var(--color-placeholder);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.profile-edit-btn {
+  margin-top: 4px;
+}
+
+.edit-profile__password {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-hairline);
+}
+
+/* ---------- Payment settings (saved wallets) ---------- */
+
+.wallet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wallet-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 12px 14px;
+  border-color: #dcdce2;
+  box-shadow: var(--shadow-card);
+}
+
+.wallet-card--default {
+  border-color: var(--color-ink);
+}
+
+.wallet-card__logo {
+  border-radius: 10px;
+}
+
+.wallet-card__text {
+  min-width: 0;
+}
+
+.wallet-card__name {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.wallet-card__number {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.wallet-card__badge {
+  min-width: 68px;
+  margin-top: 6px;
+}
+
+.wallet-card__actions {
+  grid-column: 2;
+  display: flex;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.wallet-card__actions .text-button {
+  align-self: auto;
+  padding: 2px 0;
+}
+
+.wallet-card__remove {
+  color: var(--color-danger);
+}
+
+.add-wallet-btn {
+  margin-top: -2px;
+}
+
+.settings-group__list--single {
+  margin-top: 4px;
+}
+
+.empty-text--tight {
+  margin-top: 4px;
+  text-align: left;
+}
+
+/* ---------- Privacy ---------- */
+
+.permission-chip {
+  flex: none;
+  align-self: center;
+  padding: 2px 8px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.permission-chip--success {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success-text);
+}
+
+.permission-chip--danger {
+  background: var(--color-badge-danger-bg);
+  border-color: var(--color-badge-danger-border);
+  color: var(--color-badge-danger-text);
+}
+
+.privacy-card {
+  padding: 14px 16px 16px;
+  border-color: #dcdce2;
+  box-shadow: var(--shadow-card);
+}
+
+.privacy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.privacy-card__note {
+  margin-top: 12px;
+  color: var(--color-placeholder);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* ---------- Help & Support ---------- */
+
+.support-card {
+  padding: 14px 16px 16px;
+  border-color: #dcdce2;
+  box-shadow: var(--shadow-card);
+}
+
+.support-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+
+.support-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.support-list dt {
+  color: var(--color-placeholder);
+}
+
+.support-list dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.support-card__map {
+  display: inline-block;
+  margin-top: 14px;
+  font-size: 12px;
+}
+
+.app-version {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-color: #dcdce2;
+  box-shadow: var(--shadow-card);
+  font-size: 13px;
+}
+
+.app-version__label {
+  font-weight: 700;
+}
+
+.app-version__value {
+  color: var(--color-placeholder);
+}
+
+/* ---------- Guest mode (paid without an account) ---------- */
+
+.choice-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.choice-actions .text-button {
+  align-self: center;
+}
+
+.receipt-body__guest,
+.success-body__guest {
+  margin-top: 16px;
+  text-align: left;
+}
+
+.receipt-body__guest p + p {
+  margin-top: 6px;
+}
+
+.receipt-body__guest-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.success-body__guest {
+  align-self: stretch;
+}
+
+/* The design's spacing rule for the button assumes no note above it. */
+.success-body__guest + .success-body__cta {
+  margin-top: 20px;
+}
+
+/* ---------- Scanned clamp landing ---------- */
+
+.scan-landing {
+  padding-top: 16px;
+}
+
+.scan-landing__clamp {
+  margin-top: 2px;
+  color: var(--color-placeholder);
+  font-size: 12px;
+}
+
+.scan-landing__clamp strong {
+  color: var(--color-ink);
+  font-size: 14px;
+}
+
+/* The raw code is reference material, not something to read first. */
+.scan-landing__code {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.notice--paid {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+}
+
+/* ---------- Evidence photos ---------- */
+
+.evidence {
+  margin-top: 18px;
+}
+
+.evidence__title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.evidence__strip {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 2px 2px 6px;
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.evidence__thumb {
+  display: block;
+  width: 112px;
+  height: 84px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid #dcdce2;
+  border-radius: 8px;
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+}
+
+.evidence__thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.evidence__note {
+  color: var(--color-placeholder);
+  font-size: 11px;
+}
+
+.photo-modal {
+  max-width: 360px;
+}
+
+.photo-modal .modal__box {
+  align-items: stretch;
+  gap: 12px;
+  padding: 18px 16px 16px;
+  text-align: left;
+}
+
+.photo-modal__title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.photo-modal__image {
+  width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #f1f1f5;
+}
+
+.photo-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.photo-modal__actions .btn {
+  flex: 1 1 40%;
+}
+
+.violation-card__hint {
+  color: var(--color-placeholder);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* ==========================================================================
+   Motion
+   --------------------------------------------------------------------------
+   CSS only, on purpose. This app is opened at the roadside by someone who
+   has just found a clamp on their wheel, often on mobile data and a cheap
+   phone — so an animation library isn't worth the download, and nothing here
+   may delay reading the violation or paying it.
+   Everything is short (under 300ms), uses only transform and opacity so it
+   runs on the GPU, and switches off entirely under prefers-reduced-motion.
+   ========================================================================== */
+
+:root {
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.26, 0.64, 1);
+}
+
+/* Each screen fades up as it arrives. The header is deliberately excluded —
+   it's the same black bar on every screen, so animating it makes navigation
+   feel slower than it is. */
+.page__body {
+  animation: page-enter 260ms var(--ease-out) both;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Lists arrive one after another rather than all at once. Capped at 8 so a
+   long violation history doesn't keep the last rows waiting. */
+.history-list > li,
+.faq-list > li,
+.vehicle-list > li,
+.recent__list > li {
+  animation: row-enter 240ms var(--ease-out) both;
+}
+
+.history-list > li:nth-child(1),
+.faq-list > li:nth-child(1),
+.vehicle-list > li:nth-child(1),
+.recent__list > li:nth-child(1) { animation-delay: 20ms; }
+.history-list > li:nth-child(2),
+.faq-list > li:nth-child(2),
+.vehicle-list > li:nth-child(2),
+.recent__list > li:nth-child(2) { animation-delay: 50ms; }
+.history-list > li:nth-child(3),
+.faq-list > li:nth-child(3),
+.vehicle-list > li:nth-child(3),
+.recent__list > li:nth-child(3) { animation-delay: 80ms; }
+.history-list > li:nth-child(4),
+.faq-list > li:nth-child(4),
+.vehicle-list > li:nth-child(4),
+.recent__list > li:nth-child(4) { animation-delay: 110ms; }
+.history-list > li:nth-child(5),
+.faq-list > li:nth-child(5),
+.vehicle-list > li:nth-child(5),
+.recent__list > li:nth-child(5) { animation-delay: 140ms; }
+.history-list > li:nth-child(n + 6),
+.faq-list > li:nth-child(n + 6),
+.vehicle-list > li:nth-child(n + 6),
+.recent__list > li:nth-child(n + 6) { animation-delay: 170ms; }
+
+@keyframes row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* Cards that carry the main answer on a screen get a slightly larger move. */
+.violation-card,
+.due-card,
+.map-card,
+.receipt-card {
+  animation: card-enter 300ms var(--ease-out) both;
+}
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.99);
+  }
+}
+
+/* Press feedback. Web buttons feel dead on a phone without it — this is the
+   single change that most makes the app feel native. */
+.btn,
+.segmented__option,
+.faq-chip,
+.history-card,
+.category-card,
+.settings-row,
+.vehicle-card,
+.faq-item__question {
+  transition:
+    transform 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out),
+    background-color 140ms var(--ease-out),
+    border-color 140ms var(--ease-out);
+}
+
+.btn:active,
+.segmented__option:active,
+.faq-chip:active,
+.faq-item__question:active {
+  transform: scale(0.97);
+}
+
+/* Tappable cards move less — they're big, so a large scale looks wrong. */
+.history-card:active,
+.category-card:active,
+.settings-row:active,
+.vehicle-card:active {
+  transform: scale(0.988);
+}
+
+.btn--primary:active {
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+}
+
+/* The FAQ answer opens instead of appearing. grid-template-rows animates
+   cleanly to auto height, which max-height hacks never quite manage. */
+.faq-item__answer {
+  animation: answer-open 220ms var(--ease-out) both;
+}
+
+@keyframes answer-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* Status badges pop when they land, so a change from UNPAID to PAID is
+   noticed rather than just being a different colour on reload. */
+.status-badge {
+  animation: badge-in 320ms var(--ease-spring) both;
+}
+
+@keyframes badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+}
+
+/* Modal: the native <dialog> backdrop fades, the box rises. */
+.modal::backdrop {
+  animation: fade-in 180ms var(--ease-out) both;
+}
+
+.modal__box {
+  animation: sheet-up 260ms var(--ease-spring) both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+}
+
+/* ---------- Skeletons ----------
+   Shown while data loads, instead of the word "Loading". A shape in roughly
+   the right place reads as faster than a spinner, and stops the layout
+   jumping when the real content lands. */
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #ececf2;
+  border-radius: 8px;
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  animation: shimmer 1.4s infinite;
+}
+
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 30px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skeleton-card {
+  height: 108px;
+  border-radius: var(--radius-card);
+}
+
+.skeleton-line {
+  height: 12px;
+}
+
+.skeleton-line + .skeleton-line {
+  margin-top: 8px;
+}
+
+/* ---------- Motion off ----------
+   Honours the phone's "reduce motion" setting, which people with vestibular
+   conditions switch on. Content still appears; it just doesn't move. */
+
+@media (prefers-reduced-motion: reduce) {
+  .page__body,
+  .history-list > li,
+  .faq-list > li,
+  .vehicle-list > li,
+  .recent__list > li,
+  .violation-card,
+  .due-card,
+  .map-card,
+  .receipt-card,
+  .status-badge,
+  .modal::backdrop,
+  .modal__box,
+  .faq-item__answer {
+    animation: none;
+  }
+
+  .btn:active,
+  .segmented__option:active,
+  .faq-chip:active,
+  .faq-item__question:active,
+  .history-card:active,
+  .category-card:active,
+  .settings-row:active,
+  .vehicle-card:active {
+    transform: none;
+  }
+
+  .skeleton::after {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   The moments worth animating
+   --------------------------------------------------------------------------
+   The three screens where motion carries meaning rather than decoration:
+   arriving at the app, paying, and moving between tabs.
+   ========================================================================== */
+
+/* ---------- Payment success: the tick draws itself ---------- */
+
+.success-check {
+  display: block;
+  margin: 0 auto;
+  overflow: visible;
+}
+
+.success-check__halo {
+  fill: var(--color-success-text);
+  opacity: 0;
+  transform-origin: 60px 60px;
+  animation: halo 900ms var(--ease-out) 420ms both;
+}
+
+.success-check__ring {
+  fill: none;
+  stroke: var(--color-success-text);
+  stroke-width: 6;
+  /* 2πr for r=52, so the dash is exactly one full circumference. */
+  stroke-dasharray: 327;
+  stroke-dashoffset: 327;
+  transform: rotate(-90deg);
+  transform-origin: 60px 60px;
+  animation: draw-ring 620ms var(--ease-out) both;
+}
+
+.success-check__tick {
+  fill: none;
+  stroke: var(--color-success-text);
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 72;
+  stroke-dashoffset: 72;
+  /* Starts as the ring closes, so it reads as one gesture. */
+  animation: draw-tick 380ms var(--ease-out) 480ms both;
+}
+
+@keyframes draw-ring {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes draw-tick {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes halo {
+  from {
+    opacity: 0.22;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+/* The words follow the tick rather than arriving with it. */
+.success-body__title--rise {
+  animation: rise 420ms var(--ease-out) 700ms both;
+}
+
+.success-body__text--rise {
+  animation: rise 420ms var(--ease-out) 800ms both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* ---------- Welcome: the first thing anyone sees ---------- */
+
+.welcome__car {
+  animation: car-in 900ms var(--ease-out) both;
+}
+
+.welcome__logo {
+  animation: logo-in 700ms var(--ease-spring) 150ms both;
+}
+
+.welcome__title {
+  animation: rise 500ms var(--ease-out) 380ms both;
+}
+
+.welcome__subtitle {
+  animation: rise 500ms var(--ease-out) 460ms both;
+}
+
+.welcome__actions {
+  animation: rise 520ms var(--ease-out) 560ms both;
+}
+
+/* The car drifts in slightly zoomed, so the screen feels alive on open. */
+@keyframes car-in {
+  from {
+    opacity: 0;
+    transform: scale(1.08) translateY(-10px);
+  }
+}
+
+@keyframes logo-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+/* ---------- Bottom nav ---------- */
+
+.bottom-nav__item {
+  position: relative;
+}
+
+/* A dot under the active tab, so the current place is obvious at a glance
+   without relying on colour alone. */
+.bottom-nav__item::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-ink);
+  opacity: 0;
+  transform: translateX(-50%) scale(0.4);
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 260ms var(--ease-spring);
+}
+
+.bottom-nav__item.active::after,
+.bottom-nav__item[aria-current='page']::after {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+.bottom-nav__icon {
+  transition: transform 260ms var(--ease-spring);
+}
+
+.bottom-nav__item[aria-current='page'] .bottom-nav__icon {
+  transform: translateY(-2px) scale(1.08);
+}
+
+.bottom-nav__item:active .bottom-nav__icon {
+  transform: scale(0.9);
+}
+
+/* ---------- Primary button sheen ----------
+   A single pass of light across Pay Now when it appears. One sweep only —
+   a button that shimmers forever looks like it's still loading. */
+
+.btn--primary {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn--primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.22) 50%, transparent 65%);
+  transform: translateX(-100%);
+  animation: sheen 1100ms var(--ease-out) 500ms 1;
+  pointer-events: none;
+}
+
+@keyframes sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The tick is shown already drawn, not animated into place. */
+  .success-check__ring,
+  .success-check__tick {
+    stroke-dashoffset: 0;
+    animation: none;
+  }
+
+  .success-check__halo,
+  .success-body__title--rise,
+  .success-body__text--rise,
+  .welcome__car,
+  .welcome__logo,
+  .welcome__title,
+  .welcome__subtitle,
+  .welcome__actions,
+  .btn--primary::after {
+    animation: none;
+  }
+
+  .success-check__halo,
+  .btn--primary::after {
+    opacity: 0;
+  }
+
+  .bottom-nav__icon,
+  .bottom-nav__item::after {
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   My Vehicles — the cards pull up and brake
+   --------------------------------------------------------------------------
+   Each vehicle slides in from the right, overshoots slightly, dips forward
+   as if the weight shifts under braking, then rebounds and settles — the way
+   a car stops. The rotation is tiny (under a degree) on purpose: enough to
+   feel like suspension, not enough to look like the card is falling over.
+   They arrive one after another, like cars pulling into a queue.
+   ========================================================================== */
+
+.vehicle-list > li {
+  animation: vehicle-brake 620ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
+  transform-origin: 30% 80%; /* the front wheel, roughly */
+}
+
+.vehicle-list > li:nth-child(1) { animation-delay: 40ms; }
+.vehicle-list > li:nth-child(2) { animation-delay: 150ms; }
+.vehicle-list > li:nth-child(3) { animation-delay: 250ms; }
+.vehicle-list > li:nth-child(4) { animation-delay: 340ms; }
+.vehicle-list > li:nth-child(n + 5) { animation-delay: 420ms; }
+
+@keyframes vehicle-brake {
+  0% {
+    opacity: 0;
+    transform: translateX(52px) rotate(0.7deg);
+  }
+  55% {
+    opacity: 1;
+    /* Past the mark, nose down — the hardest part of the stop. */
+    transform: translateX(-7px) rotate(-0.55deg);
+  }
+  78% {
+    /* Suspension rebound. */
+    transform: translateX(3px) rotate(0.22deg);
+  }
+  92% {
+    transform: translateX(-1px) rotate(-0.08deg);
+  }
+  100% {
+    transform: translateX(0) rotate(0);
+  }
+}
+
+/* The photo lags a fraction behind the card, like the body settling after
+   the wheels have stopped. */
+.vehicle-list > li .vehicle-card__photo,
+.vehicle-list > li .vehicle-row__photo img {
+  animation: photo-settle 640ms cubic-bezier(0.16, 0.84, 0.44, 1) 60ms both;
+}
+
+@keyframes photo-settle {
+  0% {
+    transform: translateX(10px) scale(1.04);
+  }
+  60% {
+    transform: translateX(-3px) scale(0.99);
+  }
+  100% {
+    transform: translateX(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vehicle-list > li,
+  .vehicle-list > li .vehicle-card__photo,
+  .vehicle-list > li .vehicle-row__photo img {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   View Transitions API
+   --------------------------------------------------------------------------
+   The browser's own page-transition API. It snapshots the old screen and the
+   new one and cross-fades them on the compositor, so it stays smooth even
+   while React is still rendering.
+   Supported in Chrome, Edge and Android Chrome — which is most of this app's
+   audience — and ignored everywhere else, where the CSS fade below still
+   runs. Opted into per link with react-router's `viewTransition` prop.
+   ========================================================================== */
+
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: var(--ease-out);
+}
+
+::view-transition-old(root) {
+  animation-name: vt-out;
+}
+
+::view-transition-new(root) {
+  animation-name: vt-in;
+}
+
+@keyframes vt-out {
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* Where the browser handles the transition, the CSS fade would play on top
+   of it and double the movement. */
+@supports (view-transition-name: none) {
+  .page__body {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   The black header morphs in
+   --------------------------------------------------------------------------
+   The black bar is the one shape every screen shares, so it's the natural
+   thing to animate on arrival. It drops from above with its bottom corners
+   rounded far more than they rest at, then the curve flattens out to 28px as
+   it settles — the shape morphing rather than the page merely fading.
+   The title and the back button follow a beat later, so the shape reads as
+   arriving first and the content landing in it.
+   ========================================================================== */
+
+.page-header {
+  animation: header-morph 520ms var(--ease-out) both;
+  /* Keeps the curve crisp while it animates. */
+  will-change: border-radius, transform;
+}
+
+@keyframes header-morph {
+  0% {
+    /* A deep dome, lifted just out of frame. */
+    border-bottom-left-radius: 46%;
+    border-bottom-right-radius: 46%;
+    transform: translateY(-14%);
+  }
+  55% {
+    /* Past the resting curve, so it flattens with a little weight. */
+    border-bottom-left-radius: 34px;
+    border-bottom-right-radius: 34px;
+    transform: translateY(1.5%);
+  }
+  78% {
+    border-bottom-left-radius: 25px;
+    border-bottom-right-radius: 25px;
+    transform: translateY(-0.5%);
+  }
+  100% {
+    border-bottom-left-radius: var(--radius-header);
+    border-bottom-right-radius: var(--radius-header);
+    transform: translateY(0);
+  }
+}
+
+/* The content inside lands after the shape has arrived. */
+.page-header__title,
+.page-header__greeting,
+.page-header__name,
+.page-header__subtitle {
+  animation: header-content 420ms var(--ease-out) 180ms both;
+}
+
+.page-header__back,
+.page-header__action {
+  animation: header-content 380ms var(--ease-out) 260ms both;
+}
+
+@keyframes header-content {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* The taller Login header travels a little further, so it gets a touch
+   longer to do it. */
+.page-header--lg {
+  animation-duration: 600ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-header,
+  .page-header__title,
+  .page-header__greeting,
+  .page-header__name,
+  .page-header__subtitle,
+  .page-header__back,
+  .page-header__action {
+    animation: none;
+  }
+}
+
+/* ---------- Where am I? (bottom nav current page) ----------
+   The dot above was too quiet on a bright phone screen outdoors. The
+   current tab now reads three ways at once — weight, colour and a bar —
+   so it survives sunlight, a cracked screen and colour-blindness. */
+
+.bottom-nav__item {
+  color: var(--color-placeholder);
+  transition: color 200ms var(--ease-out);
+}
+
+.bottom-nav__item[aria-current='page'] {
+  color: var(--color-ink);
+}
+
+.bottom-nav__item[aria-current='page'] .bottom-nav__label {
+  font-weight: 700;
+}
+
+/* A bar riding on the nav's top border rather than a dot below the icon. */
+.bottom-nav__item::after {
+  top: -18px;
+  left: 50%;
+  width: 28px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  transform: translateX(-50%) scaleX(0.3);
+}
+
+.bottom-nav__item.active::after,
+.bottom-nav__item[aria-current='page']::after {
+  transform: translateX(-50%) scaleX(1);
+}
+
+.bottom-nav__item[aria-current='page'] .bottom-nav__icon {
+  transform: translateY(-1px) scale(1.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bottom-nav__item::after,
+  .bottom-nav__item .bottom-nav__icon {
+    transition: none;
+  }
+}
+
+/* ---------- Unpaid count on the Violations row ----------
+   One badge on the whole dashboard. If everything is flagged, nothing is. */
+
+.quick-access-item__badge {
+  flex: none;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--color-ink);
+  color: var(--color-on-ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  animation: badge-pop 380ms var(--ease-spring) 240ms both;
+}
+
+.quick-access-item--flagged {
+  border-color: var(--color-ink);
+}
+
+@keyframes badge-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+
+/* ---------- Quick Access press ----------
+   The row answers before the route does: it dips, the icon inverts and the
+   chevron leans the way you're about to travel. Nothing moves more than a
+   few pixels, so it reads as acknowledgement rather than decoration. */
+
+.quick-access-item {
+  transition:
+    transform 180ms var(--ease-out),
+    border-color 180ms var(--ease-out),
+    box-shadow 180ms var(--ease-out);
+}
+
+.quick-access-item__icon {
+  transition:
+    background 220ms var(--ease-out),
+    transform 260ms var(--ease-spring);
+}
+
+.quick-access-item__icon svg {
+  transition: color 220ms var(--ease-out);
+}
+
+.quick-access-item__chevron {
+  transition: transform 260ms var(--ease-spring);
+}
+
+.quick-access-item:active {
+  transform: scale(0.985);
+  border-color: var(--color-ink);
+  box-shadow: none;
+}
+
+.quick-access-item:active .quick-access-item__icon {
+  background: var(--color-ink);
+  transform: scale(1.06);
+}
+
+.quick-access-item:active .quick-access-item__icon svg {
+  color: var(--color-on-ink);
+}
+
+.quick-access-item:active .quick-access-item__chevron {
+  transform: translateX(4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-access-item,
+  .quick-access-item__icon,
+  .quick-access-item__icon svg,
+  .quick-access-item__chevron {
+    transition: none;
+  }
+
+  .quick-access-item__badge {
+    animation: none;
+  }
+
+  .quick-access-item:active,
+  .quick-access-item:active .quick-access-item__icon,
+  .quick-access-item:active .quick-access-item__chevron {
+    transform: none;
+  }
+}
+
+/* ---------- Quick Access colours ----------
+   Same coloured circles as the History page cards, so the two screens read
+   as one app. Payments and Violations use History's exact green and amber;
+   My Vehicles and FAQs get a blue and a violet from the same weight. */
+
+.quick-access-item--blue { --qa-tone: #2f6fe0; }
+.quick-access-item--amber { --qa-tone: #f0a52c; }
+.quick-access-item--green { --qa-tone: #17a05a; }
+.quick-access-item--violet { --qa-tone: #7a52d1; }
+
+.quick-access-item[class*='quick-access-item--'] .quick-access-item__icon {
+  background: var(--qa-tone, var(--color-icon-bg));
+}
+
+.quick-access-item[class*='quick-access-item--'] .quick-access-item__icon svg {
+  color: #fff;
+}
+
+/* The press used to turn the grey circle black. With coloured circles that
+   would wipe the colour out, so the circle keeps its colour and just pops. */
+.quick-access-item[class*='quick-access-item--']:active .quick-access-item__icon {
+  background: var(--qa-tone, var(--color-ink));
+  transform: scale(1.08);
+}
+
+.quick-access-item[class*='quick-access-item--']:active .quick-access-item__icon svg {
+  color: #fff;
+}
+
+/* ---------- Home vehicle card ----------
+   A wallet-pass style card: soft gradient, the plate in a plate-shaped
+   chip, and the car parked on the right running off the card's edge. It
+   isn't a link, so it has no press state at all. */
+
+.vehicle-hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  min-height: 156px;
+  padding: 20px 20px 20px 22px;
+  border: 1px solid #e3e5ee;
+  border-radius: 22px;
+  background:
+    radial-gradient(110% 130% at 100% 100%, #dfe4f0 0%, rgba(223, 228, 240, 0) 62%),
+    linear-gradient(160deg, #ffffff 0%, #f1f3f9 100%);
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 14px 30px -14px rgba(16, 24, 40, 0.22);
+  overflow: hidden;
+  color: var(--color-ink);
+}
+
+.vehicle-hero__text {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  max-width: 55%;
+  min-width: 0;
+}
+
+.vehicle-hero__text p {
+  margin: 0;
+}
+
+.vehicle-hero__eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-placeholder);
+}
+
+/* Shaped like a plate rather than set as a heading: thick border, square-ish
+   corners, wide letter spacing. */
+.vehicle-hero__plate {
+  margin: 8px 0 6px !important;
+  padding: 3px 10px 4px;
+  border: 2px solid var(--color-ink);
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.06);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.vehicle-hero__model {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.vehicle-hero__meta {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-placeholder);
+}
+
+.vehicle-hero__badge {
+  margin-top: 8px;
+}
+
+.vehicle-hero__art {
+  position: absolute;
+  z-index: 1;
+  right: -26px;
+  bottom: -40px;
+  width: 200px;
+  height: 200px;
+  pointer-events: none;
+  animation: hero-park 720ms var(--ease-out) 140ms both;
+}
+
+.vehicle-hero__photo {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.vehicle-hero__photo--stock {
+  transform: scaleX(-1);
+}
+
+/* A soft contact shadow under the tyres, so the car sits on something. */
+.vehicle-hero__shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 62px;
+  width: 150px;
+  height: 18px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0));
+}
+
+/* The car rolls in a short way and settles — once, on arrival. */
+@keyframes hero-park {
+  from {
+    opacity: 0;
+    transform: translateX(34px);
+  }
+  70% {
+    opacity: 1;
+    transform: translateX(-3px);
+  }
+}
+
+.vehicle-hero--empty {
+  min-height: 112px;
+}
+
+.vehicle-hero--empty .vehicle-hero__text {
+  max-width: 100%;
+}
+
+.vehicle-hero--loading {
+  min-height: 156px;
+  background: linear-gradient(90deg, #f1f3f9 0%, #e7eaf2 50%, #f1f3f9 100%);
+  background-size: 200% 100%;
+  animation: hero-shimmer 1.4s linear infinite;
+}
+
+@keyframes hero-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vehicle-hero__art,
+  .vehicle-hero--loading {
+    animation: none;
+  }
+}
+
+/* ---------- Profile Information ----------
+   Same visual language as Home's vehicle card and the Quick Access icons:
+   a soft gradient hero, then coloured icon tiles. */
+
+.profile-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid #e3e5ee;
+  border-radius: 22px;
+  background:
+    radial-gradient(110% 130% at 100% 100%, #dfe4f0 0%, rgba(223, 228, 240, 0) 62%),
+    linear-gradient(160deg, #ffffff 0%, #f1f3f9 100%);
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 14px 30px -14px rgba(16, 24, 40, 0.22);
+}
+
+/* A gradient ring around the initials, with a white gap between. */
+.profile-hero__ring {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  border-radius: 50%;
+  background: conic-gradient(from 210deg, #2f6fe0, #7a52d1, #17a05a, #f0a52c, #2f6fe0);
+  animation: profile-ring-in 600ms var(--ease-spring) both;
+}
+
+.profile-hero__ring .profile-avatar {
+  box-shadow: 0 0 0 3px #fff;
+}
+
+@keyframes profile-ring-in {
+  from {
+    opacity: 0;
+    transform: scale(0.7) rotate(-40deg);
+  }
+}
+
+.profile-hero__text {
+  min-width: 0;
+}
+
+.profile-hero__text p,
+.profile-hero__text h2 {
+  margin: 0;
+}
+
+.profile-hero__name {
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.profile-hero__line {
+  margin-top: 2px !important;
+  color: var(--color-placeholder);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.profile-details {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+}
+
+.profile-detail {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-hairline);
+  animation: profile-detail-in 420ms var(--ease-out) both;
+  animation-delay: calc(120ms + var(--i, 0) * 60ms);
+}
+
+.profile-detail:last-child {
+  border-bottom: none;
+}
+
+.profile-detail--blue { --tone: #2f6fe0; }
+.profile-detail--violet { --tone: #7a52d1; }
+.profile-detail--green { --tone: #17a05a; }
+.profile-detail--amber { --tone: #f0a52c; }
+.profile-detail--teal { --tone: #0f9aa6; }
+
+.profile-detail__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--tone);
+  color: #fff;
+  box-shadow: 0 6px 14px -8px var(--tone);
+}
+
+.profile-detail__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.profile-detail__label {
+  color: var(--color-placeholder);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.profile-detail__value {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+
+@keyframes profile-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-hero__ring,
+  .profile-detail {
+    animation: none;
+  }
+}
+
+.profile-hero__chip {
+  display: inline-block;
+  margin-top: 8px !important;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(15, 154, 166, 0.12);
+  color: #0b7680;
+  font-size: 11px;
+  font-weight: 600;
+}
