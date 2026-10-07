@@ -72,6 +72,72 @@
 }
 
 /* ==================================================================
+   ROW ACTION MENU (three-dots popup)
+================================================================== */
+.finance-page .row-menu-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.finance-page .row-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 160px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  z-index: 50;
+  animation: rowMenuFadeIn 0.12s ease-out;
+}
+
+@keyframes rowMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.finance-page .row-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: #FFFFFF;
+  border: none;
+  color: #111827;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.finance-page .row-menu-item:hover {
+  background: #F3F4F6;
+}
+
+.finance-page .row-menu-item + .row-menu-item {
+  border-top: 1px solid #F3F4F6;
+}
+
+.finance-page .row-menu-item-danger {
+  color: #DC2626;
+}
+
+.finance-page .row-menu-item-danger:hover {
+  background: #FEF2F2;
+}
+
+/* ==================================================================
    LOADING / EMPTY STATES
 ================================================================== */
 .finance-page .table-loading,

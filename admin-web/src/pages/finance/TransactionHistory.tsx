@@ -45,6 +45,7 @@ type TransactionStatus = "Verified" | "Rejected";
 type TransactionRow = {
   id: string;
   reference: string;
+  orNumber: string | null;
   cin: string | null;
   plateNo: string | null;
   amount: number;
@@ -193,7 +194,7 @@ export default function TransactionHistory() {
     return () => unsubscribe();
   }, []);
 
-  
+  /* Payments listener */
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(db, "payments"),
@@ -216,7 +217,6 @@ export default function TransactionHistory() {
               ? "Rejected"
               : null;
 
-            // Pending pa — wala pa sa history.
             if (!status) return null;
 
             const rawMethod = String(data.method ?? "").toLowerCase();
@@ -231,12 +231,9 @@ export default function TransactionHistory() {
               id: d.id,
               reference:
                 data.referenceNumber ?? data.paymentReference ?? d.id,
-              // Tatlong naming convention ang ginagamit ng iba't ibang
-              // sumusulat sa collection na ito.
+              orNumber: (data.orNumber as string) ?? null,
               cin: ((data.cin ?? data.violationCin) as string) ?? null,
               plateNo: ((data.plateNo ?? data.plateNumber) as string) ?? null,
-              // totalAmount muna — kasama na ang convenience fee. Sa amount
-              // lang, ang multa ang ipinapakita, hindi ang binayaran.
               amount: Number(data.totalAmount ?? data.amount ?? 0),
               method,
               verifiedBy: data.verifiedBy ?? "—",
@@ -351,9 +348,6 @@ export default function TransactionHistory() {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 
-  // -----------------------------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------------------------
   return (
     <div className="finance-page">
       <div className="dashboard">
@@ -461,6 +455,7 @@ export default function TransactionHistory() {
                       <thead>
                         <tr>
                           <th>Reference</th>
+                          <th>OR Number</th>
                           <th>CIN</th>
                           <th>Plate No.</th>
                           <th>Amount</th>
@@ -474,6 +469,11 @@ export default function TransactionHistory() {
                         {paginatedRows.map((row) => (
                           <tr key={row.id}>
                             <td className="cell-reference">{row.reference}</td>
+                            <td className="cell-or-number">
+                              {row.orNumber ?? (
+                                <span className="cell-empty">—</span>
+                              )}
+                            </td>
                             <td>
                               {row.cin ? (
                                 <span className="cin-pill">{row.cin}</span>

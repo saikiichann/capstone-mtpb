@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { KeyRound, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
+  addDoc,
   collection,
   doc,
   getDoc,
@@ -29,9 +30,9 @@ import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
 import logoutIcon from "../../assets/logout.png";
 
-// ---------------------------------------------------------------------------
-// TYPES
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   TYPES
+------------------------------------------------------------------ */
 type RoleSlug =
   | "oic"
   | "it-admin"
@@ -51,6 +52,7 @@ type PaymentStatus = "Pending Verification" | "Verified" | "Rejected";
 type PaymentRow = {
   id: string;
   reference: string;
+  orNumber: string | null;
   cin: string | null;
   plateNo: string | null;
   amount: number;
@@ -61,6 +63,7 @@ type PaymentRow = {
   paidAt: Timestamp | null;
   violationId: string | null;
   clampId: string | null;
+  recordedBy: string | null;
   orphaned: boolean;
 };
 
@@ -73,9 +76,9 @@ type Metrics = {
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
-// ---------------------------------------------------------------------------
-// CONSTANTS
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   CONSTANTS
+------------------------------------------------------------------ */
 const ITEMS_PER_PAGE = 10;
 
 const ROLE_LABELS: Record<RoleSlug, string> = {
@@ -129,9 +132,9 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// HELPERS
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   HELPERS
+------------------------------------------------------------------ */
 const formatCurrency = (amount: number): string =>
   `₱${amount.toLocaleString("en-US", {
     minimumFractionDigits: 2,
@@ -176,9 +179,9 @@ const getWaitingClass = (band: WaitingBand): string => {
   return map[band] ?? "";
 };
 
-// ---------------------------------------------------------------------------
-// COMPONENT
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   COMPONENT
+------------------------------------------------------------------ */
 export default function PaymentVerification() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -243,9 +246,11 @@ export default function PaymentVerification() {
             data.verificationStatus ?? data.status ?? ""
           ).toLowerCase();
 
-          const status: PaymentStatus = ["verified", "succeeded", "approved"].includes(
-            rawStatus
-          )
+          const status: PaymentStatus = [
+            "verified",
+            "succeeded",
+            "approved",
+          ].includes(rawStatus)
             ? "Verified"
             : ["rejected", "failed", "declined"].includes(rawStatus)
             ? "Rejected"
@@ -257,6 +262,7 @@ export default function PaymentVerification() {
           return {
             id: d.id,
             reference: data.referenceNumber ?? data.paymentReference ?? d.id,
+            orNumber: (data.orNumber as string) ?? null,
             cin: ((data.cin ?? data.violationCin) as string) ?? null,
             plateNo: ((data.plateNo ?? data.plateNumber) as string) ?? null,
             amount: Number(data.totalAmount ?? data.amount ?? 0),
@@ -267,6 +273,7 @@ export default function PaymentVerification() {
             paidAt,
             violationId: (data.violationId as string) ?? null,
             clampId: (data.clampId as string) ?? null,
+            recordedBy: (data.recordedBy as string) ?? null,
             orphaned: false,
           } as PaymentRow;
         });
@@ -373,7 +380,6 @@ export default function PaymentVerification() {
     setIsMenuOpen(false);
   };
 
-  /** Hinahanap ang clamp document reference gamit ang clampId. */
   const findClampRef = async (clampId: string | null) => {
     if (!clampId) return null;
     try {
@@ -387,7 +393,6 @@ export default function PaymentVerification() {
     }
   };
 
-  /** Hinahanap ang violation document reference, by ID o by CIN. */
   const findViolationRef = async (row: PaymentRow) => {
     if (row.violationId) return doc(db, "violations", row.violationId);
     if (!row.cin) return null;
@@ -402,18 +407,6 @@ export default function PaymentVerification() {
     }
   };
 
-  /**
-   * Approve o reject ang bayad — isang atomic write.
-   *
-   * ✅ FIX: Kapag Rejected, `paymentStatus` ay naka-set sa "Rejected" — HINDI
-   * "Unpaid". Para lumabas yung status na "Payment Rejected" sa AllViolations
-   * page (na nagde-derive mula sa `paymentStatus` field).
-   *
-   * Note: Dati, "Unpaid" yung naka-set para makapag-resubmit yung violator.
-   * Pero yung AllViolations ay may fallback check din sa `rejectionReason` +
-   * `rejectedAt` — kaya hindi kailangan yung "Unpaid" workaround. Naka-set
-   * na sa "Rejected" para consistent yung status across pages.
-   */
   const handlePaymentAction = async (
     row: PaymentRow,
     action: "Verified" | "Rejected"
@@ -422,6 +415,38 @@ export default function PaymentVerification() {
       alert(
         "This payment is not linked to any violation. It cannot be approved or rejected here — check the payment record in Firestore first."
       );
+      return;
+    }
+
+    // SEGREGATION OF DUTIES CHECK
+    if (action === "Verified" && row.recordedBy === currentUser.name) {
+      alert(
+        "SEGREGATION OF DUTIES VIOLATION\n\n" +
+          "You cannot verify your own cash entry.\n\n" +
+          `You recorded this payment (${row.reference}). ` +
+          "A DIFFERENT authorized personnel (Finance Supervisor or OIC) " +
+          "must verify this payment.\n\n" +
+          "This is required by COA Circular 2022-004 (Government Cash Handling — Two-Person Control)."
+      );
+
+      try {
+        await addDoc(collection(db, "auditLogs"), {
+          userName: currentUser.name,
+          action: `attempted to self-verify payment ${row.reference} for ${row.cin}`,
+          record: row.cin ?? row.reference,
+          type: "segregation-violation-attempt",
+          metadata: {
+            reference: row.reference,
+            cin: row.cin,
+            recordedBy: row.recordedBy,
+            attemptedBy: currentUser.name,
+          },
+          timestamp: serverTimestamp(),
+        });
+      } catch (logErr) {
+        console.warn("Failed to log segregation violation attempt:", logErr);
+      }
+
       return;
     }
 
@@ -440,7 +465,9 @@ export default function PaymentVerification() {
       !window.confirm(
         `Approve payment for ${row.reference}?\n\nCIN: ${
           row.cin ?? "—"
-        }\nAmount: ${formatCurrency(row.amount)}\nMethod: ${row.method}`
+        }\nOR Number: ${row.orNumber ?? "—"}\nAmount: ${formatCurrency(
+          row.amount
+        )}\nMethod: ${row.method}`
       )
     ) {
       return;
@@ -458,12 +485,25 @@ export default function PaymentVerification() {
         return;
       }
 
+      let resolvedClampId: string | null = row.clampId;
+
+      if (!resolvedClampId) {
+        try {
+          const vSnap = await getDoc(violationRef);
+          if (vSnap.exists()) {
+            const vData = vSnap.data();
+            resolvedClampId = vData.clampId ?? vData.clampQrId ?? null;
+          }
+        } catch (err) {
+          console.warn("Clamp resolution from violation failed:", err);
+        }
+      }
+
       const clampRef =
-        action === "Verified" ? await findClampRef(row.clampId) : null;
+        action === "Verified" ? await findClampRef(resolvedClampId) : null;
 
       const batch = writeBatch(db);
 
-      // 1. Payment record
       batch.update(doc(db, "payments", row.id), {
         status: action,
         verificationStatus: action,
@@ -472,8 +512,6 @@ export default function PaymentVerification() {
         ...(action === "Rejected" ? { rejectionReason } : {}),
       });
 
-      // 2. Violation
-      // ✅ FIX: Rejected → "Rejected" (hindi "Unpaid")
       batch.update(violationRef, {
         paymentStatus: action === "Verified" ? "Verified" : "Rejected",
         verifiedBy: currentUser.name,
@@ -483,6 +521,7 @@ export default function PaymentVerification() {
               paymentMethod: row.method,
               paymentReference: row.reference,
               referenceNumber: row.reference,
+              orNumber: row.orNumber,
               totalPaid: row.amount,
               paidAt: row.paidAt ?? serverTimestamp(),
               releaseStatus: "Awaiting OIC Approval",
@@ -501,30 +540,31 @@ export default function PaymentVerification() {
           : {}),
       });
 
-      // 3. Clamp — verified lang, para makapasok sa release queue
       if (clampRef) {
         batch.update(clampRef, {
           status: "verified",
           paidAt: serverTimestamp(),
         });
-      } else if (action === "Verified") {
-        console.warn("No linked clamp found for this payment.");
       }
 
-      // 4. Audit log
       batch.set(doc(collection(db, "auditLogs")), {
         userName: currentUser.name,
         action: `${
           action === "Verified" ? "approved" : "rejected"
-        } payment for ${row.cin ?? "(no CIN)"} (${row.reference})`,
+        } payment for ${row.cin ?? "(no CIN)"} (${row.reference}${
+          row.orNumber ? ` — OR #${row.orNumber}` : ""
+        })`,
         record: row.cin ?? row.reference,
         type: "payment-verification",
         metadata: {
           reference: row.reference,
+          orNumber: row.orNumber,
           cin: row.cin,
           amount: row.amount,
           method: row.method,
           newStatus: action,
+          recordedBy: row.recordedBy,
+          verifiedBy: currentUser.name,
           ...(rejectionReason ? { rejectionReason } : {}),
         },
         timestamp: serverTimestamp(),
@@ -557,13 +597,9 @@ export default function PaymentVerification() {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 
-  // -----------------------------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------------------------
   return (
     <div className="finance-page">
       <div className="dashboard">
-        {/* SIDEBAR */}
         <aside className="sidebar">
           <div className="sidebar-brand">
             <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
@@ -598,7 +634,6 @@ export default function PaymentVerification() {
           </nav>
         </aside>
 
-        {/* MAIN CONTENT */}
         <div className="main">
           <header className="main-header">
             <div>
@@ -648,7 +683,6 @@ export default function PaymentVerification() {
           </header>
 
           <main className="main-content">
-            {/* METRIC CARDS */}
             <div className="metric-grid-three">
               {metricCards.map((card) => (
                 <div key={card.title} className="card metric-card">
@@ -658,7 +692,6 @@ export default function PaymentVerification() {
               ))}
             </div>
 
-            {/* VERIFICATION QUEUE */}
             <div className="card">
               <p className="card-eyebrow">Sector 3 · Oldest first</p>
               <h2 className="card-title">Verification Queue</h2>
@@ -678,10 +711,12 @@ export default function PaymentVerification() {
                       <thead>
                         <tr>
                           <th>Reference</th>
+                          <th>OR Number</th>
                           <th>CIN</th>
                           <th>Plate No.</th>
                           <th>Amount</th>
                           <th>Method</th>
+                          <th>Recorded By</th>
                           <th>Waiting</th>
                           <th>Action</th>
                         </tr>
@@ -703,6 +738,9 @@ export default function PaymentVerification() {
                                 />
                               )}
                             </td>
+                            <td className="cell-or-number">
+                              {row.orNumber ?? "—"}
+                            </td>
                             <td>
                               {row.cin ? (
                                 <span className="cin-pill">{row.cin}</span>
@@ -719,6 +757,9 @@ export default function PaymentVerification() {
                               {formatCurrency(row.amount)}
                             </td>
                             <td className="cell-method">{row.method}</td>
+                            <td className="cell-recorded-by">
+                              {row.recordedBy ?? "—"}
+                            </td>
                             <td>
                               <span
                                 className={`waiting-pill ${getWaitingClass(
@@ -741,6 +782,8 @@ export default function PaymentVerification() {
                                 title={
                                   row.orphaned
                                     ? "Not linked to a violation"
+                                    : row.recordedBy === currentUser.name
+                                    ? "Cannot verify your own entry"
                                     : "Approve payment"
                                 }
                               >
@@ -765,7 +808,6 @@ export default function PaymentVerification() {
                     </table>
                   </div>
 
-                  {/* PAGINATION */}
                   <div className="pagination">
                     <button
                       type="button"

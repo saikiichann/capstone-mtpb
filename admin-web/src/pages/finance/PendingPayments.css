@@ -34,7 +34,17 @@
 }
 
 /* ==================================================================
-   TABLE CELLS
+   TABLE — global cell alignment
+   All th + td are left-aligned by default. The Action column gets
+   its own overrides below.
+================================================================== */
+.finance-page .data-table th,
+.finance-page .data-table td {
+  text-align: left;
+}
+
+/* ==================================================================
+   TABLE CELLS — cell-specific styling
 ================================================================== */
 .finance-page .cell-due-date {
   color: #374151;
@@ -51,17 +61,28 @@
   color: #DC2626;
 }
 
-/* Violation No. cell */
 .finance-page .cell-violation-no {
   font-weight: 600;
   color: #111827;
   white-space: nowrap;
 }
 
-/* Action cell */
+/* ==================================================================
+   ACTION COLUMN — pulled slightly left, centered content
+   Right padding shifts the visual center toward the left so the
+   button doesn't hug the far-right edge of the table.
+================================================================== */
+.finance-page .data-table th:last-child,
+.finance-page .data-table td.cell-action {
+  width: 160px;
+  min-width: 160px;
+  max-width: 160px;
+  text-align: center;
+  padding-right: 40px;
+}
+
 .finance-page .cell-action {
   white-space: nowrap;
-  text-align: right;
 }
 
 /* ==================================================================
@@ -183,15 +204,45 @@
 }
 
 /* ------------------------------------------------------------------
-   REFERENCE BOX
-   Lumalabas lang pagkatapos ma-save — doon pa lang nabubuo ang
-   reference number, kaya hindi ito ipinapakita bago mag-save.
+   REFERENCE PREVIEW BOX (before save)
+------------------------------------------------------------------ */
+.finance-page .cash-ref-preview {
+  background: #EFF6FF;
+  border: 1px dashed #93C5FD;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.finance-page .cash-ref-preview-label {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1D4ED8;
+}
+
+.finance-page .cash-ref-preview-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #64748B;
+  font-style: italic;
+}
+
+/* ------------------------------------------------------------------
+   REFERENCE BOX (after save)
 ------------------------------------------------------------------ */
 .finance-page .cash-reference-box {
   background: #DBEAFE;
   border-radius: 10px;
   padding: 18px 20px;
   margin-bottom: 16px;
+}
+
+.finance-page .cash-reference-box.cash-reference-saved {
+  background: #EFF6FF;
+  border: 1px dashed #93C5FD;
 }
 
 .finance-page .cash-reference-label {
@@ -247,6 +298,11 @@
   font-weight: 700;
 }
 
+.finance-page .cash-summary-amount {
+  color: #16A34A !important;
+  font-size: 15px;
+}
+
 /* ------------------------------------------------------------------
    FORM
 ------------------------------------------------------------------ */
@@ -262,6 +318,10 @@
   color: #374151;
 }
 
+.finance-page .required {
+  color: #DC2626;
+}
+
 .finance-page .form-input {
   width: 100%;
   padding: 11px 14px;
@@ -270,7 +330,9 @@
   font-size: 14px;
   font-family: inherit;
   color: #111827;
+  background: #FFFFFF;
   outline: none;
+  box-sizing: border-box;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -284,8 +346,20 @@
   color: #9CA3AF;
 }
 
+.finance-page .form-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6B7280;
+  line-height: 1.4;
+}
+
 .finance-page .form-error {
-  margin: 0 0 12px;
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 6px;
   font-size: 13px;
   line-height: 1.45;
   color: #B91C1C;
@@ -307,6 +381,21 @@
   font-size: 12px;
   line-height: 1.5;
   color: #6B7280;
+}
+
+/* ------------------------------------------------------------------
+   HIDE NATIVE NUMBER INPUT SPINNERS
+------------------------------------------------------------------ */
+.finance-page input[type="number"]::-webkit-outer-spin-button,
+.finance-page input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+.finance-page input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 /* ------------------------------------------------------------------

@@ -12,6 +12,17 @@
   white-space: nowrap;
 }
 
+/* OR Number cell — same treatment as Reference for audit readability */
+.finance-page .cell-or-number {
+  font-family: inherit;
+  font-weight: 500;
+  color: #111827;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .finance-page .cin-pill {
   display: inline-block;
   padding: 4px 12px;

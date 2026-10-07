@@ -626,6 +626,36 @@
   flex-shrink: 0;
 }
 
+/* ==================================================================
+   CASH PAYMENT MODAL — Reference Preview Box (before save)
+================================================================== */
+.pending-payments-page .cash-ref-preview {
+  background: #EFF6FF;
+  border: 1px dashed #93C5FD;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.pending-payments-page .cash-ref-preview-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #1D4ED8;
+  text-transform: uppercase;
+  margin: 0 0 4px;
+}
+
+.pending-payments-page .cash-ref-preview-hint {
+  font-size: 12px;
+  color: #64748B;
+  font-style: italic;
+  margin: 0;
+}
+
+/* ==================================================================
+   CASH PAYMENT MODAL — Details Summary Box
+================================================================== */
 .pending-payments-page .cash-summary {
   background: #F3F4F6;
   border-radius: 8px;
@@ -649,6 +679,14 @@
   font-weight: 600;
 }
 
+.pending-payments-page .cash-summary-amount {
+  color: #16A34A !important;
+  font-size: 15px;
+}
+
+/* ==================================================================
+   CASH PAYMENT MODAL — Form Fields
+================================================================== */
 .pending-payments-page .form-group {
   margin-bottom: 12px;
 }
@@ -661,6 +699,10 @@
   margin-bottom: 6px;
 }
 
+.pending-payments-page .required {
+  color: #DC2626;
+}
+
 .pending-payments-page .form-input {
   width: 100%;
   padding: 10px 12px;
@@ -669,7 +711,9 @@
   font-size: 14px;
   color: #111827;
   font-family: inherit;
+  background: #FFFFFF;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
 }
 
 .pending-payments-page .form-input:focus {
@@ -681,6 +725,31 @@
 .pending-payments-page .form-input:disabled {
   background: #F3F4F6;
   cursor: not-allowed;
+}
+
+/* ==================================================================
+   HIDE NATIVE NUMBER INPUT SPINNERS (up/down arrows)
+   Applied to cash amount, OR number, and all numeric inputs inside
+   the cash payment modal — spinners don't fit money/ID fields.
+================================================================== */
+.pending-payments-page input[type="number"]::-webkit-outer-spin-button,
+.pending-payments-page input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+.pending-payments-page input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.pending-payments-page .form-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6B7280;
+  line-height: 1.4;
 }
 
 .pending-payments-page .cash-change-line {
@@ -710,6 +779,9 @@
   line-height: 1.5;
 }
 
+/* ==================================================================
+   CASH PAYMENT MODAL — Success Reference Box (after save)
+================================================================== */
 .pending-payments-page .cash-reference-box {
   background: #F0FDF4;
   border: 1px solid #BBF7D0;
@@ -741,6 +813,54 @@
   color: #374151;
   line-height: 1.6;
   margin: 0;
+}
+
+/* ==================================================================
+   MODAL BUTTONS
+================================================================== */
+.pending-payments-page .btn-primary {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #1D4ED8;
+  color: #FFFFFF;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.pending-payments-page .btn-primary:hover:not(:disabled) {
+  background: #1E40AF;
+}
+
+.pending-payments-page .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pending-payments-page .btn-secondary {
+  padding: 10px 20px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  background: #FFFFFF;
+  color: #374151;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.pending-payments-page .btn-secondary:hover:not(:disabled) {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.pending-payments-page .btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* ==================================================================

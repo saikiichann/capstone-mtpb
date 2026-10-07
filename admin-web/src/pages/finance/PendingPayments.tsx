@@ -6,6 +6,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   runTransaction,
@@ -28,9 +29,9 @@ import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
 import logoutIcon from "../../assets/logout.png";
 
-// ---------------------------------------------------------------------------
-// TYPES
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   TYPES
+------------------------------------------------------------------ */
 type RoleSlug =
   | "oic"
   | "it-admin"
@@ -60,11 +61,10 @@ type PendingRow = {
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
-// ---------------------------------------------------------------------------
-// CONSTANTS
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   CONSTANTS
+------------------------------------------------------------------ */
 const ITEMS_PER_PAGE = 10;
-
 const PAYMENT_DUE_HOURS = 72;
 
 const ROLE_LABELS: Record<RoleSlug, string> = {
@@ -78,6 +78,7 @@ const ROLE_LABELS: Record<RoleSlug, string> = {
   "impounding-staff": "Impounding Staff",
 };
 
+// ✅ FINANCE-ONLY SIDEBAR
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
@@ -118,9 +119,9 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// HELPERS
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   HELPERS
+------------------------------------------------------------------ */
 const formatCurrency = (amount: number): string =>
   `₱${amount.toLocaleString("en-US", {
     minimumFractionDigits: 2,
@@ -160,13 +161,13 @@ const generateViolationNo = (cin: string): string => {
   return `${prefix}-${match[1].padStart(5, "0")}`;
 };
 
-
 const recordCashPayment = async (params: {
   violationId: string;
   cin: string;
   plateNo: string;
   amountDue: number;
   cashReceived: number;
+  orNumber: string;
   officerName: string;
 }): Promise<string> => {
   const year = new Date().getFullYear();
@@ -177,7 +178,9 @@ const recordCashPayment = async (params: {
 
   return runTransaction(db, async (tx) => {
     const counterSnap = await tx.get(counterRef);
-    const last = counterSnap.exists() ? Number(counterSnap.data().lastValue ?? 0) : 0;
+    const last = counterSnap.exists()
+      ? Number(counterSnap.data().lastValue ?? 0)
+      : 0;
     const next = last + 1;
     const referenceNumber = `REF-${year}-${String(next).padStart(5, "0")}`;
 
@@ -187,20 +190,18 @@ const recordCashPayment = async (params: {
       { merge: true }
     );
 
-    // Lumilipat sa "Pending Verification" — hindi diretso sa "Verified".
-    // Nananatiling dalawang tao ang kailangan: isa para tanggapin ang cash,
-    // isa para i-verify. Kung ang finance staff din ang mag-ve-verify ng
-    // sarili niyang cash entry, wala nang silbi ang hakbang na iyon.
     tx.update(violationRef, {
       paymentStatus: "Pending Verification",
       paymentMethod: "Cash",
       paymentReference: referenceNumber,
       referenceNumber,
+      orNumber: params.orNumber,
       totalPaid: params.amountDue,
       cashReceived: params.cashReceived,
       cashChange: params.cashReceived - params.amountDue,
       paidAt: serverTimestamp(),
       cashRecordedBy: params.officerName,
+      orIssuedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       updatedBy: params.officerName,
     });
@@ -213,15 +214,18 @@ const recordCashPayment = async (params: {
       totalAmount: params.amountDue,
       cashReceived: params.cashReceived,
       referenceNumber,
+      orNumber: params.orNumber,
       method: "Cash",
       status: "pending",
       recordedBy: params.officerName,
       createdAt: serverTimestamp(),
+      orIssuedAt: serverTimestamp(),
+      orIssuedBy: params.officerName,
     });
 
     tx.set(auditRef, {
       userName: params.officerName,
-      action: `recorded cash payment for ${params.cin}`,
+      action: `recorded cash payment for ${params.cin} — OR #${params.orNumber}, Ref ${referenceNumber}`,
       record: params.cin,
       type: "cash-payment",
       metadata: {
@@ -230,6 +234,7 @@ const recordCashPayment = async (params: {
         amountDue: params.amountDue,
         cashReceived: params.cashReceived,
         referenceNumber,
+        orNumber: params.orNumber,
       },
       timestamp: serverTimestamp(),
     });
@@ -238,9 +243,9 @@ const recordCashPayment = async (params: {
   });
 };
 
-// ---------------------------------------------------------------------------
-// COMPONENT
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   COMPONENT
+------------------------------------------------------------------ */
 export default function PendingPayments() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -255,10 +260,11 @@ export default function PendingPayments() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Cash payment modal
   const [cashRow, setCashRow] = useState<PendingRow | null>(null);
   const [cashInput, setCashInput] = useState("");
   const [cashError, setCashError] = useState("");
+  const [orNumber, setOrNumber] = useState("");
+  const [orError, setOrError] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedReference, setSavedReference] = useState<string | null>(null);
 
@@ -304,7 +310,6 @@ export default function PendingPayments() {
             const data = d.data();
             const recordedAt = (data.recordedAt as Timestamp) ?? null;
 
-            // Compute due date based on recordedAt + PAYMENT_DUE_HOURS
             let dueDate: Timestamp | null = null;
             if (recordedAt) {
               try {
@@ -337,7 +342,7 @@ export default function PendingPayments() {
           .sort((a, b) => {
             const at = a.recordedAt?.toMillis() ?? 0;
             const bt = b.recordedAt?.toMillis() ?? 0;
-            return at - bt; // pinakamatagal nang naghihintay muna
+            return at - bt;
           });
 
         setRows(pending);
@@ -385,11 +390,12 @@ export default function PendingPayments() {
     setIsMenuOpen(false);
   };
 
-  /* Cash modal */
   const openCashModal = (row: PendingRow) => {
     setCashRow(row);
     setCashInput("");
     setCashError("");
+    setOrNumber("");
+    setOrError("");
     setSavedReference(null);
   };
 
@@ -397,6 +403,8 @@ export default function PendingPayments() {
     setCashRow(null);
     setCashInput("");
     setCashError("");
+    setOrNumber("");
+    setOrError("");
     setSavedReference(null);
   };
 
@@ -409,7 +417,16 @@ export default function PendingPayments() {
   const handleSaveCash = async () => {
     if (!cashRow) return;
     setCashError("");
+    setOrError("");
 
+    if (!orNumber.trim()) {
+      setOrError("OR Number is required. Get it from the physical receipt.");
+      return;
+    }
+    if (!/^\d{4,}$/.test(orNumber.trim())) {
+      setOrError("OR Number must be numeric (at least 4 digits).");
+      return;
+    }
     if (!cashInput.trim()) {
       setCashError("Enter the amount of cash received.");
       return;
@@ -429,12 +446,31 @@ export default function PendingPayments() {
 
     setSaving(true);
     try {
+      const orQuery = query(
+        collection(db, "payments"),
+        where("orNumber", "==", orNumber.trim())
+      );
+      const orSnap = await getDocs(orQuery);
+      if (!orSnap.empty) {
+        const existing = orSnap.docs[0].data();
+        setOrError(
+          `OR ${orNumber} was already recorded on ${
+            existing.createdAt?.toDate().toLocaleString() ?? "unknown date"
+          } by ${existing.recordedBy ?? "unknown"} for ${
+            existing.cin ?? "unknown"
+          }. Please verify the physical OR before proceeding.`
+        );
+        setSaving(false);
+        return;
+      }
+
       const reference = await recordCashPayment({
         violationId: cashRow.id,
         cin: cashRow.cin,
         plateNo: cashRow.plateNo,
         amountDue: cashRow.amount,
         cashReceived,
+        orNumber: orNumber.trim(),
         officerName: currentUser.name,
       });
       setSavedReference(reference);
@@ -446,7 +482,6 @@ export default function PendingPayments() {
     }
   };
 
-  /* Metrics */
   const metrics = useMemo(() => {
     const totalPending = rows.length;
     const overdue = rows.filter((r) => r.daysLeft < 0).length;
@@ -463,22 +498,19 @@ export default function PendingPayments() {
     { title: "Due Today", value: String(metrics.dueToday) },
   ];
 
-  /* Pagination */
   const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
   const paginatedRows = rows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 
-  // -----------------------------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------------------------
   return (
     <div className="finance-page">
       <div className="dashboard">
-        {/* SIDEBAR */}
+        {/* SIDEBAR — FINANCE ONLY */}
         <aside className="sidebar">
           <div className="sidebar-brand">
             <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
@@ -563,7 +595,6 @@ export default function PendingPayments() {
           </header>
 
           <main className="main-content">
-            {/* METRIC CARDS */}
             <div className="metric-grid-three">
               {metricCards.map((card) => (
                 <div key={card.title} className="card metric-card">
@@ -573,7 +604,6 @@ export default function PendingPayments() {
               ))}
             </div>
 
-            {/* TABLE */}
             <div className="card">
               <p className="card-eyebrow">Sector 3</p>
               <h2 className="card-title">Pending Payments</h2>
@@ -653,20 +683,19 @@ export default function PendingPayments() {
                     </table>
                   </div>
 
-                  {/* PAGINATION */}
                   <div className="pagination">
                     <button
                       type="button"
                       className="pagination-btn"
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
+                      disabled={safePage === 1}
                     >
                       <ChevronLeft size={16} />
                       Previous
                     </button>
 
                     <div className="pagination-info">
-                      <span className="pagination-page">{currentPage}</span>
+                      <span className="pagination-page">{safePage}</span>
                       <span className="pagination-sep">
                         of {totalPages} pages
                       </span>
@@ -678,7 +707,7 @@ export default function PendingPayments() {
                       onClick={() =>
                         setCurrentPage((p) => Math.min(totalPages, p + 1))
                       }
-                      disabled={currentPage === totalPages}
+                      disabled={safePage === totalPages}
                     >
                       Next
                       <ChevronRight size={16} />
@@ -693,7 +722,10 @@ export default function PendingPayments() {
 
       {/* CASH PAYMENT MODAL */}
       {cashRow && (
-        <div className="modal-overlay" onClick={closeCashModal}>
+        <div
+          className="modal-overlay"
+          onClick={saving ? undefined : closeCashModal}
+        >
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">
@@ -703,6 +735,7 @@ export default function PendingPayments() {
                 type="button"
                 className="modal-close-btn"
                 onClick={closeCashModal}
+                disabled={saving}
               >
                 <X size={20} />
               </button>
@@ -712,12 +745,13 @@ export default function PendingPayments() {
               {savedReference ? (
                 <>
                   <div className="cash-reference-box cash-reference-saved">
-                    <p className="cash-reference-label">Reference No.</p>
+                    <p className="cash-reference-label">REFERENCE NO.</p>
                     <p className="cash-reference-value">{savedReference}</p>
                   </div>
                   <p className="cash-saved-note">
                     Cash payment recorded. {cashRow.cin} now appears under
-                    Payment Verification for confirmation.
+                    Payment Verification for confirmation by a different staff
+                    member (segregation of duties).
                   </p>
                   {change !== null && change > 0 && (
                     <p className="cash-change-line">
@@ -728,6 +762,11 @@ export default function PendingPayments() {
                 </>
               ) : (
                 <>
+                  <div className="cash-ref-preview">
+                    <p className="cash-ref-preview-label">REFERENCE NO.</p>
+                    <p className="cash-ref-preview-hint">Generated on save</p>
+                  </div>
+
                   <div className="cash-summary">
                     <div className="cash-summary-row">
                       <span>CIN</span>
@@ -739,8 +778,36 @@ export default function PendingPayments() {
                     </div>
                     <div className="cash-summary-row">
                       <span>Amount Due</span>
-                      <strong>{formatCurrency(cashRow.amount)}</strong>
+                      <strong className="cash-summary-amount">
+                        {formatCurrency(cashRow.amount)}
+                      </strong>
                     </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="orNumber">
+                      OR Number <span className="required">*</span>
+                    </label>
+                    <input
+                      id="orNumber"
+                      type="text"
+                      inputMode="numeric"
+                      className="form-input"
+                      placeholder="e.g. 1234567"
+                      value={orNumber}
+                      onChange={(e) => {
+                        setOrNumber(e.target.value.replace(/\D/g, ""));
+                        setOrError("");
+                      }}
+                      disabled={saving}
+                      autoFocus
+                    />
+                    <small className="form-hint">
+                      Enter the OR number from the physical receipt issued
+                      to the violator. This is required for audit
+                      traceability and reconciliation.
+                    </small>
+                    {orError && <p className="form-error">{orError}</p>}
                   </div>
 
                   <div className="form-group">
@@ -752,14 +819,13 @@ export default function PendingPayments() {
                       min="0"
                       step="0.01"
                       className="form-input"
-                      placeholder="Amount"
+                      placeholder={cashRow.amount.toString()}
                       value={cashInput}
                       onChange={(e) => {
                         setCashInput(e.target.value);
                         setCashError("");
                       }}
                       disabled={saving}
-                      autoFocus
                     />
                   </div>
 
@@ -773,8 +839,9 @@ export default function PendingPayments() {
 
                   <p className="modal-note">
                     The reference number is generated when you save. The
-                    violation moves to Payment Verification, not straight to
-                    Verified.
+                    violation moves to Payment Verification for confirmation
+                    by a different staff member — you cannot verify your own
+                    entry.
                   </p>
                 </>
               )}
@@ -797,9 +864,9 @@ export default function PendingPayments() {
                   <button
                     className="btn-primary"
                     onClick={handleSaveCash}
-                    disabled={saving || !cashInput.trim()}
+                    disabled={saving || !cashInput.trim() || !orNumber.trim()}
                   >
-                    {saving ? "Saving..." : "Save Changes"}
+                    {saving ? "Saving..." : "Confirm Payment"}
                   </button>
                 </>
               )}

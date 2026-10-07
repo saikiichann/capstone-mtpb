@@ -49,6 +49,7 @@ type TransactionStatus = "Verified" | "Rejected";
 type TransactionRow = {
   id: string;
   reference: string;
+  orNumber: string | null;
   cin: string | null;
   plateNo: string | null;
   amount: number;
@@ -181,7 +182,7 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 /* ------------------------------------------------------------------
-   HELPERS — identical to the Finance version.
+   HELPERS
 ------------------------------------------------------------------ */
 const formatCurrency = (amount: number): string =>
   `₱${amount.toLocaleString("en-US", {
@@ -260,12 +261,7 @@ export default function TransactionHistory() {
     return () => unsubscribe();
   }, []);
 
-  /**
-   * Same source and enrichment as Finance's version: reads `payments`
-   * (not `violations`), so a Rejected payment stays visible here even
-   * though the violation itself goes back to "Unpaid" — otherwise every
-   * rejected payment would vanish from the audit trail.
-   */
+  /* Payments listener */
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(db, "payments"),
@@ -301,6 +297,7 @@ export default function TransactionHistory() {
             return {
               id: d.id,
               reference: data.referenceNumber ?? data.paymentReference ?? d.id,
+              orNumber: (data.orNumber as string) ?? null,
               cin: ((data.cin ?? data.violationCin) as string) ?? null,
               plateNo: ((data.plateNo ?? data.plateNumber) as string) ?? null,
               amount: Number(data.totalAmount ?? data.amount ?? 0),
@@ -399,8 +396,6 @@ export default function TransactionHistory() {
     }
   };
 
-  /** Kept for consistency with the other OIC pages even though this route
-   *  is OIC-only (Supervisor never reaches it) — see App.tsx. */
   const navGroups = useMemo(
     () =>
       NAV_GROUPS.filter(
@@ -410,10 +405,7 @@ export default function TransactionHistory() {
     [currentUser.role]
   );
 
-  /**
-   * The design shows a search box that Finance's original page doesn't
-   * have — added here, filtering client-side on CIN, plate, or reference.
-   */
+  /* Search — kasama na ang OR Number */
   const filteredRows = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return rows;
@@ -421,7 +413,8 @@ export default function TransactionHistory() {
       (row) =>
         (row.cin ?? "").toLowerCase().includes(q) ||
         (row.plateNo ?? "").toLowerCase().includes(q) ||
-        row.reference.toLowerCase().includes(q)
+        row.reference.toLowerCase().includes(q) ||
+        (row.orNumber ?? "").toLowerCase().includes(q)
     );
   }, [rows, searchQuery]);
 
@@ -430,8 +423,6 @@ export default function TransactionHistory() {
     () => Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE)),
     [filteredRows.length]
   );
-  // Clamped during render instead of a corrective useEffect — same fix
-  // applied to the other OIC pages built earlier.
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
   const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -443,7 +434,6 @@ export default function TransactionHistory() {
   return (
     <div className="oic-page transaction-history-page">
       <div className="dashboard">
-        {/* SIDEBAR */}
         <aside className="sidebar">
           <div className="sidebar-brand">
             <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
@@ -480,7 +470,6 @@ export default function TransactionHistory() {
           </nav>
         </aside>
 
-        {/* MAIN CONTENT */}
         <div className="main">
           <header className="main-header">
             <div>
@@ -533,7 +522,7 @@ export default function TransactionHistory() {
               <input
                 type="text"
                 className="search-bar-input"
-                placeholder="Search..."
+                placeholder="Search OR, CIN, plate, or reference..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -562,6 +551,7 @@ export default function TransactionHistory() {
                       <thead>
                         <tr>
                           <th>Reference</th>
+                          <th>OR Number</th>
                           <th>CIN</th>
                           <th>Plate No.</th>
                           <th>Amount</th>
@@ -575,6 +565,11 @@ export default function TransactionHistory() {
                         {paginatedRows.map((row) => (
                           <tr key={row.id}>
                             <td className="cell-reference">{row.reference}</td>
+                            <td className="cell-or-number">
+                              {row.orNumber ?? (
+                                <span className="cell-empty">—</span>
+                              )}
+                            </td>
                             <td>
                               {row.cin ? (
                                 <span className="cin-pill">{row.cin}</span>

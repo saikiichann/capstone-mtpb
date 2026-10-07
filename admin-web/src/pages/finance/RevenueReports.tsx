@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { KeyRound } from "lucide-react";
 import {
@@ -17,12 +17,12 @@ import {
   getDoc,
   onSnapshot,
   query,
+  where,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./RevenueReports.css";
 
-// Asset imports
 import mtpbLogo from "../../assets/mtpb-logo.png";
 import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
@@ -47,15 +47,9 @@ type RoleSlug =
   | "clamping-staff"
   | "impounding-staff";
 
-type CurrentUser = {
-  name: string;
-  role: RoleSlug;
-};
+type CurrentUser = { name: string; role: RoleSlug };
 
-type RevenuePoint = {
-  day: string;
-  value: number;
-};
+type RevenuePoint = { day: string; value: number };
 
 type Metrics = {
   todayRevenue: number;
@@ -63,17 +57,16 @@ type Metrics = {
   thisMonthRevenue: number;
 };
 
-type NavItem = {
-  label: string;
-  icon: string;
-  path: string;
-  active?: boolean;
+type PaymentRecord = {
+  id: string;
+  referenceNumber: string;
+  orNumber: string | null;
+  amount: number;
+  verifiedAt: Timestamp | null;
 };
 
-type NavGroup = {
-  label: string;
-  items: NavItem[];
-};
+type NavItem = { label: string; icon: string; path: string; active?: boolean };
+type NavGroup = { label: string; items: NavItem[] };
 
 // ---------------------------------------------------------------------------
 // CONSTANTS
@@ -94,9 +87,7 @@ const ROLE_LABELS: Record<RoleSlug, string> = {
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
-    items: [
-      { label: "Overview", icon: overviewIcon, path: "/finance" },
-    ],
+    items: [{ label: "Overview", icon: overviewIcon, path: "/finance" }],
   },
   {
     label: "Payment/Finance",
@@ -107,7 +98,6 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Revenue Reports", icon: revenueIcon, path: "/finance/revenue", active: true },
     ],
   },
-
   {
     label: "Reports",
     items: [
@@ -120,9 +110,11 @@ const NAV_GROUPS: NavGroup[] = [
 // ---------------------------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------------------------
-const formatCurrency = (amount: number): string => {
-  return `₱${amount.toLocaleString("en-US")}`;
-};
+const formatCurrency = (amount: number): string =>
+  `₱${amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 
 const formatCompactCurrency = (amount: number): string => {
   if (amount >= 1000) return `₱${(amount / 1000).toFixed(0)}k`;
@@ -174,10 +166,9 @@ export default function RevenueReports() {
   });
   const [revenueData, setRevenueData] = useState<RevenuePoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [allPayments, setAllPayments] = useState<PaymentRecord[]>([]);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Fetch current user
-  // -----------------------------------------------------------------------
+  /* Current user */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
       if (!loggedUser) {
@@ -206,51 +197,47 @@ export default function RevenueReports() {
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Real-time listener for violations (revenue source)
-  // ✅ CHANGED: Reads from "violations" collection
-  // -----------------------------------------------------------------------
+  /* Payments listener */
   useEffect(() => {
-    const ref = collection(db, "violations");
+    const q = query(
+      collection(db, "payments"),
+      where("status", "==", "Verified")
+    );
 
     const unsubscribe = onSnapshot(
-      ref,
+      q,
       (snap) => {
-        const allPayments = snap.docs.map((d) => {
+        const payments: PaymentRecord[] = snap.docs.map((d) => {
           const data = d.data();
           return {
-            // Use fineAmount instead of amount
-            amount: Number(data.fineAmount ?? 0),
-            // Use paymentStatus instead of status
-            status: data.paymentStatus ?? "Unpaid",
-            // Use verifiedAt (same field)
-            verifiedAt: data.verifiedAt ?? null,
+            id: d.id,
+            referenceNumber: data.referenceNumber ?? d.id,
+            orNumber: data.orNumber ?? null,
+            amount: Number(data.totalAmount ?? data.amount ?? 0),
+            verifiedAt: (data.verifiedAt as Timestamp) ?? null,
           };
         });
 
-        // Only count "Verified" payments
-        const verified = allPayments.filter((p) => p.status === "Verified");
-
-        // Compute metrics
-        const todayRevenue = verified
+        // Metrics
+        const todayRevenue = payments
           .filter((p) => isToday(p.verifiedAt))
           .reduce((sum, p) => sum + p.amount, 0);
 
-        const thisMonthRevenue = verified
+        const thisMonthRevenue = payments
           .filter((p) => isThisMonth(p.verifiedAt))
           .reduce((sum, p) => sum + p.amount, 0);
 
-        const totalRevenue = verified.reduce((sum, p) => sum + p.amount, 0);
+        const totalRevenue = payments.reduce((sum, p) => sum + p.amount, 0);
 
         setMetrics({ todayRevenue, totalRevenue, thisMonthRevenue });
 
-        // Compute last 7 days revenue
+        // Chart — last 7 days
         const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
         const revenueMap: Record<string, number> = {};
         days.forEach((d) => (revenueMap[d] = 0));
 
         const today = new Date();
-        verified.forEach((p) => {
+        payments.forEach((p) => {
           if (p.verifiedAt) {
             try {
               const date = p.verifiedAt.toDate();
@@ -258,21 +245,21 @@ export default function RevenueReports() {
                 (today.getTime() - date.getTime()) / 86400000
               );
               if (diffDays >= 0 && diffDays <= 6) {
-                const jsDay = date.getDay(); // 0=Sun, 1=Mon...
-                const dayLabel = days[(jsDay + 6) % 7]; // Shift so Mon=0
+                const jsDay = date.getDay();
+                const dayLabel = days[(jsDay + 6) % 7];
                 if (dayLabel in revenueMap) revenueMap[dayLabel] += p.amount;
               }
             } catch {
-              // skip invalid date
+              // skip
             }
           }
         });
 
-        const revenueArr: RevenuePoint[] = days.map((day) => ({
-          day,
-          value: revenueMap[day],
-        }));
-        setRevenueData(revenueArr);
+        setRevenueData(
+          days.map((day) => ({ day, value: revenueMap[day] }))
+        );
+
+        setAllPayments(payments);
         setLoading(false);
       },
       (err) => {
@@ -283,9 +270,7 @@ export default function RevenueReports() {
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Click-outside for dropdown
-  // -----------------------------------------------------------------------
+  /* Click outside */
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -296,9 +281,6 @@ export default function RevenueReports() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // -----------------------------------------------------------------------
-  // HANDLERS
-  // -----------------------------------------------------------------------
   const handleLogout = async () => {
     try {
       await firebaseSignOut(auth);
@@ -319,6 +301,30 @@ export default function RevenueReports() {
     setIsMenuOpen(false);
   };
 
+  /* OR Range summary — mula sa lahat ng payments */
+  const orRange = useMemo(() => {
+    const orNumbers = allPayments
+      .map((p) => p.orNumber)
+      .filter(Boolean) as string[];
+
+    if (orNumbers.length === 0) {
+      return { from: "—", to: "—", count: 0 };
+    }
+
+    const sorted = [...orNumbers].sort((a, b) => {
+      const na = Number(a);
+      const nb = Number(b);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return a.localeCompare(b);
+    });
+
+    return {
+      from: sorted[0],
+      to: sorted[sorted.length - 1],
+      count: orNumbers.length,
+    };
+  }, [allPayments]);
+
   const metricCards = [
     {
       title: "Revenue by day",
@@ -336,13 +342,9 @@ export default function RevenueReports() {
     },
   ];
 
-  // -----------------------------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------------------------
   return (
     <div className="finance-page">
       <div className="dashboard">
-        {/* SIDEBAR */}
         <aside className="sidebar">
           <div className="sidebar-brand">
             <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
@@ -375,7 +377,6 @@ export default function RevenueReports() {
           </nav>
         </aside>
 
-        {/* MAIN CONTENT */}
         <div className="main">
           <header className="main-header">
             <div>
@@ -419,7 +420,7 @@ export default function RevenueReports() {
           </header>
 
           <main className="main-content">
-            {/* METRIC CARDS (3 columns) */}
+            {/* METRIC CARDS */}
             <div className="metric-grid-three">
               {metricCards.map((card) => (
                 <div key={card.title} className="card metric-card">
@@ -430,6 +431,38 @@ export default function RevenueReports() {
                   )}
                 </div>
               ))}
+            </div>
+
+            {/* OR RANGE SUMMARY */}
+            <div className="card">
+              <p className="card-eyebrow">Official Receipts</p>
+              <h2 className="card-title">OR Range Summary</h2>
+
+              <div className="or-summary-grid">
+                <div className="or-summary-item">
+                  <span className="or-summary-label">OR Range</span>
+                  <span className="or-summary-value">
+                    {orRange.count > 0
+                      ? `${orRange.from} — ${orRange.to}`
+                      : "No records"}
+                  </span>
+                </div>
+                <div className="or-summary-item">
+                  <span className="or-summary-label">Receipts Issued</span>
+                  <span className="or-summary-value">{orRange.count}</span>
+                </div>
+                <div className="or-summary-item">
+                  <span className="or-summary-label">Total Verified</span>
+                  <span className="or-summary-value">
+                    {formatCurrency(metrics.totalRevenue)}
+                  </span>
+                </div>
+              </div>
+
+              <p className="or-summary-note">
+                Use this range to reconcile against the physical OR booklet.
+                Any gap in the sequence may indicate missing or unrecorded receipts.
+              </p>
             </div>
 
             {/* REVENUE CHART */}

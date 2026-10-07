@@ -4,7 +4,29 @@
 ================================================================== */
 
 /* ==================================================================
-   METRIC CARDS (3 columns)
+   PAGE-WIDE FONT — Inter
+================================================================== */
+.finance-page {
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ==================================================================
+   MAIN CONTENT — bawasan ang gap at padding
+   (override default mula sa Homepage.css)
+================================================================== */
+.finance-page .main-content {
+  padding: 20px 28px;
+  gap: 16px;                /* ← dating 24px, gawing 16px */
+}
+
+.finance-page .card {
+  padding: 20px 24px;       /* ← dating 24px, gawing 20px */
+}
+
+/* ==================================================================
+   METRIC CARDS (3 columns) — mas compact
 ================================================================== */
 .finance-page .metric-grid-three {
   display: grid;
@@ -14,28 +36,244 @@
 }
 
 .finance-page .metric-grid-three .metric-card {
-  padding: 20px 24px;
+  padding: 16px 20px;       /* ← dating 20px 24px */
 }
 
 .finance-page .metric-grid-three .metric-title {
-  font-size: 14px;
+  font-family: inherit;
+  font-size: 13px;
   font-weight: 600;
   color: #111827;
   margin: 0;
 }
 
 .finance-page .metric-grid-three .metric-value {
-  font-size: 28px;
+  font-family: inherit;
+  font-size: 24px;          /* ← dating 28px */
   font-weight: 700;
   color: #000;
-  margin: 8px 0 4px;
+  margin: 6px 0 2px;
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 .finance-page .metric-grid-three .metric-subtitle {
-  font-size: 12px;
-  margin: 4px 0 0;
+  font-family: inherit;
+  font-size: 11.5px;
+  margin: 2px 0 0;
   color: #6B7280;
+}
+
+/* ==================================================================
+   CARD HEADER — mas compact
+================================================================== */
+.finance-page .card-eyebrow {
+  font-size: 10.5px;
+  margin: 0 0 2px;
+}
+
+.finance-page .card-title {
+  font-size: 17px;          /* ← dating 20px */
+  margin: 0 0 12px;
+}
+
+/* ==================================================================
+   OR RANGE SUMMARY — mas compact
+================================================================== */
+.finance-page .or-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;      /* ← dating 20px */
+}
+
+.finance-page .or-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 20px;       /* ← dating 22px 24px */
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+}
+
+.finance-page .or-summary-label {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748B;
+  margin: 0;
+}
+
+.finance-page .or-summary-value {
+  font-family: inherit;
+  font-size: 18px;          /* ← dating 22px */
+  font-weight: 700;
+  color: #0F172A;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.finance-page .or-summary-note {
+  font-family: inherit;
+  margin: 0;
+  padding: 0 4px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #6B7280;
+  font-style: italic;
+}
+
+/* ==================================================================
+   REVENUE CHART — i-limit ang height
+================================================================== */
+.finance-page .revenue-chart-container {
+  width: 100%;
+  max-height: 240px;        /* ← limitahan para hindi sobrang haba */
+}
+
+/* ==================================================================
+   TABLE — compact rows
+================================================================== */
+.finance-page .table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.finance-page .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: inherit;
+  font-size: 14px;
+  margin-top: 10px;         /* ← dating 16px */
+}
+
+.finance-page .data-table thead {
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.finance-page .data-table th {
+  font-family: inherit;
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #374151;
+  padding: 10px 8px;        /* ← dating 12px 8px */
+  white-space: nowrap;
+}
+
+.finance-page .data-table td {
+  font-family: inherit;
+  padding: 12px 8px;        /* ← dating 14px 8px */
+  color: #374151;
+  vertical-align: middle;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.finance-page .data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.finance-page .data-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+/* ==================================================================
+   TABLE CELLS
+================================================================== */
+.finance-page .cell-reference {
+  font-family: inherit;
+  font-weight: 600;
+  color: #111827;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.finance-page .cell-or-number {
+  font-family: inherit;
+  font-weight: 500;
+  color: #111827;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-page .cell-plate {
+  font-family: inherit;
+  color: #111827;
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.finance-page .cell-amount {
+  font-family: inherit;
+  color: #111827;
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-page .cell-method {
+  font-family: inherit;
+  color: #374151;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.finance-page .cell-verified-by {
+  font-family: inherit;
+  color: #374151;
+  font-weight: 500;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.finance-page .cell-verified-at {
+  font-family: inherit;
+  color: #6B7280;
+  font-weight: 400;
+  font-size: 12.5px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-page .cin-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   LOADING / EMPTY
+================================================================== */
+.finance-page .table-loading,
+.finance-page .table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 20px;       /* ← dating 40px */
+  font-family: inherit;
+  color: #6B7280;
+  font-size: 13.5px;
+}
+
+.finance-page .table-loading p,
+.finance-page .table-empty p {
+  margin: 0;
 }
 
 /* ==================================================================
@@ -45,10 +283,23 @@
   .finance-page .metric-grid-three {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .finance-page .or-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
   .finance-page .metric-grid-three {
     grid-template-columns: 1fr;
+  }
+
+  .finance-page .or-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-page .main-content {
+    padding: 16px;
+    gap: 12px;
   }
 }

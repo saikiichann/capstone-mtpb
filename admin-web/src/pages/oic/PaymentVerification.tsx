@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
+  addDoc,
   collection,
   doc,
   getDoc,
@@ -66,6 +67,7 @@ type PaymentStatus = "Pending Verification" | "Verified" | "Rejected";
 type PaymentRow = {
   id: string;
   reference: string;
+  orNumber: string | null;
   cin: string | null;
   plateNo: string | null;
   amount: number;
@@ -76,6 +78,7 @@ type PaymentRow = {
   paidAt: Timestamp | null;
   violationId: string | null;
   clampId: string | null;
+  recordedBy: string | null;
   orphaned: boolean;
 };
 
@@ -320,22 +323,23 @@ export default function PaymentVerification() {
             data.verificationStatus ?? data.status ?? ""
           ).toLowerCase();
 
-          const status: PaymentStatus = [
-            "verified",
-            "succeeded",
-            "approved",
-          ].includes(rawStatus)
+          const status: PaymentStatus = ["verified", "succeeded", "approved"].includes(
+            rawStatus
+          )
             ? "Verified"
             : ["rejected", "failed", "declined"].includes(rawStatus)
             ? "Rejected"
             : "Pending Verification";
 
           const paidAt =
-            (data.paidAt as Timestamp) ?? (data.createdAt as Timestamp) ?? null;
+            (data.paidAt as Timestamp) ??
+            (data.createdAt as Timestamp) ??
+            null;
 
           return {
             id: d.id,
             reference: data.referenceNumber ?? data.paymentReference ?? d.id,
+            orNumber: (data.orNumber as string) ?? null,
             cin: ((data.cin ?? data.violationCin) as string) ?? null,
             plateNo: ((data.plateNo ?? data.plateNumber) as string) ?? null,
             amount: Number(data.totalAmount ?? data.amount ?? 0),
@@ -346,6 +350,7 @@ export default function PaymentVerification() {
             paidAt,
             violationId: (data.violationId as string) ?? null,
             clampId: (data.clampId as string) ?? null,
+            recordedBy: (data.recordedBy as string) ?? null,
             orphaned: false,
           } as PaymentRow;
         });
@@ -483,13 +488,6 @@ export default function PaymentVerification() {
     }
   };
 
-  /**
-   * Approve o reject ang bayad — isang atomic write.
-   *
-   * ✅ FIX: Kapag Rejected, `paymentStatus` ay naka-set sa "Rejected" — HINDI
-   * "Unpaid". Para lumabas yung status na "Payment Rejected" sa AllViolations
-   * page (na nagde-derive mula sa `paymentStatus` field).
-   */
   const handlePaymentAction = async (
     row: PaymentRow,
     action: "Verified" | "Rejected"
@@ -498,6 +496,40 @@ export default function PaymentVerification() {
       alert(
         "This payment is not linked to any violation. It cannot be approved or rejected here — check the payment record in Firestore first."
       );
+      return;
+    }
+
+    // ─── SEGREGATION OF DUTIES CHECK ───
+    // Hindi pwedeng i-verify ng parehong tao na nag-record ng payment.
+    if (action === "Verified" && row.recordedBy === currentUser.name) {
+      alert(
+        "SEGREGATION OF DUTIES VIOLATION\n\n" +
+          "Hindi mo pwedeng i-verify ang sarili mong cash entry.\n\n" +
+          `Nag-record ka ng payment na ito (${row.reference}). ` +
+          "Kailangan ng IBANG authorized personnel (Finance Supervisor o OIC) " +
+          "ang mag-verify ng payment na ito.\n\n" +
+          "Ito ay requirement ng COA Circular 2022-004 (Government Cash Handling — Two-Person Control)."
+      );
+
+      // Log the attempt para may evidence kung may investigation
+      try {
+        await addDoc(collection(db, "auditLogs"), {
+          userName: currentUser.name,
+          action: `attempted to self-verify payment ${row.reference} for ${row.cin}`,
+          record: row.cin ?? row.reference,
+          type: "segregation-violation-attempt",
+          metadata: {
+            reference: row.reference,
+            cin: row.cin,
+            recordedBy: row.recordedBy,
+            attemptedBy: currentUser.name,
+          },
+          timestamp: serverTimestamp(),
+        });
+      } catch (logErr) {
+        console.warn("Failed to log segregation violation attempt:", logErr);
+      }
+
       return;
     }
 
@@ -516,7 +548,9 @@ export default function PaymentVerification() {
       !window.confirm(
         `Approve payment for ${row.reference}?\n\nCIN: ${
           row.cin ?? "—"
-        }\nAmount: ${formatCurrency(row.amount)}\nMethod: ${row.method}`
+        }\nOR Number: ${row.orNumber ?? "—"}\nAmount: ${formatCurrency(
+          row.amount
+        )}\nMethod: ${row.method}`
       )
     ) {
       return;
@@ -542,7 +576,6 @@ export default function PaymentVerification() {
           if (vSnap.exists()) {
             const vData = vSnap.data();
             resolvedClampId = vData.clampId ?? vData.clampQrId ?? null;
-            console.log("Resolved clampId from violation:", resolvedClampId);
           }
         } catch (err) {
           console.warn("Clamp resolution from violation failed:", err);
@@ -564,7 +597,6 @@ export default function PaymentVerification() {
       });
 
       // 2. Violation
-      // ✅ FIX: Rejected → "Rejected" (hindi "Unpaid")
       batch.update(violationRef, {
         paymentStatus: action === "Verified" ? "Verified" : "Rejected",
         verifiedBy: currentUser.name,
@@ -574,6 +606,7 @@ export default function PaymentVerification() {
               paymentMethod: row.method,
               paymentReference: row.reference,
               referenceNumber: row.reference,
+              orNumber: row.orNumber,
               totalPaid: row.amount,
               paidAt: row.paidAt ?? serverTimestamp(),
               releaseStatus: "Awaiting OIC Approval",
@@ -592,18 +625,12 @@ export default function PaymentVerification() {
           : {}),
       });
 
-      // 3. Clamp — verified lang, para makapasok sa release queue
+      // 3. Clamp — verified lang
       if (clampRef) {
         batch.update(clampRef, {
           status: "verified",
           paidAt: serverTimestamp(),
         });
-        console.log(`✅ Clamp ${resolvedClampId} updated to "verified"`);
-      } else if (action === "Verified") {
-        console.warn(
-          "⚠️ No linked clamp found — payment verified but clamp not updated.",
-          { resolvedClampId, rowClampId: row.clampId }
-        );
       }
 
       // 4. Audit log
@@ -611,15 +638,20 @@ export default function PaymentVerification() {
         userName: currentUser.name,
         action: `${
           action === "Verified" ? "approved" : "rejected"
-        } payment for ${row.cin ?? "(no CIN)"} (${row.reference})`,
+        } payment for ${row.cin ?? "(no CIN)"} (${row.reference}${
+          row.orNumber ? ` — OR #${row.orNumber}` : ""
+        })`,
         record: row.cin ?? row.reference,
         type: "payment-verification",
         metadata: {
           reference: row.reference,
+          orNumber: row.orNumber,
           cin: row.cin,
           amount: row.amount,
           method: row.method,
           newStatus: action,
+          recordedBy: row.recordedBy,
+          verifiedBy: currentUser.name,
           ...(rejectionReason ? { rejectionReason } : {}),
         },
         timestamp: serverTimestamp(),
@@ -766,10 +798,12 @@ export default function PaymentVerification() {
                       <thead>
                         <tr>
                           <th>Reference</th>
+                          <th>OR Number</th>
                           <th>CIN</th>
                           <th>Plate No.</th>
                           <th>Amount</th>
                           <th>Method</th>
+                          <th>Recorded By</th>
                           <th>Waiting</th>
                           <th>Action</th>
                         </tr>
@@ -791,6 +825,9 @@ export default function PaymentVerification() {
                                 />
                               )}
                             </td>
+                            <td className="cell-or-number">
+                              {row.orNumber ?? "—"}
+                            </td>
                             <td>
                               {row.cin ? (
                                 <span className="cin-pill">{row.cin}</span>
@@ -807,6 +844,9 @@ export default function PaymentVerification() {
                               {formatCurrency(row.amount)}
                             </td>
                             <td className="cell-method">{row.method}</td>
+                            <td className="cell-recorded-by">
+                              {row.recordedBy ?? "—"}
+                            </td>
                             <td>
                               <span
                                 className={`waiting-pill ${getWaitingClass(
@@ -829,6 +869,8 @@ export default function PaymentVerification() {
                                 title={
                                   row.orphaned
                                     ? "Not linked to a violation"
+                                    : row.recordedBy === currentUser.name
+                                    ? "Cannot verify your own entry"
                                     : "Approve payment"
                                 }
                               >

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { KeyRound, ChevronLeft, ChevronRight, X, Copy, Check } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   runTransaction,
@@ -190,9 +191,7 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 /* ------------------------------------------------------------------
-   HELPERS — identical to the Finance version. This is shared business
-   logic (fine amounts, due-date rules, the cash-recording transaction);
-   it must not diverge just because a different role's page calls it.
+   HELPERS
 ------------------------------------------------------------------ */
 const formatCurrency = (amount: number): string =>
   `₱${amount.toLocaleString("en-US", {
@@ -234,14 +233,18 @@ const generateViolationNo = (cin: string): string => {
 };
 
 /**
- * Records a cash payment received over the counter — by Finance, or now
- * also by the OIC as a backup when Finance isn't available.
+ * Records a cash payment received over the counter — by Finance, or by the
+ * OIC as a backup when Finance isn't available.
  *
- * This moves the violation to "Pending Verification", never straight to
+ * Requires an OR Number. This is validated against existing payments
+ * before saving — duplicates are rejected. Every cash payment is
+ * traceable to a physical receipt, and reuse of the same OR is
+ * prevented.
+ *
+ * The violation moves to "Pending Verification", never straight to
  * "Verified" — Finance still has to confirm it on Payment Verification
  * afterward. That keeps two-person control intact even with OIC able to
- * record: OIC records, Finance verifies, still two different people. Only
- * the recorder's identity changes; the verification step is untouched.
+ * record: whoever records, someone ELSE must verify.
  */
 const recordCashPayment = async (params: {
   violationId: string;
@@ -249,6 +252,7 @@ const recordCashPayment = async (params: {
   plateNo: string;
   amountDue: number;
   cashReceived: number;
+  orNumber: string;
   officerName: string;
 }): Promise<string> => {
   const year = new Date().getFullYear();
@@ -259,7 +263,9 @@ const recordCashPayment = async (params: {
 
   return runTransaction(db, async (tx) => {
     const counterSnap = await tx.get(counterRef);
-    const last = counterSnap.exists() ? Number(counterSnap.data().lastValue ?? 0) : 0;
+    const last = counterSnap.exists()
+      ? Number(counterSnap.data().lastValue ?? 0)
+      : 0;
     const next = last + 1;
     const referenceNumber = `REF-${year}-${String(next).padStart(5, "0")}`;
 
@@ -274,11 +280,13 @@ const recordCashPayment = async (params: {
       paymentMethod: "Cash",
       paymentReference: referenceNumber,
       referenceNumber,
+      orNumber: params.orNumber,
       totalPaid: params.amountDue,
       cashReceived: params.cashReceived,
       cashChange: params.cashReceived - params.amountDue,
       paidAt: serverTimestamp(),
       cashRecordedBy: params.officerName,
+      orIssuedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       updatedBy: params.officerName,
     });
@@ -291,15 +299,18 @@ const recordCashPayment = async (params: {
       totalAmount: params.amountDue,
       cashReceived: params.cashReceived,
       referenceNumber,
+      orNumber: params.orNumber,
       method: "Cash",
       status: "pending",
       recordedBy: params.officerName,
       createdAt: serverTimestamp(),
+      orIssuedAt: serverTimestamp(),
+      orIssuedBy: params.officerName,
     });
 
     tx.set(auditRef, {
       userName: params.officerName,
-      action: `recorded cash payment for ${params.cin}`,
+      action: `recorded cash payment for ${params.cin} — OR #${params.orNumber}, Ref ${referenceNumber}`,
       record: params.cin,
       type: "cash-payment",
       metadata: {
@@ -308,6 +319,7 @@ const recordCashPayment = async (params: {
         amountDue: params.amountDue,
         cashReceived: params.cashReceived,
         referenceNumber,
+        orNumber: params.orNumber,
       },
       timestamp: serverTimestamp(),
     });
@@ -337,8 +349,12 @@ export default function PendingPayments() {
   const [cashRow, setCashRow] = useState<PendingRow | null>(null);
   const [cashInput, setCashInput] = useState("");
   const [cashError, setCashError] = useState("");
+  const [orNumber, setOrNumber] = useState("");
+  const [orError, setOrError] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedReference, setSavedReference] = useState<string | null>(null);
+  const [savedChange, setSavedChange] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
 
   /* Current user */
   useEffect(() => {
@@ -457,8 +473,6 @@ export default function PendingPayments() {
     }
   };
 
-  /** Kept for consistency with the other OIC pages even though this route
-   *  is OIC-only (Supervisor never reaches it) — see App.tsx. */
   const navGroups = useMemo(
     () =>
       NAV_GROUPS.filter(
@@ -473,14 +487,22 @@ export default function PendingPayments() {
     setCashRow(row);
     setCashInput("");
     setCashError("");
+    setOrNumber("");
+    setOrError("");
     setSavedReference(null);
+    setSavedChange(null);
+    setCopied(false);
   };
 
   const closeCashModal = () => {
     setCashRow(null);
     setCashInput("");
     setCashError("");
+    setOrNumber("");
+    setOrError("");
     setSavedReference(null);
+    setSavedChange(null);
+    setCopied(false);
   };
 
   const cashReceived = Number(cashInput);
@@ -489,10 +511,30 @@ export default function PendingPayments() {
       ? cashReceived - cashRow.amount
       : null;
 
+  const handleCopy = () => {
+    if (!savedReference) return;
+    navigator.clipboard.writeText(savedReference).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
   const handleSaveCash = async () => {
     if (!cashRow) return;
     setCashError("");
+    setOrError("");
 
+    // Validate OR Number
+    if (!orNumber.trim()) {
+      setOrError("OR Number is required. Get it from the physical receipt.");
+      return;
+    }
+    if (!/^\d{4,}$/.test(orNumber.trim())) {
+      setOrError("OR Number must be numeric (at least 4 digits).");
+      return;
+    }
+
+    // Validate Cash
     if (!cashInput.trim()) {
       setCashError("Enter the amount of cash received.");
       return;
@@ -512,15 +554,42 @@ export default function PendingPayments() {
 
     setSaving(true);
     try {
+      // Duplicate OR check
+      const orQuery = query(
+        collection(db, "payments"),
+        where("orNumber", "==", orNumber.trim())
+      );
+      const orSnap = await getDocs(orQuery);
+      if (!orSnap.empty) {
+        const existing = orSnap.docs[0].data();
+        setOrError(
+          `OR ${orNumber} was already recorded on ${
+            existing.createdAt?.toDate().toLocaleString() ?? "unknown date"
+          } by ${existing.recordedBy ?? "unknown"} for ${
+            existing.cin ?? "unknown"
+          }. Please verify the physical OR before proceeding.`
+        );
+        setSaving(false);
+        return;
+      }
+
       const reference = await recordCashPayment({
         violationId: cashRow.id,
         cin: cashRow.cin,
         plateNo: cashRow.plateNo,
         amountDue: cashRow.amount,
         cashReceived,
+        orNumber: orNumber.trim(),
         officerName: currentUser.name,
       });
+
       setSavedReference(reference);
+      setSavedChange(cashReceived - cashRow.amount);
+
+      // Auto-close after 2s
+      setTimeout(() => {
+        closeCashModal();
+      }, 2000);
     } catch (err: any) {
       console.error("Cash payment failed:", err);
       setCashError(err.message || "Failed to record cash payment.");
@@ -548,8 +617,6 @@ export default function PendingPayments() {
 
   /* Pagination */
   const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
-  // Clamped during render instead of a corrective useEffect — same fix
-  // applied to ClampingLog.tsx / ImpoundingLog.tsx / ActiveImpounding.tsx.
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
   const paginatedRows = rows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -769,9 +836,9 @@ export default function PendingPayments() {
         </div>
       </div>
 
-      {/* CASH PAYMENT MODAL */}
+      {/* CASH PAYMENT MODAL — reference-style layout */}
       {cashRow && (
-        <div className="modal-overlay" onClick={closeCashModal}>
+        <div className="modal-overlay" onClick={saving ? undefined : closeCashModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">
@@ -781,6 +848,7 @@ export default function PendingPayments() {
                 type="button"
                 className="modal-close-btn"
                 onClick={closeCashModal}
+                disabled={saving}
               >
                 <X size={20} />
               </button>
@@ -789,23 +857,34 @@ export default function PendingPayments() {
             <div className="modal-body">
               {savedReference ? (
                 <>
+                  {/* Success state */}
                   <div className="cash-reference-box cash-reference-saved">
-                    <p className="cash-reference-label">Reference No.</p>
+                    <p className="cash-reference-label">REFERENCE NO.</p>
                     <p className="cash-reference-value">{savedReference}</p>
                   </div>
                   <p className="cash-saved-note">
                     Cash payment recorded. {cashRow.cin} now appears under
-                    Payment Verification for confirmation.
+                    Payment Verification for confirmation by another staff
+                    member (segregation of duties).
                   </p>
-                  {change !== null && change > 0 && (
+                  {savedChange !== null && savedChange > 0 && (
                     <p className="cash-change-line">
                       Change due to violator:{" "}
-                      <strong>{formatCurrency(change)}</strong>
+                      <strong>{formatCurrency(savedChange)}</strong>
                     </p>
                   )}
                 </>
               ) : (
                 <>
+                  {/* Reference number preview (generated on save) */}
+                  <div className="cash-ref-preview">
+                    <p className="cash-ref-preview-label">REFERENCE NO.</p>
+                    <p className="cash-ref-preview-hint">
+                      Generated on save
+                    </p>
+                  </div>
+
+                  {/* Details box */}
                   <div className="cash-summary">
                     <div className="cash-summary-row">
                       <span>CIN</span>
@@ -817,10 +896,39 @@ export default function PendingPayments() {
                     </div>
                     <div className="cash-summary-row">
                       <span>Amount Due</span>
-                      <strong>{formatCurrency(cashRow.amount)}</strong>
+                      <strong className="cash-summary-amount">
+                        {formatCurrency(cashRow.amount)}
+                      </strong>
                     </div>
                   </div>
 
+                  {/* OR Number */}
+                  <div className="form-group">
+                    <label htmlFor="orNumber">
+                      OR Number <span className="required">*</span>
+                    </label>
+                    <input
+                      id="orNumber"
+                      type="text"
+                      inputMode="numeric"
+                      className="form-input"
+                      placeholder="e.g. 1234567"
+                      value={orNumber}
+                      onChange={(e) => {
+                        setOrNumber(e.target.value.replace(/\D/g, ""));
+                        setOrError("");
+                      }}
+                      disabled={saving}
+                    />
+                    <small className="form-hint">
+                      Enter the OR number from the physical receipt issued
+                      to the violator. This is required for audit
+                      traceability and reconciliation.
+                    </small>
+                    {orError && <p className="form-error">{orError}</p>}
+                  </div>
+
+                  {/* Cash Received */}
                   <div className="form-group">
                     <label htmlFor="cashReceived">Cash Received (₱)</label>
                     <input
@@ -830,7 +938,7 @@ export default function PendingPayments() {
                       min="0"
                       step="0.01"
                       className="form-input"
-                      placeholder="Amount"
+                      placeholder={cashRow.amount.toString()}
                       value={cashInput}
                       onChange={(e) => {
                         setCashInput(e.target.value);
@@ -848,12 +956,6 @@ export default function PendingPayments() {
                   )}
 
                   {cashError && <p className="form-error">{cashError}</p>}
-
-                  <p className="modal-note">
-                    The reference number is generated when you save. The
-                    violation moves to Payment Verification, not straight to
-                    Verified.
-                  </p>
                 </>
               )}
             </div>
@@ -875,9 +977,9 @@ export default function PendingPayments() {
                   <button
                     className="btn-primary"
                     onClick={handleSaveCash}
-                    disabled={saving || !cashInput.trim()}
+                    disabled={saving || !cashInput.trim() || !orNumber.trim()}
                   >
-                    {saving ? "Saving..." : "Save Changes"}
+                    {saving ? "Saving..." : "Confirm Payment"}
                   </button>
                 </>
               )}

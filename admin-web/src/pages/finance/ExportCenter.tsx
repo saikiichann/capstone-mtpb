@@ -22,6 +22,7 @@ import {
   serverTimestamp,
   limit,
   getDocs,
+  where,
   Timestamp,
 } from "firebase/firestore";
 import * as XLSX from "xlsx";
@@ -30,7 +31,6 @@ import autoTable from "jspdf-autotable";
 import { auth, db } from "../../firebase";
 import "./ExportCenter.css";
 
-// Asset imports
 import mtpbLogo from "../../assets/mtpb-logo.png";
 import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
@@ -86,11 +86,7 @@ type NavGroup = {
 // ---------------------------------------------------------------------------
 // CONSTANTS
 // ---------------------------------------------------------------------------
-const DATA_TYPE_OPTIONS: DataType[] = [
-  "Transactions",
-  "Revenue",
-  "Release Log",
-];
+const DATA_TYPE_OPTIONS: DataType[] = ["Transactions", "Revenue", "Release Log"];
 
 const ROLE_LABELS: Record<RoleSlug, string> = {
   oic: "Officer in Charge",
@@ -203,7 +199,10 @@ const slugifyDataType = (dataType: DataType): string => {
 const formatDateForFilename = (dateStr: string): string => {
   try {
     const [, m, d] = dateStr.split("-");
-    const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+    const monthNames = [
+      "jan", "feb", "mar", "apr", "may", "jun",
+      "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
     return `${monthNames[parseInt(m, 10) - 1]}${parseInt(d, 10)}`;
   } catch {
     return "unknown";
@@ -289,7 +288,7 @@ const downloadCsv = (
 };
 
 // ---------------------------------------------------------------------------
-// EXPORT: Excel — 2 sheets (Summary + Data)
+// EXPORT: Excel
 // ---------------------------------------------------------------------------
 const downloadExcel = (
   filename: string,
@@ -306,7 +305,9 @@ const downloadExcel = (
 
   const totalRecords = rows.length;
   const totalAmount = rows.reduce((sum, r) => {
-    const amt = Number(r.totalAmount ?? r.amount ?? r.totalPaid ?? 0);
+    const amt = Number(
+      r.totalAmount ?? r.amount ?? r.totalPaid ?? r.fineAmount ?? 0
+    );
     return sum + (isNaN(amt) ? 0 : amt);
   }, 0);
 
@@ -364,7 +365,7 @@ const downloadExcel = (
 };
 
 // ---------------------------------------------------------------------------
-// EXPORT: PDF — Dark navy header + Blue accent (same as Record Officer)
+// EXPORT: PDF
 // ---------------------------------------------------------------------------
 const downloadPdf = (
   filename: string,
@@ -386,13 +387,13 @@ const downloadPdf = (
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
 
-  // ─── HEADER — Dark navy + Blue accent ───
+  // ─── HEADER ───
   const headerHeight = 90;
 
-  doc.setFillColor(15, 23, 42); // #0A2540 dark navy
+  doc.setFillColor(15, 23, 42);
   doc.rect(0, 0, pageWidth, headerHeight, "F");
 
-  doc.setFillColor(29, 78, 216); // #1D4ED8 blue-700
+  doc.setFillColor(29, 78, 216);
   doc.rect(0, headerHeight, pageWidth, 4, "F");
 
   doc.setTextColor(255, 255, 255);
@@ -402,7 +403,7 @@ const downloadPdf = (
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(200, 210, 230); // light gray-blue
+  doc.setTextColor(200, 210, 230);
   doc.text("Manila Traffic and Parking Bureau", 40, 58);
   doc.text("Integrated Enforcement System", 40, 72);
 
@@ -413,19 +414,13 @@ const downloadPdf = (
 
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(200, 210, 230); // light gray-blue
-  doc.text(
-    `Date Range: ${metadata.dateRange}`,
-    pageWidth - 40,
-    66,
-    { align: "right" }
-  );
-  doc.text(
-    `Exported by: ${metadata.exportedBy}`,
-    pageWidth - 40,
-    80,
-    { align: "right" }
-  );
+  doc.setTextColor(200, 210, 230);
+  doc.text(`Date Range: ${metadata.dateRange}`, pageWidth - 40, 66, {
+    align: "right",
+  });
+  doc.text(`Exported by: ${metadata.exportedBy}`, pageWidth - 40, 80, {
+    align: "right",
+  });
 
   // ─── SUMMARY CARDS ───
   const cardY = headerHeight + 24;
@@ -435,7 +430,9 @@ const downloadPdf = (
 
   const totalRecords = rows.length;
   const totalAmount = rows.reduce((sum, r) => {
-    const amt = Number(r.totalAmount ?? r.amount ?? r.totalPaid ?? 0);
+    const amt = Number(
+      r.totalAmount ?? r.amount ?? r.totalPaid ?? r.fineAmount ?? 0
+    );
     return sum + (isNaN(amt) ? 0 : amt);
   }, 0);
 
@@ -474,21 +471,23 @@ const downloadPdf = (
 
     doc.setFontSize(13);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(10, 37, 64); // dark navy
+    doc.setTextColor(10, 37, 64);
     doc.text(card.value, x + 12, cardY + 42);
   });
 
-  // ─── TABLE ───
-  // 1. Define which keys you want to show, but don't set fixed widths yet
+  // ─── TABLE COLUMNS ───
   const preferredColumnKeys = [
     { key: "referenceNumber", label: "REFERENCE" },
+    { key: "orNumber", label: "OR NO." },
     { key: "cin", label: "CIN" },
     { key: "plateNo", label: "PLATE NO." },
     { key: "amount", label: "AMOUNT" },
     { key: "method", label: "METHOD" },
     { key: "status", label: "STATUS" },
+    { key: "recordedBy", label: "RECORDED BY" },
+    { key: "recordedAt", label: "RECORDED AT" },
     { key: "verifiedBy", label: "VERIFIED BY" },
-    { key: "verifiedAt", label: "DATE & TIME" },
+    { key: "verifiedAt", label: "VERIFIED AT" },
   ];
 
   const fallbackColumnKeys = [
@@ -503,35 +502,53 @@ const downloadPdf = (
   const hasPaymentFields = "referenceNumber" in firstRow || "amount" in firstRow;
   const baseColumns = hasPaymentFields ? preferredColumnKeys : fallbackColumnKeys;
 
-  // 2. Calculate the "natural" width of each column based on content
-  const tableMargin = 40; // left and right margins
-  const availableWidth = pageWidth - (tableMargin * 2);
+  const tableMargin = 40;
+  const availableWidth = pageWidth - tableMargin * 2;
+
+  // ─── getCellValue: handles fallbacks for amount, recordedAt, plateNo ───
+  const getCellValue = (row: Record<string, any>, key: string): string => {
+    // Amount — fallback chain
+    if (key === "amount") {
+      const raw = row.amount ?? row.totalAmount ?? row.fineAmount ?? "";
+      const num = Number(raw);
+      return isNaN(num) ? String(raw) : num.toLocaleString();
+    }
+
+    // Recorded At — fallback sa createdAt, orIssuedAt, paidAt
+    if (key === "recordedAt") {
+      const v =
+        row.recordedAt ??
+        row.createdAt ??
+        row.orIssuedAt ??
+        row.paidAt ??
+        "";
+      return v ? String(v) : "";
+    }
+
+    // Plate No — kung wala, blank (pero naka-enrich na sa handleExport)
+    if (key === "plateNo") {
+      const v = row.plateNo ?? row.plateNumber ?? "";
+      return v ? String(v) : "";
+    }
+
+    const v = row[key];
+    if (v === null || v === undefined) return "";
+    return String(v);
+  };
 
   const calculatedColumns = baseColumns.map((col) => {
-    // Find the longest string in this column (header or data)
     let maxLen = col.label.length;
-    
     rows.forEach((row) => {
-      let val = row[col.key];
-      if (val === null || val === undefined) val = "";
-      if (col.key === "amount") {
-        const num = Number(val);
-        val = isNaN(num) ? String(val) : num.toLocaleString();
-      }
-      const strVal = String(val);
+      const strVal = getCellValue(row, col.key);
       if (strVal.length > maxLen) maxLen = strVal.length;
     });
-
-    // Convert character length to approximate points (roughly 5.5pt per char at font size 8.5)
-    // We add a little padding (e.g., +10) so text doesn't touch the edges
-    return {
-      ...col,
-      naturalWidth: (maxLen * 5.5) + 10, 
-    };
+    return { ...col, naturalWidth: maxLen * 5.5 + 10 };
   });
 
-  // 3. Scale the columns to fit the available page width exactly
-  const totalNaturalWidth = calculatedColumns.reduce((sum, col) => sum + col.naturalWidth, 0);
+  const totalNaturalWidth = calculatedColumns.reduce(
+    (sum, col) => sum + col.naturalWidth,
+    0
+  );
   const scaleFactor = availableWidth / totalNaturalWidth;
 
   const columnSet = calculatedColumns.map((col) => ({
@@ -541,15 +558,7 @@ const downloadPdf = (
 
   const headers = columnSet.map((c) => c.label);
   const body = rows.map((row) =>
-    columnSet.map((c) => {
-      const value = row[c.key];
-      if (value === null || value === undefined) return "";
-      if (c.key === "amount") {
-        const num = Number(value);
-        return isNaN(num) ? String(value) : num.toLocaleString();
-      }
-      return String(value);
-    })
+    columnSet.map((c) => getCellValue(row, c.key))
   );
 
   autoTable(doc, {
@@ -558,20 +567,20 @@ const downloadPdf = (
     startY: cardY + cardHeight + 20,
     theme: "plain",
     styles: {
-      fontSize: 8.5,
-      cellPadding: { top: 8, right: 6, bottom: 8, left: 6 },
+      fontSize: 8,
+      cellPadding: { top: 7, right: 5, bottom: 7, left: 5 },
       overflow: "linebreak",
       textColor: [51, 65, 85],
       lineColor: [241, 245, 249],
       lineWidth: 0.3,
     },
     headStyles: {
-      fillColor: [30, 58, 138], // #1E3A8A blue-900
+      fillColor: [30, 58, 138],
       textColor: [255, 255, 255],
       fontStyle: "bold",
-      fontSize: 8,
+      fontSize: 7.5,
       halign: "left",
-      cellPadding: { top: 10, right: 6, bottom: 10, left: 6 },
+      cellPadding: { top: 9, right: 5, bottom: 9, left: 5 },
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252],
@@ -584,7 +593,7 @@ const downloadPdf = (
     columnStyles: columnSet.reduce(
       (acc, col, idx) => ({
         ...acc,
-        [idx]: { cellWidth: col.width, overflow: 'linebreak' },
+        [idx]: { cellWidth: col.width, overflow: "linebreak" },
       }),
       {}
     ),
@@ -642,7 +651,6 @@ export default function ExportCenter() {
   const [recentExports, setRecentExports] = useState<ExportLogRow[]>([]);
   const [loadingExports, setLoadingExports] = useState(true);
 
-  // Fetch current user
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
       if (!loggedUser) {
@@ -671,7 +679,6 @@ export default function ExportCenter() {
     return () => unsubscribe();
   }, []);
 
-  // Recent exports listener
   useEffect(() => {
     const ref = collection(db, "exportLogs");
     const q = query(ref, orderBy("timestamp", "desc"), limit(10));
@@ -701,7 +708,6 @@ export default function ExportCenter() {
     return () => unsubscribe();
   }, []);
 
-  // Click-outside for dropdown
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -763,6 +769,82 @@ export default function ExportCenter() {
         ...d.data(),
       }));
 
+      // ─── ENRICH: Fetch plateNo mula sa violations kung wala sa payments ───
+      if (dataType === "Transactions" || dataType === "Revenue") {
+        const needsLookup = data.filter(
+          (item) => !item.plateNo && (item.violationId || item.cin)
+        );
+
+        const violationCache = new Map<string, { plateNo: string | null }>();
+
+        // Fetch by violationId
+        const vIds = Array.from(
+          new Set(
+            needsLookup
+              .map((i) => i.violationId as string | undefined)
+              .filter(Boolean)
+          )
+        ) as string[];
+
+        await Promise.all(
+          vIds.map(async (vId) => {
+            try {
+              const vSnap = await getDoc(doc(db, "violations", vId));
+              if (vSnap.exists()) {
+                violationCache.set(`id:${vId}`, {
+                  plateNo: (vSnap.data().plateNo as string) ?? null,
+                });
+              }
+            } catch (err) {
+              console.warn(`Violation lookup by id ${vId} failed:`, err);
+            }
+          })
+        );
+
+        // Fetch by cin (fallback)
+        const cins = Array.from(
+          new Set(
+            needsLookup
+              .filter((i) => !i.violationId && i.cin)
+              .map((i) => i.cin as string)
+          )
+        );
+
+        await Promise.all(
+          cins.map(async (cin) => {
+            try {
+              const q = query(
+                collection(db, "violations"),
+                where("cin", "==", cin)
+              );
+              const snap = await getDocs(q);
+              if (!snap.empty) {
+                violationCache.set(`cin:${cin}`, {
+                  plateNo: (snap.docs[0].data().plateNo as string) ?? null,
+                });
+              }
+            } catch (err) {
+              console.warn(`Violation lookup by cin ${cin} failed:`, err);
+            }
+          })
+        );
+
+        // Apply plateNo fallback
+        data = data.map((item) => {
+          if (item.plateNo) return item;
+          if (item.violationId) {
+            const cached = violationCache.get(`id:${item.violationId}`);
+            if (cached?.plateNo) return { ...item, plateNo: cached.plateNo };
+          }
+          if (item.cin) {
+            const cached = violationCache.get(`cin:${item.cin}`);
+            if (cached?.plateNo) return { ...item, plateNo: cached.plateNo };
+          }
+          return item;
+        });
+      }
+
+      // Filter by date range
       const timestampField =
         dataType === "Release Log" ? "releasedAt" : "paidAt";
 

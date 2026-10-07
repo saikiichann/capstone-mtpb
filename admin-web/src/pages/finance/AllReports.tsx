@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, MoreHorizontal } from "lucide-react";
+import { KeyRound, MoreHorizontal, Download, Play, Trash2 } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
@@ -84,9 +84,7 @@ const ROLE_LABELS: Record<RoleSlug, string> = {
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
-    items: [
-      { label: "Overview", icon: overviewIcon, path: "/finance" },
-    ],
+    items: [{ label: "Overview", icon: overviewIcon, path: "/finance" }],
   },
   {
     label: "Payment/Finance",
@@ -144,7 +142,9 @@ const getStatusClass = (status: ReportStatus): string => {
 // ---------------------------------------------------------------------------
 export default function AllReports() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const rowMenuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
@@ -220,7 +220,7 @@ export default function AllReports() {
   }, []);
 
   // -----------------------------------------------------------------------
-  // EFFECT: Click-outside for dropdown
+  // EFFECT: Click-outside for both dropdowns
   // -----------------------------------------------------------------------
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -229,6 +229,12 @@ export default function AllReports() {
         !dropdownRef.current.contains(event.target as Node)
       ) {
         setIsMenuOpen(false);
+      }
+      if (
+        rowMenuRef.current &&
+        !rowMenuRef.current.contains(event.target as Node)
+      ) {
+        setOpenMenuId(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -257,6 +263,32 @@ export default function AllReports() {
   const handleChangePassword = () => {
     console.log("Navigating to Change Password...");
     setIsMenuOpen(false);
+  };
+
+  const handleToggleRowMenu = (id: string) => {
+    setOpenMenuId((prev) => (prev === id ? null : id));
+  };
+
+  const handleRunNow = (row: ReportRow) => {
+    console.log(`Running report now: ${row.reportName}`);
+    setOpenMenuId(null);
+    // TODO: Trigger actual report run
+  };
+
+  const handleDownload = (row: ReportRow) => {
+    console.log(`Downloading report: ${row.reportName}`);
+    setOpenMenuId(null);
+    // TODO: Trigger actual download (CSV/Excel/PDF)
+  };
+
+  const handleDelete = (row: ReportRow) => {
+    const confirmed = window.confirm(
+      `Delete report "${row.reportName}"?\n\nThis action cannot be undone.`
+    );
+    if (!confirmed) return;
+    console.log(`Deleting report: ${row.reportName}`);
+    setOpenMenuId(null);
+    // TODO: Delete from Firestore
   };
 
   // -----------------------------------------------------------------------
@@ -402,13 +434,48 @@ export default function AllReports() {
                             </span>
                           </td>
                           <td className="cell-more">
-                            <button
-                              type="button"
-                              className="row-more-btn"
-                              aria-label="More options"
+                            <div
+                              className="row-menu-wrapper"
+                              ref={openMenuId === row.id ? rowMenuRef : null}
                             >
-                              <MoreHorizontal size={16} />
-                            </button>
+                              <button
+                                type="button"
+                                className="row-more-btn"
+                                aria-label="More options"
+                                onClick={() => handleToggleRowMenu(row.id)}
+                              >
+                                <MoreHorizontal size={16} />
+                              </button>
+
+                              {openMenuId === row.id && (
+                                <div className="row-menu-dropdown">
+                                  <button
+                                    type="button"
+                                    className="row-menu-item"
+                                    onClick={() => handleDownload(row)}
+                                  >
+                                    <Download size={14} />
+                                    <span>Download</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="row-menu-item"
+                                    onClick={() => handleRunNow(row)}
+                                  >
+                                    <Play size={14} />
+                                    <span>Run now</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="row-menu-item row-menu-item-danger"
+                                    onClick={() => handleDelete(row)}
+                                  >
+                                    <Trash2 size={14} />
+                                    <span>Delete</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}

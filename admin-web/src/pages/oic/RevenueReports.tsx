@@ -54,18 +54,18 @@ type CurrentUser = { name: string; role: RoleSlug };
 
 type DayBucket = { label: string; dateKey: string; value: number };
 
+type PaymentSummary = {
+  id: string;
+  orNumber: string | null;
+  amount: number;
+};
+
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
 /* ------------------------------------------------------------------
    CONSTANTS
 ------------------------------------------------------------------ */
-/**
- * Placeholder daily revenue goal — no stored target exists anywhere in
- * Firestore for this. If the OIC wants a different number, change it
- * here, or wire it to a settings document later if it needs to be
- * editable from the UI.
- */
 const DAILY_REVENUE_TARGET = 10000;
 
 const ROLE_LABELS: Record<RoleSlug, string> = {
@@ -191,8 +191,6 @@ const NAV_GROUPS: NavGroup[] = [
 const formatCurrency = (amount: number): string =>
   `₱${Math.round(amount).toLocaleString("en-US")}`;
 
-/** Local YYYY-MM-DD — not toISOString(), which converts to UTC and can
- *  shift a late-night entry onto the wrong calendar day (PH is UTC+8). */
 const dateKeyOf = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate()
@@ -201,9 +199,6 @@ const dateKeyOf = (d: Date): string =>
 const monthKeyOf = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 
-/** The last 7 calendar days ending today, oldest first — not necessarily
- *  Mon–Sun, just whichever 7 days are actually "the last 7 days" as of
- *  whenever the OIC opens this page. */
 const buildLast7Days = (): DayBucket[] => {
   const days: DayBucket[] = [];
   const now = new Date();
@@ -235,6 +230,7 @@ export default function RevenueReports() {
   const [dayBuckets, setDayBuckets] = useState<DayBucket[]>(buildLast7Days());
   const [monthTotal, setMonthTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [payments, setPayments] = useState<PaymentSummary[]>([]);
 
   /* Current user */
   useEffect(() => {
@@ -264,18 +260,7 @@ export default function RevenueReports() {
     return () => unsubscribe();
   }, []);
 
-  /**
-   * Same `payments` source as Transaction History — only Verified entries
-   * count as revenue. Each one is bucketed by its own local calendar date
-   * into the last-7-days chart, and separately summed into the current
-   * month's total (which can reach further back than 7 days).
-   *
-   * "Sector 3" in the header is a label, not a live filter — payment
-   * documents don't reliably carry a sectorId (that lives on the
-   * violation), so this totals everything rather than silently
-   * undercounting. Same caveat applies to Clamping Log and Impounding
-   * Log elsewhere in this module.
-   */
+  /* Payments listener */
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(db, "payments"),
@@ -284,6 +269,7 @@ export default function RevenueReports() {
         const bucketIndex = new Map(buckets.map((b, i) => [b.dateKey, i]));
         const thisMonthKey = monthKeyOf(new Date());
         let monthSum = 0;
+        const summaries: PaymentSummary[] = [];
 
         snap.docs.forEach((d) => {
           const data = d.data();
@@ -316,10 +302,17 @@ export default function RevenueReports() {
           if (idx !== undefined) {
             buckets[idx].value += amount;
           }
+
+          summaries.push({
+            id: d.id,
+            orNumber: data.orNumber ?? null,
+            amount,
+          });
         });
 
         setDayBuckets(buckets);
         setMonthTotal(monthSum);
+        setPayments(summaries);
         setLoading(false);
       },
       (err) => {
@@ -359,8 +352,6 @@ export default function RevenueReports() {
     }
   };
 
-  /** Kept for consistency with the other OIC pages even though this route
-   *  is OIC-only (Supervisor never reaches it) — see App.tsx. */
   const navGroups = useMemo(
     () =>
       NAV_GROUPS.filter(
@@ -375,6 +366,30 @@ export default function RevenueReports() {
     () => dayBuckets.reduce((sum, b) => sum + b.value, 0),
     [dayBuckets]
   );
+
+  /* OR Range summary */
+  const orRange = useMemo(() => {
+    const orNumbers = payments
+      .map((p) => p.orNumber)
+      .filter(Boolean) as string[];
+
+    if (orNumbers.length === 0) {
+      return { from: "—", to: "—", count: 0 };
+    }
+
+    const sorted = [...orNumbers].sort((a, b) => {
+      const na = Number(a);
+      const nb = Number(b);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return a.localeCompare(b);
+    });
+
+    return {
+      from: sorted[0],
+      to: sorted[sorted.length - 1],
+      count: orNumbers.length,
+    };
+  }, [payments]);
 
   const metricCards = [
     {
@@ -397,7 +412,6 @@ export default function RevenueReports() {
   return (
     <div className="oic-page revenue-reports-page">
       <div className="dashboard">
-        {/* SIDEBAR */}
         <aside className="sidebar">
           <div className="sidebar-brand">
             <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
@@ -434,7 +448,6 @@ export default function RevenueReports() {
           </nav>
         </aside>
 
-        {/* MAIN CONTENT */}
         <div className="main">
           <header className="main-header">
             <div>
@@ -492,6 +505,39 @@ export default function RevenueReports() {
                   )}
                 </div>
               ))}
+            </div>
+
+            {/* OR RANGE SUMMARY */}
+            <div className="card">
+              <p className="card-eyebrow">Official Receipts</p>
+              <h2 className="card-title">OR Range Summary</h2>
+
+              <div className="or-summary-grid">
+                <div className="or-summary-item">
+                  <span className="or-summary-label">OR Range</span>
+                  <span className="or-summary-value">
+                    {orRange.count > 0
+                      ? `${orRange.from} — ${orRange.to}`
+                      : "No records"}
+                  </span>
+                </div>
+                <div className="or-summary-item">
+                  <span className="or-summary-label">Receipts Issued</span>
+                  <span className="or-summary-value">{orRange.count}</span>
+                </div>
+                <div className="or-summary-item">
+                  <span className="or-summary-label">Total Verified</span>
+                  <span className="or-summary-value">
+                    {formatCurrency(last7DaysTotal)}
+                  </span>
+                </div>
+              </div>
+
+              <p className="or-summary-note">
+                Use this range to reconcile against the physical OR booklet.
+                Any gap in the sequence may indicate missing or unrecorded
+                receipts.
+              </p>
             </div>
 
             {/* CHART */}

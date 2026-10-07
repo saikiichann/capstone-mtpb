@@ -386,6 +386,17 @@
   white-space: nowrap;
 }
 
+/* OR Number cell — same treatment as Reference for audit readability */
+.transaction-history-page .cell-or-number {
+  font-family: inherit;
+  font-weight: 500;
+  color: #111827;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .transaction-history-page .cell-plate {
   font-weight: 600;
   color: #111827;
