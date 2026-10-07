@@ -1,0 +1,29 @@
+import { adminAuth, createFirestoreStore } from '../server/firestore-store.js'
+import { corsHeaders, errorResponse, json, preflight, readJson, requireUser } from '../server/http.js'
+import { paymongo } from '../server/paymongo.js'
+import { createPaymentService } from '../server/payments-service.js'
+
+// POST /api/confirm-payment
+// Body: { attemptId }
+// Asks PayMongo directly whether the payment went through. The success page
+// calls this in case the webhook hasn't arrived yet, and to get the REF
+// number and payment details (the browser can't read checkout attempts).
+// Returns: { status: 'pending' | 'paid' | 'duplicate' | 'expired' | 'failed' | 'review',
+//            payment: { attemptId, referenceNumber, cin, totalAmount, ... } }
+
+export function OPTIONS(request) {
+  return preflight(request)
+}
+
+export async function POST(request) {
+  const headers = corsHeaders(request)
+  try {
+    const user = await requireUser(request, adminAuth())
+    const body = await readJson(request)
+    const service = createPaymentService({ store: createFirestoreStore(), paymongo })
+    const result = await service.confirm({ uid: user.uid, attemptId: body.attemptId })
+    return json(200, result, headers)
+  } catch (err) {
+    return errorResponse(err, headers)
+  }
+}
