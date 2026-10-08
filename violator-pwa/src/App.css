@@ -1466,9 +1466,12 @@ a.btn--primary {
   font-weight: 700;
 }
 
+/* Grey and regular weight, so the examples read as hints, not as filled-in
+   values; what the violator types stays dark and bold. */
 .pay-field input::placeholder {
-  color: var(--color-ink);
-  opacity: 0.85;
+  color: var(--color-placeholder);
+  font-weight: 400;
+  opacity: 1;
 }
 
 .pay-field input:focus {
@@ -4484,16 +4487,36 @@ div.settings-row {
 }
 
 /* ---------- Vehicle type photos ----------
-   Studio shots on white, facing right. Shown as they are, never mirrored, or
-   the badges and plates read backwards. On the Home card's tinted background
-   the white is multiplied away; the list and details cards are white
-   already. */
+   Studio shots on white, facing right, in different proportions (the
+   motorcycles are taller than the cars), so each one is fitted inside its
+   box rather than spilling over the text next to it.
+   Home card: mirrored to face into the card, like the design, with the white
+   multiplied away on the tinted background. The list and details keep them
+   unmirrored so badges and plates read the right way round; their cards are
+   white already. */
 .vehicle-hero__art--type {
   mix-blend-mode: multiply;
 }
 
-.vehicle-hero__art--type .vehicle-hero__photo,
+.vehicle-hero__art--type .vehicle-hero__photo {
+  transform: scaleX(-1);
+}
+
 .vehicle-row__photo--type img,
 .vehicle-details__photo--type img {
+  max-width: none;
+  object-fit: contain;
   transform: none;
+}
+
+/* Fixed sizes a little inside each box (the boxes are 92x80 and 180x120),
+   so a tall motorcycle can't reach the text around it. */
+.vehicle-row__photo--type img {
+  width: 88px;
+  height: 70px;
+}
+
+.vehicle-details__photo--type img {
+  width: 168px;
+  height: 100px;
 }

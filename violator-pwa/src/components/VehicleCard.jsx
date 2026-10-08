@@ -6,7 +6,8 @@ import StatusBadge from './StatusBadge'
 //
 // Laid out like a wallet pass: the plate in a plate-style chip on the left,
 // the car parked on the right and running off the card's edge. Type photos
-// are shown as they are (see vehiclePhoto); an MTPB photo likewise.
+// are mirrored here to face into the card (see App.css); an MTPB photo is
+// shown as it was taken.
 export default function VehicleCard({ vehicle }) {
   const photo = vehiclePhoto(vehicle)
   const description = vehicleDescription(vehicle)

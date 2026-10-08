@@ -7,9 +7,10 @@ import {
   query,
   where,
 } from 'firebase/firestore'
+import auvPhoto from '../assets/vehicles/auv.jpg'
 import hatchbackPhoto from '../assets/vehicles/hatchback.jpg'
-import motorcycleAutomaticPhoto from '../assets/vehicles/motorcycle-automatic.jpg'
-import motorcycleManualPhoto from '../assets/vehicles/motorcycle-manual.jpg'
+import motorcyclePhoto from '../assets/vehicles/motorcycle.jpg'
+import mpvPhoto from '../assets/vehicles/mpv.jpg'
 import pickupPhoto from '../assets/vehicles/pickup.jpg'
 import sedanPhoto from '../assets/vehicles/sedan.jpg'
 import suvPhoto from '../assets/vehicles/suv.jpg'
@@ -147,10 +148,11 @@ export async function removeVehicle(ownerUid, vehicle) {
 
 // Uses the owner's uploaded photo when there is one; otherwise the stock
 // image from the Figma file for that kind of vehicle.
-// One photo per type in the enforcer app's dropdown (Sedan, SUV, Hatchback,
-// Van, Pickup, Truck, Motorcycle (Manual), Motorcycle (Automatic)). Words are
-// matched loosely, so plain "Motorcycle" from older records still gets a
-// motorcycle and anything unknown gets the sedan rather than nothing.
+// One photo per type in the enforcer app's dropdown: Sedan, SUV, Hatchback,
+// Van, Pickup, Motorcycle, Truck, AUV, MPV. Only the type picks the photo;
+// make and colour are shown as text, never matched. Words are matched
+// loosely, so "Pickup Truck" or "Motorcycle (Manual)" still find theirs and
+// anything unknown gets the sedan rather than nothing.
 const TYPE_PHOTOS = {
   sedan: sedanPhoto,
   hatchback: hatchbackPhoto,
@@ -158,18 +160,21 @@ const TYPE_PHOTOS = {
   van: vanPhoto,
   pickup: pickupPhoto,
   truck: truckPhoto,
-  motorcycleManual: motorcycleManualPhoto,
-  motorcycleAutomatic: motorcycleAutomaticPhoto,
+  auv: auvPhoto,
+  mpv: mpvPhoto,
+  motorcycle: motorcyclePhoto,
 }
 
 export function vehicleKind(vehicle) {
   const type = String(vehicle?.vehicleType ?? '').toLowerCase()
-  if (/motor|scooter/.test(type)) return /auto|scooter/.test(type) ? 'motorcycleAutomatic' : 'motorcycleManual'
+  if (/motor|scooter/.test(type)) return 'motorcycle'
   if (!type && (vehicle?.category === 'motorcycle' || /^2\b/.test(vehicle?.wheelCategory ?? ''))) {
-    return 'motorcycleManual'
+    return 'motorcycle'
   }
   if (/pick/.test(type)) return 'pickup'
   if (/truck/.test(type)) return 'truck'
+  if (/\bauv\b/.test(type)) return 'auv'
+  if (/\bmpv\b/.test(type)) return 'mpv'
   if (/van/.test(type)) return 'van'
   if (/suv|crossover/.test(type)) return 'suv'
   if (/hatch/.test(type)) return 'hatchback'
@@ -178,8 +183,7 @@ export function vehicleKind(vehicle) {
 
 // Owners can't upload photos. A `photoUrl` set by MTPB still wins; otherwise
 // the vehicle gets the photo for its type. Type photos are white-background
-// studio shots facing right, shown as they are (mirroring would flip the
-// badges and plates).
+// studio shots facing right; only the Home card mirrors them.
 export function vehiclePhoto(vehicle) {
   if (vehicle?.photoUrl) return { src: vehicle.photoUrl, isStock: false, isTypePhoto: false }
   return { src: TYPE_PHOTOS[vehicleKind(vehicle)], isStock: true, isTypePhoto: true }
