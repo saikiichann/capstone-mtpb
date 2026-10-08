@@ -1466,9 +1466,12 @@ a.btn--primary {
   font-weight: 700;
 }
 
+/* Grey and regular weight, so the examples read as hints, not as filled-in
+   values; what the violator types stays dark and bold. */
 .pay-field input::placeholder {
-  color: var(--color-ink);
-  opacity: 0.85;
+  color: var(--color-placeholder);
+  font-weight: 400;
+  opacity: 1;
 }
 
 .pay-field input:focus {
@@ -4481,4 +4484,62 @@ div.settings-row {
   color: #0b7680;
   font-size: 11px;
   font-weight: 600;
+}
+
+/* ---------- Vehicle type photos ----------
+   Studio shots on white, facing right, in different proportions (the
+   motorcycles are taller than the cars), so each one is fitted inside its
+   box rather than spilling over the text next to it.
+   Home card: mirrored to face into the card, like the design, with the white
+   multiplied away on the tinted background. The list and details keep them
+   unmirrored so badges and plates read the right way round; their cards are
+   white already. */
+.vehicle-hero__art--type {
+  mix-blend-mode: multiply;
+}
+
+.vehicle-hero__art--type .vehicle-hero__photo {
+  transform: scaleX(-1);
+}
+
+.vehicle-row__photo--type img,
+.vehicle-details__photo--type img {
+  max-width: none;
+  object-fit: contain;
+  transform: none;
+}
+
+/* Fixed sizes a little inside each box (the boxes are 92x80 and 180x120),
+   so a tall motorcycle can't reach the text around it. */
+.vehicle-row__photo--type img {
+  width: 88px;
+  height: 70px;
+}
+
+.vehicle-details__photo--type img {
+  width: 168px;
+  height: 100px;
+}
+
+/* ---------- Tab pages: only the content scrolls ----------
+   Home, History, Vehicles and Profile fill exactly one screen: the page
+   content scrolls inside its own area and the bottom nav sits under it,
+   never moving. (A sticky nav scrolled along with the page in some
+   browsers.) Short pages don't scroll at all. */
+.tab-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.tab-layout > .app-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tab-layout > .bottom-nav {
+  position: relative;
+  flex: none;
 }

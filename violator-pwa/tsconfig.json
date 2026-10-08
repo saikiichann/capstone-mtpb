@@ -1,0 +1,17 @@
+{
+  // This app is plain JavaScript; nothing here turns on type checking.
+  // It exists so Vite (and VS Code) stop at this folder instead of using the
+  // React Native tsconfig at the root of the shared repo, which made the dev
+  // server fail on every file.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["src", "server", "api", "scripts"]
+}

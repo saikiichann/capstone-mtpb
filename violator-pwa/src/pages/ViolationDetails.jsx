@@ -162,6 +162,15 @@ function ViolationCard({ violation, showPayment = false, onPayNow }) {
           </div>
         </>
       )}
+
+      {/* Guests who scanned a clamp have no Home or Profile to find the
+          FAQs from, so the link is here for everyone. */}
+      <p className="violation-card__hint">
+        Have questions?{' '}
+        <Link className="text-link" to="/faq">
+          Read the FAQs
+        </Link>
+      </p>
     </section>
   )
 }

@@ -1,12 +1,10 @@
 import { lazy, Suspense, useState } from 'react'
-import { Link } from 'react-router-dom'
 import mtpbLogo from '../../assets/mtpb-logo.webp'
-import { useAuth } from '../../auth/auth-context'
 import Modal from '../../components/Modal'
 import PageHeader from '../../components/PageHeader'
 import SettingsRow from '../../components/SettingsRow'
-import { BugIcon, ChatIcon, HelpIcon } from '../../components/icons/rows'
-import { OFFICE_HOURS, OFFICE_PHONE, SUPPORT_EMAIL, supportMailto } from '../../data/contact'
+import { BugIcon, HelpIcon } from '../../components/icons/rows'
+import { OFFICE_HOURS, SUPPORT_EMAIL } from '../../data/contact'
 import { directionsUrl, IMPOUND_LOTS } from '../../data/places'
 
 const LocationMap = lazy(() => import('../../components/LocationMap'))
@@ -15,18 +13,13 @@ const LocationMap = lazy(() => import('../../components/LocationMap'))
 // - Report a Problem doesn't take reports in the app: concerns about a
 //   violation are legal matters MTPB handles in person, so it shows where
 //   the office is, in the same style as the Pay Onsite instructions.
-// - Contact Support opens the phone's email app with the details filled in.
+// - The MTPB Office card below has the email and directions, so there is no
+//   separate Contact Support row. MTPB has no public hotline.
 const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '1.0.0'
 
 export default function HelpSupport() {
-  const { user } = useAuth()
   const [reportOpen, setReportOpen] = useState(false)
   const office = IMPOUND_LOTS[0]
-
-  const contactLink = supportMailto({
-    subject: 'MTPB app – question',
-    lines: ['My question:', '', '---', `Account: ${user?.email ?? ''}`],
-  })
 
   return (
     <div className="page">
@@ -45,12 +38,6 @@ export default function HelpSupport() {
             title="Report a Problem"
             description="Handled in person at the MTPB office"
             onClick={() => setReportOpen(true)}
-          />
-          <SettingsRow
-            icon={<ChatIcon />}
-            title="Contact Support"
-            description="Get help from the MTPB office"
-            href={contactLink}
             last
           />
         </div>
@@ -67,22 +54,31 @@ export default function HelpSupport() {
               </dd>
             </div>
             <div>
-              <dt>Phone</dt>
-              <dd>
-                <a className="text-link" href={`tel:${OFFICE_PHONE.replace(/[^\d+]/g, '')}`}>
-                  {OFFICE_PHONE}
-                </a>
-              </dd>
-            </div>
-            <div>
               <dt>Office hours</dt>
               <dd>{OFFICE_HOURS}</dd>
             </div>
           </dl>
-          <Link className="text-link support-card__map" to="/impound">
-            Impound location and directions
-          </Link>
         </div>
+
+        {/* Same card as the Impound Location page. */}
+        <section className="card map-card" aria-labelledby="office-name">
+          <Suspense fallback={<div className="location-map location-map--loading" style={{ height: 240 }} />}>
+            <LocationMap
+              center={office.position}
+              markers={[{ id: office.id, position: office.position, label: office.name }]}
+              label={`Map showing ${office.name}`}
+            />
+          </Suspense>
+          <div className="map-card__body">
+            <h2 id="office-name" className="screen-title">
+              {office.name}
+            </h2>
+            <p className="screen-subtitle">{office.area}</p>
+            <a className="btn btn--primary" href={directionsUrl(office.position)} target="_blank" rel="noreferrer">
+              Get directions
+            </a>
+          </div>
+        </section>
 
         <div className="card app-version">
           <span className="app-version__label">App Version</span>

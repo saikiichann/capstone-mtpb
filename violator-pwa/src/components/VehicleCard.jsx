@@ -5,9 +5,9 @@ import StatusBadge from './StatusBadge'
 // Access, so this card doesn't need to be a second way there.
 //
 // Laid out like a wallet pass: the plate in a plate-style chip on the left,
-// the car parked on the right and running off the card's edge. Stock photos
-// face right, so they're mirrored to face into the card; an owner's own
-// photo is shown as it was taken.
+// the car parked on the right and running off the card's edge. Type photos
+// are mirrored here to face into the card (see App.css); an MTPB photo is
+// shown as it was taken.
 export default function VehicleCard({ vehicle }) {
   const photo = vehiclePhoto(vehicle)
   const description = vehicleDescription(vehicle)
@@ -24,7 +24,7 @@ export default function VehicleCard({ vehicle }) {
           <StatusBadge status={verificationOf(vehicle)} className="vehicle-hero__badge" />
         )}
       </div>
-      <div className="vehicle-hero__art" aria-hidden="true">
+      <div className={`vehicle-hero__art${photo.isTypePhoto ? ' vehicle-hero__art--type' : ''}`} aria-hidden="true">
         <span className="vehicle-hero__shadow" />
         <img
           className={`vehicle-hero__photo${photo.isStock ? ' vehicle-hero__photo--stock' : ''}`}

@@ -79,7 +79,9 @@ export default function VehicleDetails() {
 
       <main className="page__body vehicle-details">
         <section className="card vehicle-details__hero">
-          <span className={`vehicle-details__photo${photo.isStock ? ' vehicle-details__photo--stock' : ''}`}>
+          <span
+            className={`vehicle-details__photo${photo.isStock ? ' vehicle-details__photo--stock' : ''}${photo.isTypePhoto ? ' vehicle-details__photo--type' : ''}`}
+          >
             <img src={photo.src} width={150} height={150} alt="" />
           </span>
           <h2 className="vehicle-details__plate">{vehicle.plateNumber}</h2>

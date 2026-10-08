@@ -69,7 +69,9 @@ function VehicleListCard({ vehicle }) {
       className="card vehicle-row"
       aria-label={`${vehicle.plateNumber}, ${vehicleTypeLine(vehicle)}, ${badge}. View details`}
     >
-      <span className={`vehicle-row__photo${photo.isStock ? ' vehicle-row__photo--stock' : ''}`}>
+      <span
+        className={`vehicle-row__photo${photo.isStock ? ' vehicle-row__photo--stock' : ''}${photo.isTypePhoto ? ' vehicle-row__photo--type' : ''}`}
+      >
         <img src={photo.src} width={96} height={96} alt="" />
       </span>
       <span className="vehicle-row__text">

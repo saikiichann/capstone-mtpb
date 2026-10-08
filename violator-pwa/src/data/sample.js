@@ -40,6 +40,30 @@ export const sampleVehicles = [
     photoUrl: null,
     createdAt: '2026-04-15T08:00:00+08:00',
   },
+  // One of every other type in the enforcer app's dropdown, so each photo can
+  // be seen in demo mode. They have no violations.
+  ...[
+    ['DEF 5678', 'Toyota', 'Wigo', 2023, 'Hatchback', '4 Wheels', 'Red'],
+    ['GHI 9012', 'Toyota', 'Fortuner', 2021, 'SUV', '4 Wheels', 'Gray'],
+    ['JKL 3456', 'Toyota', 'Hiace', 2020, 'Van', '4 Wheels', 'Brown'],
+    ['MNO 7890', 'Toyota', 'Hilux', 2022, 'Pickup', '4 Wheels', 'Silver'],
+    ['PQR 1357', 'Isuzu', 'Forward', 2019, 'Truck', '6 Wheels or more', 'Blue'],
+    ['STU 2468', 'Toyota', 'Tamaraw', 2024, 'AUV', '4 Wheels', 'Gray'],
+    ['VWX 9753', 'Toyota', 'Innova', 2022, 'MPV', '4 Wheels', 'White'],
+  ].map(([plateNumber, make, model, year, vehicleType, wheelCategory, color], i) => ({
+    id: `sample-vehicle-${i + 3}`,
+    ownerUid: 'demo',
+    plateNumber,
+    make,
+    model,
+    year,
+    vehicleType,
+    wheelCategory,
+    color,
+    verificationStatus: 'active',
+    photoUrl: null,
+    createdAt: `2026-05-${String(i + 1).padStart(2, '0')}T08:00:00+08:00`,
+  })),
 ]
 
 // Violations for the sample owner's vehicles. `status` is where the vehicle
