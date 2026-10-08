@@ -3,11 +3,28 @@ import { View, Text, TouchableOpacity, Modal, FlatList, StyleSheet } from 'react
 import Icon from 'react-native-vector-icons/Feather';
 import { colors } from '../theme/colors';
 
-const DEFAULT_NOTIFICATIONS = [
+export interface NotificationItem {
+  id: string;
+  text: string;
+  time: string;
+}
+
+interface NotificationPanelProps {
+  visible: boolean;
+  onClose: () => void;
+  notifications?: NotificationItem[];
+}
+
+const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
   { id: '1', text: 'ABC 1235 was verified and in process for release', time: 'Wed, May 20, 05:30 PM' },
   { id: '2', text: 'ABD 1234 was verified and in process for release', time: 'Wed, May 20, 05:30 PM' },
 ];
-export default function NotificationPanel({ visible, onClose, notifications = DEFAULT_NOTIFICATIONS }) {
+
+export default function NotificationPanel({
+  visible,
+  onClose,
+  notifications = DEFAULT_NOTIFICATIONS,
+}: NotificationPanelProps) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
@@ -19,20 +36,26 @@ export default function NotificationPanel({ visible, onClose, notifications = DE
             </TouchableOpacity>
           </View>
 
-          <FlatList
-            data={notifications}
-            keyExtractor={(item) => item.id}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            renderItem={({ item }) => (
-              <View style={styles.item}>
-                <View style={styles.dot} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.itemText}>{item.text}</Text>
-                  <Text style={styles.itemTime}>{item.time}</Text>
+          {notifications.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No new notifications</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={notifications}
+              keyExtractor={(item) => item.id}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              renderItem={({ item }) => (
+                <View style={styles.item}>
+                  <View style={styles.dot} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.itemText}>{item.text}</Text>
+                    <Text style={styles.itemTime}>{item.time}</Text>
+                  </View>
                 </View>
-              </View>
-            )}
-          />
+              )}
+            />
+          )}
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -42,7 +65,7 @@ export default function NotificationPanel({ visible, onClose, notifications = DE
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   card: { width: '100%', maxHeight: '60%', backgroundColor: colors.white, borderRadius: 14, padding: 16 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   title: { fontSize: 16, fontWeight: '800', color: colors.black },
   closeBtn: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.red, alignItems: 'center', justifyContent: 'center' },
   separator: { height: 1, backgroundColor: colors.border, marginVertical: 10 },
@@ -50,4 +73,6 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.green, marginRight: 10, marginTop: 5 },
   itemText: { fontSize: 12, color: colors.black, lineHeight: 17 },
   itemTime: { fontSize: 10, color: colors.gray, marginTop: 4 },
+  emptyContainer: { paddingVertical: 20, alignItems: 'center' },
+  emptyText: { fontSize: 12, color: colors.gray },
 });

@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, StatusBar, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import RNPrint from 'react-native-print';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebase'; // Siguraduhing tama ang import path ng Firebase config ninyo
 import { colors } from '../theme/colors';
 
 interface ViolationRecord {
@@ -32,25 +34,60 @@ interface ViolationDetailsScreenProps {
   route?: {
     params?: {
       record?: ViolationRecord;
+      clampId?: string;
+      clampCode?: string;
     };
   };
 }
 
 export default function ViolationDetailsScreen({ navigation, route }: ViolationDetailsScreenProps) {
-  const record: ViolationRecord = route?.params?.record || {};
+  const initialRecord: ViolationRecord = route?.params?.record || {};
+  const directClampCode = route?.params?.clampCode || route?.params?.clampId;
 
-  // Status check
-  const isSettled = record.paymentStatus === 'SETTLED' || record.status === 'RELEASED';
+  // Local state para sa real-time Firestore updates
+  const [record, setRecord] = useState<ViolationRecord>(initialRecord);
 
-  // Fallbacks para sa Ticket ID, Photo, at Penalty
+  // Real-time Firestore Listener
+  useEffect(() => {
+    const documentId = record.id || record.ticketNumber || directClampCode;
+    if (!documentId) return;
+
+    // Mag-listen sa Firestore 'violations' collection
+    const unsub = onSnapshot(
+      doc(db, 'violations', documentId),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const liveData = docSnap.data() as ViolationRecord;
+          setRecord((prev) => ({
+            ...prev,
+            ...liveData,
+            id: docSnap.id,
+          }));
+        }
+      },
+      (error) => {
+        console.log('Real-time listener error:', error);
+      }
+    );
+
+    return () => unsub(); // Unsubscribe pag-unmount ng screen
+  }, [record.id, record.ticketNumber, directClampCode]);
+
+  // Dynamic Status check (Gumagana kapag "SETTLED", "PAID", o "RELEASED")
+  const currentStatus = (record.paymentStatus || record.status || '').toUpperCase();
+  const isSettled = currentStatus === 'SETTLED' || currentStatus === 'PAID' || currentStatus === 'RELEASED';
+
+  // Fallbacks para sa Ticket ID, Photo, Clamp Code, at Penalty
   const ticketId = record.id || record.ticketNumber || 'N/A';
+  const clampCodeDisplay = record.clampCode || directClampCode || 'N/A';
   const totalPenalty = Number(record.penalty || record.amount || 0);
   const photoPath = record.photoUri || record.photoLocalUri || record.photoUrl;
 
   // Format Violations (String o Array)
-  const violationDisplay = record.violations && record.violations.length > 0
-    ? record.violations.join(', ')
-    : record.violation || 'Clamping Violation';
+  const violationDisplay =
+    record.violations && record.violations.length > 0
+      ? record.violations.join(', ')
+      : record.violation || 'Clamping Violation';
 
   // Format Date (Firestore Timestamp / Date / String)
   const formattedDate = () => {
@@ -62,7 +99,7 @@ export default function ViolationDetailsScreen({ navigation, route }: ViolationD
       });
     }
     if (typeof record.createdAt === 'string') return record.createdAt;
-    return 'N/A';
+    return new Date().toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
   };
 
   const handlePrint = async () => {
@@ -78,7 +115,7 @@ export default function ViolationDetailsScreen({ navigation, route }: ViolationD
           <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
           <style>
             body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 20px; color: #111; line-height: 1.4; }
-            .badge { background:${isSettled ? '#3BB54A' : '#E5484D'}; color:#fff; text-align:center; padding:10px; border-radius:6px; font-weight:bold; font-size:14px; text-transform:uppercase; }
+            .badge { background:${isSettled ? '#2E7D32' : '#E5484D'}; color:#fff; text-align:center; padding:10px; border-radius:6px; font-weight:bold; font-size:14px; text-transform:uppercase; }
             .header-title { text-align:center; margin-top:15px; margin-bottom:20px; font-size:18px; border-bottom:2px solid #eee; padding-bottom:10px; }
             .item-row { margin-bottom: 8px; font-size: 13px; }
             .label { font-weight: bold; color: #555; }
@@ -94,7 +131,7 @@ export default function ViolationDetailsScreen({ navigation, route }: ViolationD
           <h2 class="header-title">MANILA TRAFFIC & PARKING BUREAU<br/><span style="font-size:12px; font-weight:normal;">Clamping Violation Ticket Summary</span></h2>
 
           <div class="item-row"><span class="label">Ticket Number:</span> ${ticketId}</div>
-          ${record.clampCode ? `<div class="item-row"><span class="label">Clamp Code:</span> ${record.clampCode}</div>` : ''}
+          <div class="item-row"><span class="label">Clamp Code:</span> ${clampCodeDisplay}</div>
           <div class="item-row"><span class="label">Date Issued:</span> ${formattedDate()}</div>
           <div class="item-row"><span class="label">Location:</span> ${record.location || 'N/A'}</div>
           <div class="item-row"><span class="label">Plate Number:</span> ${record.plate || 'NO PLATE'}</div>
@@ -137,10 +174,10 @@ export default function ViolationDetailsScreen({ navigation, route }: ViolationD
       </View>
 
       <ScrollView style={styles.body} contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
-        {/* Status Banner */}
+        {/* Dynamic Status Banner */}
         <View style={[styles.banner, { backgroundColor: isSettled ? colors.green : colors.red }]}>
           <Text style={styles.bannerText}>
-            {isSettled ? 'PAYMENT SETTLED' : 'PAYMENT UNSETTLED / CLAMPED'}
+            {isSettled ? 'PAYMENT SETTLED / UNCLAMPED' : 'PAYMENT UNSETTLED / CLAMPED'}
           </Text>
         </View>
 
@@ -166,14 +203,10 @@ export default function ViolationDetailsScreen({ navigation, route }: ViolationD
             <Text style={[styles.readOnlyText, { fontWeight: '700' }]}>{ticketId}</Text>
           </View>
 
-          {record.clampCode && (
-            <>
-              <Text style={[styles.smallLabel, { marginTop: 10 }]}>CLAMP CODE</Text>
-              <View style={styles.readOnly}>
-                <Text style={styles.readOnlyText}>{record.clampCode}</Text>
-              </View>
-            </>
-          )}
+          <Text style={[styles.smallLabel, { marginTop: 10 }]}>CLAMP CODE</Text>
+          <View style={styles.readOnly}>
+            <Text style={styles.readOnlyText}>{clampCodeDisplay}</Text>
+          </View>
 
           <Text style={[styles.smallLabel, { marginTop: 10 }]}>PLATE NUMBER</Text>
           <View style={styles.readOnly}>

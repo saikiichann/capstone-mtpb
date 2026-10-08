@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { Camera } from 'react-native-camera-kit';
@@ -13,21 +13,37 @@ export default function ScanQRScreen({ navigation }: ScanQRScreenProps) {
   const [flashOn, setFlashOn] = useState<boolean>(false);
   const [scanned, setScanned] = useState<boolean>(false);
 
-  // Helper function para mag-extract ng Clamp ID kung URL ang na-scan
+  // Helper function para mag-extract ng Clamp ID mula sa Vercel PWA URL o direct string
   const extractClampId = (rawData: string) => {
-    if (!rawData) return 'CLAMP-UNKNOWN';
+    if (!rawData) return '';
 
-    // 1. Kung URL na may parameter na clampId=
-    if (rawData.includes('clampId=')) {
-      return rawData.split('clampId=')[1].split('&')[0];
+    try {
+      // 1. Kung buong PWA URL ang na-scan (e.g., https://mtpb-violators-pwa.vercel.app/verify-email?clamp_id=CLMP-411006)
+      if (rawData.includes('mtpb-violators-pwa.vercel.app') || rawData.includes('http')) {
+        const queryString = rawData.split('?')[1];
+        if (queryString) {
+          const urlParams = new URLSearchParams(queryString);
+          const extracted = urlParams.get('clamp_id') || urlParams.get('clampId');
+          if (extracted) return extracted;
+        }
+      }
+
+      // 2. Fallback RegEx para sa CLMP- prefix (e.g., CLMP-411006)
+      const match = rawData.match(/CLMP-[A-Za-z0-9]+/i);
+      if (match) {
+        return match[0].toUpperCase();
+      }
+
+      // 3. Kung plain text o iba pang URL path format
+      if (rawData.includes('/')) {
+        const parts = rawData.split('/');
+        return parts[parts.length - 1];
+      }
+
+      return rawData;
+    } catch (error) {
+      return rawData;
     }
-    // 2. Kung URL path (e.g., domain.com/clamp/CLAMP-001)
-    if (rawData.includes('/')) {
-      const parts = rawData.split('/');
-      return parts[parts.length - 1];
-    }
-    // 3. Kung plain text lang ang QR Code
-    return rawData;
   };
 
   const onReadCode = (event: any) => {
@@ -37,23 +53,30 @@ export default function ScanQRScreen({ navigation }: ScanQRScreenProps) {
     const rawValue = event?.nativeEvent?.codeStringValue || '';
     const parsedId = extractClampId(rawValue);
 
-    // Ipasa ang parehong parsed ID at ang raw value para sa Clamping Details
-    navigation.navigate('ClampingDetails', {
-      clampId: parsedId,
-      clampCode: parsedId,
-      rawQrData: rawValue
-    });
-
-    setTimeout(() => setScanned(false), 1500);
+    if (parsedId) {
+      // Ipasa ang exact parsed CLMP ID sa ClampingDetails Screen
+      navigation.navigate('ClampingDetails', {
+        clampId: parsedId,
+        clampCode: parsedId,
+        rawQrData: rawValue
+      });
+      setTimeout(() => setScanned(false), 1500);
+    } else {
+      Alert.alert(
+        "Invalid QR Code",
+        "Walang nahanap na valid na Clamp ID sa na-scan na QR.",
+        [{ text: "OK", onPress: () => setScanned(false) }]
+      );
+    }
   };
 
   // Function para sa Testing Button kapag walang ma-scan na physical QR
   const handleTestBypass = () => {
-    const mockId = `CLAMP-TEST-${Math.floor(1000 + Math.random() * 9000)}`;
+    const mockId = `CLMP-${Math.floor(100000 + Math.random() * 900000)}`;
     navigation.navigate('ClampingDetails', {
       clampId: mockId,
       clampCode: mockId,
-      rawQrData: `https://mtpb-clamping.ph/violator?clampId=${mockId}`
+      rawQrData: `https://mtpb-violators-pwa.vercel.app/verify-email?clamp_id=${mockId}`
     });
   };
 

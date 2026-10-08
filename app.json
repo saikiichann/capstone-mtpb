@@ -1,4 +1,28 @@
 {
-  "name": "ImpoundingApp",
-  "displayName": "ImpoundingApp"
+  "expo": {
+    "name": "MTPB Enforcement",
+    "slug": "mtpb-enforcement",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/mtpb_logo.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1B2A4A"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/mtpb_logo.png",
+        "backgroundColor": "#1B2A4A"
+      },
+      "package": "com.mtpb.enforcement"
+    }
+  }
 }
