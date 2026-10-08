@@ -17,7 +17,12 @@ import { ProcessingPayment } from './PayConfirm'
 // it lands in Downloads and the gallery on Android (the only phones this app
 // supports). No share sheet — Android's often has no "save" option at all.
 
-function renderReceipt(node) {
+// Waits for the images on the card (the MTPB logo) to finish loading first:
+// a snapshot taken before that leaves an empty space where the logo goes.
+async function renderReceipt(node) {
+  await Promise.all(
+    [...node.querySelectorAll('img')].map((img) => (img.decode ? img.decode().catch(() => {}) : null)),
+  )
   return toBlob(node, {
     pixelRatio: 3,
     backgroundColor: '#fefefe',
