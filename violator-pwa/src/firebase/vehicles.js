@@ -7,8 +7,14 @@ import {
   query,
   where,
 } from 'firebase/firestore'
-import carPhoto from '../assets/vehicle-car-sample.webp'
-import motorcyclePhoto from '../assets/vehicle-motorcycle-sample.webp'
+import hatchbackPhoto from '../assets/vehicles/hatchback.jpg'
+import motorcycleAutomaticPhoto from '../assets/vehicles/motorcycle-automatic.jpg'
+import motorcycleManualPhoto from '../assets/vehicles/motorcycle-manual.jpg'
+import pickupPhoto from '../assets/vehicles/pickup.jpg'
+import sedanPhoto from '../assets/vehicles/sedan.jpg'
+import suvPhoto from '../assets/vehicles/suv.jpg'
+import truckPhoto from '../assets/vehicles/truck.jpg'
+import vanPhoto from '../assets/vehicles/van.jpg'
 import { sampleVehicles } from '../data/sample'
 import { toMillis } from '../utils/format'
 import { db, shouldUseSampleData } from './config'
@@ -17,7 +23,7 @@ import { COLLECTIONS } from './schema'
 // Vehicle fields (placeholders until the team's schema is final):
 //   ownerUid, plateNumber, vehicleType, wheelCategory, color, make, model,
 //   year, engineNumber, chassisNumber, orcrNumber,
-//   category ('car' | 'motorcycle', picks the stock photo), photoUrl,
+//   vehicleType (picks the photo, see vehiclePhoto below), photoUrl,
 //   verificationStatus ('pending' | 'active' | 'rejected'),
 //   rejectionReason (set by MTPB), createdAt, updatedAt
 //
@@ -33,25 +39,6 @@ export const VERIFICATION = {
   pending: 'pending',
   active: 'active',
   rejected: 'rejected',
-}
-
-export const WHEEL_CATEGORIES = ['2 Wheels', '3 Wheels', '4 Wheels', '6 Wheels or more']
-
-// Picking a type fills in the usual wheel category (still editable).
-export const VEHICLE_TYPES = [
-  { label: 'Sedan', wheels: '4 Wheels' },
-  { label: 'Hatchback', wheels: '4 Wheels' },
-  { label: 'SUV', wheels: '4 Wheels' },
-  { label: 'Pickup', wheels: '4 Wheels' },
-  { label: 'Van', wheels: '4 Wheels' },
-  { label: 'Motorcycle', wheels: '2 Wheels', category: 'motorcycle' },
-  { label: 'Tricycle', wheels: '3 Wheels' },
-  { label: 'Truck', wheels: '6 Wheels or more' },
-  { label: 'Other', wheels: '' },
-]
-
-export function defaultWheelsFor(vehicleType) {
-  return VEHICLE_TYPES.find((t) => t.label === vehicleType)?.wheels ?? ''
 }
 
 // "abc  1234 " → "ABC 1234". Violations are matched on the exact plate
@@ -160,12 +147,42 @@ export async function removeVehicle(ownerUid, vehicle) {
 
 // Uses the owner's uploaded photo when there is one; otherwise the stock
 // image from the Figma file for that kind of vehicle.
-export function vehiclePhoto(vehicle) {
-  if (vehicle?.photoUrl) return { src: vehicle.photoUrl, isStock: false }
-  return {
-    src: vehicle?.category === 'motorcycle' ? motorcyclePhoto : carPhoto,
-    isStock: true,
+// One photo per type in the enforcer app's dropdown (Sedan, SUV, Hatchback,
+// Van, Pickup, Truck, Motorcycle (Manual), Motorcycle (Automatic)). Words are
+// matched loosely, so plain "Motorcycle" from older records still gets a
+// motorcycle and anything unknown gets the sedan rather than nothing.
+const TYPE_PHOTOS = {
+  sedan: sedanPhoto,
+  hatchback: hatchbackPhoto,
+  suv: suvPhoto,
+  van: vanPhoto,
+  pickup: pickupPhoto,
+  truck: truckPhoto,
+  motorcycleManual: motorcycleManualPhoto,
+  motorcycleAutomatic: motorcycleAutomaticPhoto,
+}
+
+export function vehicleKind(vehicle) {
+  const type = String(vehicle?.vehicleType ?? '').toLowerCase()
+  if (/motor|scooter/.test(type)) return /auto|scooter/.test(type) ? 'motorcycleAutomatic' : 'motorcycleManual'
+  if (!type && (vehicle?.category === 'motorcycle' || /^2\b/.test(vehicle?.wheelCategory ?? ''))) {
+    return 'motorcycleManual'
   }
+  if (/pick/.test(type)) return 'pickup'
+  if (/truck/.test(type)) return 'truck'
+  if (/van/.test(type)) return 'van'
+  if (/suv|crossover/.test(type)) return 'suv'
+  if (/hatch/.test(type)) return 'hatchback'
+  return 'sedan'
+}
+
+// Owners can't upload photos. A `photoUrl` set by MTPB still wins; otherwise
+// the vehicle gets the photo for its type. Type photos are white-background
+// studio shots facing right, shown as they are (mirroring would flip the
+// badges and plates).
+export function vehiclePhoto(vehicle) {
+  if (vehicle?.photoUrl) return { src: vehicle.photoUrl, isStock: false, isTypePhoto: false }
+  return { src: TYPE_PHOTOS[vehicleKind(vehicle)], isStock: true, isTypePhoto: true }
 }
 
 export function vehicleDescription(vehicle) {

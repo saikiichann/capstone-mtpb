@@ -4482,3 +4482,18 @@ div.settings-row {
   font-size: 11px;
   font-weight: 600;
 }
+
+/* ---------- Vehicle type photos ----------
+   Studio shots on white, facing right. Shown as they are, never mirrored, or
+   the badges and plates read backwards. On the Home card's tinted background
+   the white is multiplied away; the list and details cards are white
+   already. */
+.vehicle-hero__art--type {
+  mix-blend-mode: multiply;
+}
+
+.vehicle-hero__art--type .vehicle-hero__photo,
+.vehicle-row__photo--type img,
+.vehicle-details__photo--type img {
+  transform: none;
+}
