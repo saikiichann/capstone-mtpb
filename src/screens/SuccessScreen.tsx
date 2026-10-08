@@ -4,7 +4,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { colors } from '../theme/colors';
 
-export default function SuccessScreen({ navigation, route }) {
+interface SuccessScreenProps {
+  navigation: any;
+  route?: {
+    params?: {
+      violationNo?: string;
+      dateIssued?: string;
+      dashboardRoute?: string;
+    };
+  };
+}
+
+export default function SuccessScreen({ navigation, route }: SuccessScreenProps) {
   const violationNo = route?.params?.violationNo || 'IM-000000';
   const dateIssued = route?.params?.dateIssued || '';
   const dashboardRoute = route?.params?.dashboardRoute || 'ImpoundDashboard';

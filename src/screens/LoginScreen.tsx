@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { signIn } from '../services/authService';
 import {
   View,
   Text,
@@ -14,28 +15,39 @@ import {
 import Icon from 'react-native-vector-icons/Feather';
 import { colors } from '../theme/colors';
 
-export default function LoginScreen({ navigation }) {
+interface LoginScreenProps {
+  navigation: any;
+}
+
+export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [username, setUsername] = useState('juandelacruz@mtpbclamp.ph');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSignIn = () => {
-    // TODO: wire up to your auth API / Firebase Auth
+  const handleSignIn = async () => {
+    // Kung gusto mo muna i-bypass habang inaayos ang Firebase access:
+    // navigation.replace('ClampDashboard');
+    // return;
+
     if (!username.trim() || !password.trim()) {
       setErrorMsg('Please enter both username and password.');
       return;
     }
 
-    const email = username.toLowerCase();
-    if (!email.includes('clamp')) {
-      setErrorMsg('This account is not registered to the Clamping Team.');
-      return;
-    }
-
     setErrorMsg('');
-    navigation.replace('ClampDashboard');
+    setLoading(true);
+    try {
+      await signIn(username, password);
+      navigation.replace('ClampDashboard');
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Unable to sign in. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
   };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={colors.navy} />
@@ -94,8 +106,8 @@ export default function LoginScreen({ navigation }) {
           {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
           {/* SIGN IN */}
-          <TouchableOpacity style={styles.signInButton} onPress={handleSignIn}>
-            <Text style={styles.signInText}>Sign In</Text>
+          <TouchableOpacity style={styles.signInButton} onPress={handleSignIn} disabled={loading}>
+            <Text style={styles.signInText}>{loading ? 'Signing in...' : 'Sign In'}</Text>
           </TouchableOpacity>
 
           {/* FORGOT PASSWORD */}
@@ -120,11 +132,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.navy,
   },
-
-  /* =========================
-     HEADER
-  ========================= */
-
   header: {
     backgroundColor: colors.navy,
     paddingTop: 40,
@@ -132,7 +139,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomRightRadius: 60,
   },
-
   logoWrap: {
     width: 100,
     height: 100,
@@ -140,12 +146,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 12,
   },
-
   logo: {
     width: 96,
     height: 96,
   },
-
   headerTitle: {
     color: colors.white,
     fontSize: 20,
@@ -153,11 +157,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 26,
   },
-
-  /* =========================
-     FORM
-  ========================= */
-
   formCard: {
     flex: 1,
     backgroundColor: colors.white,
@@ -166,7 +165,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingTop: 32,
   },
-
   formTitle: {
     fontSize: 22,
     fontWeight: '700',
@@ -174,7 +172,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
-
   label: {
     fontSize: 11,
     fontWeight: '700',
@@ -183,7 +180,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 14,
   },
-
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -192,33 +188,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 48,
   },
-
   inputIcon: {
     marginRight: 10,
   },
-
   input: {
     flex: 1,
     fontSize: 14,
     color: colors.black,
   },
-
   eyeButton: {
     paddingLeft: 8,
     paddingVertical: 4,
   },
-
   errorText: {
     color: colors.red,
     fontSize: 12,
     marginTop: 12,
     textAlign: 'center',
   },
-
-  /* =========================
-     SIGN IN
-  ========================= */
-
   signInButton: {
     backgroundColor: colors.black,
     borderRadius: 10,
@@ -227,38 +214,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 20,
   },
-
   signInText: {
     color: colors.white,
     fontSize: 15,
     fontWeight: '700',
   },
-
-  /* =========================
-     FORGOT PASSWORD
-  ========================= */
-
   forgotButton: {
     alignSelf: 'center',
     marginTop: 18,
   },
-
   forgotText: {
     color: colors.gray,
     fontSize: 13,
   },
-
-  /* =========================
-     FOOTER
-  ========================= */
-
   footerPillWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingBottom: 24,
   },
-
   footerPill: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -266,7 +240,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 18,
   },
-
   footerPillText: {
     fontSize: 10,
     fontWeight: '600',

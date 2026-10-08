@@ -1,16 +1,47 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, StatusBar, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, StatusBar, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import Dropdown from '../components/Dropdown';
 import { colors } from '../theme/colors';
+import { createViolation } from '../services/violationsService';
 
-const LOCATIONS = ['Sector 1 - Sample Street 1', 'Sector 1 - Sample Street 2', 'Sector 2 - Sample Street 1', 'Sector 3 - Sample Street 1'];
-const MAKES = ['Honda', 'Toyota', 'Mitsubishi', 'Nissan', 'Hyundai', 'Ford', 'Suzuki'];
-const TYPES = ['Sedan', 'SUV', 'Hatchback', 'Van', 'Pickup', 'Motorcycle', 'Truck'];
-const COLORS = ['Black', 'White', 'Silver', 'Gray', 'Red', 'Blue', 'Green'];
+// District 3 (Manila: Binondo, Quiapo, San Nicolas, Santa Cruz)
+const LOCATIONS: string[] = [
+  'Sector 3 - Rizal Avenue (Santa Cruz)',
+  'Sector 3 - Escolta Street (Binondo)',
+  'Sector 3 - Ongpin Street (Binondo)',
+  'Sector 3 - Quintin Paredes Road (Binondo)',
+  'Sector 3 - Plaza Miranda / Hidalgo St (Quiapo)',
+  'Sector 3 - Quezon Boulevard (Quiapo)',
+  'Sector 3 - Carriedo Street (Santa Cruz)',
+  'Sector 3 - San Fernando Street (San Nicolas)',
+  'Sector 3 - Recto Avenue (District 3 Portion)',
+];
 
-const VIOLATIONS = {
+// Kasama na ang Motorcycle Brands & Car Makes
+const MAKES: string[] = [
+  'Honda',
+  'Yamaha',
+  'Suzuki',
+  'Kawasaki',
+  'TVS',
+  'Vespa',
+  'SYM',
+  'Kymco',
+  'Toyota',
+  'Mitsubishi',
+  'Nissan',
+  'Hyundai',
+  'Ford',
+  'Isuzu'
+];
+
+// Inuna ang Motorcycle sa Vehicle Types
+const TYPES: string[] = ['Motorcycle', 'Scooter', 'Sedan', 'SUV', 'Hatchback', 'Van', 'Pickup', 'Truck'];
+const COLORS: string[] = ['Black', 'White', 'Silver', 'Gray', 'Red', 'Blue', 'Green', 'Yellow', 'Matte Black'];
+
+const VIOLATIONS: Record<string, number> = {
   Obstruction: 900,
   'Illegal Parking': 500,
   'No Parking Zone': 1000,
@@ -19,16 +50,29 @@ const VIOLATIONS = {
   'Parking on Sidewalk': 1000,
 };
 
-export default function ClampingDetailsScreen({ navigation, route }) {
-  const clampCode = route?.params?.clampCode || 'L-14';
+interface ClampingDetailsScreenProps {
+  navigation: any;
+  route?: {
+    params?: {
+      clampCode?: string;
+      clampId?: string;
+      rawQrData?: string;
+      photoUri?: string;
+    };
+  };
+}
+
+export default function ClampingDetailsScreen({ navigation, route }: ClampingDetailsScreenProps) {
+  const clampCode = route?.params?.clampCode || route?.params?.clampId || 'CLAMP-001';
   const photoUri = route?.params?.photoUri;
 
-  const [location, setLocation] = useState(LOCATIONS[0]);
-  const [plate, setPlate] = useState('');
-  const [make, setMake] = useState('Honda');
-  const [type, setType] = useState('Sedan');
-  const [color, setColor] = useState('Black');
-  const [selected, setSelected] = useState([]);
+  const [location, setLocation] = useState<string>(LOCATIONS[0]);
+  const [plate, setPlate] = useState<string>('');
+  const [make, setMake] = useState<string>('Honda');
+  const [type, setType] = useState<string>('Motorcycle'); // Defaulted to Motorcycle / Scooter
+  const [color, setColor] = useState<string>('Black');
+  const [selected, setSelected] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState<boolean>(false);
 
   const penalty = selected.reduce((sum, v) => sum + (VIOLATIONS[v] || 0), 0);
   const canIssue = plate.trim().length > 0 && selected.length > 0 && !!photoUri;
@@ -40,21 +84,46 @@ export default function ClampingDetailsScreen({ navigation, route }) {
     now.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }),
   ].join(' | ');
 
-  const addViolation = (v) => { if (!selected.includes(v)) setSelected([...selected, v]); };
-  const removeViolation = (v) => setSelected(selected.filter((x) => x !== v));
+  const addViolation = (v: string) => {
+    if (!selected.includes(v)) setSelected([...selected, v]);
+  };
 
-  const issueTicket = () => {
-    navigation.navigate('Success', {
-      violationNo: clampCode,
-      dateIssued,
-      dashboardRoute: 'ClampDashboard',
-    });
+  const removeViolation = (v: string) => setSelected(selected.filter((x) => x !== v));
+
+  const issueTicket = async () => {
+    setSubmitting(true);
+    try {
+      const record = await createViolation({
+        clampCode,
+        location,
+        plate,
+        make,
+        type,
+        color,
+        violations: selected,
+        penalty,
+        photoLocalUri: photoUri,
+        district: 'District 3',
+        sector: 'Sector 3',
+      });
+
+      navigation.navigate('Success', {
+        violationNo: record.id,
+        dateIssued,
+        dashboardRoute: 'ClampDashboard',
+      });
+    } catch (e: any) {
+      Alert.alert('Failed to submit', e.message || 'Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={colors.navy} />
 
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Icon name="arrow-left" size={20} color={colors.white} />
@@ -64,12 +133,13 @@ export default function ClampingDetailsScreen({ navigation, route }) {
       </View>
 
       <ScrollView style={styles.body} contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+        {/* Clamp Info & Location */}
         <View style={styles.card}>
           <View style={styles.row}>
             <View style={{ flex: 1, marginRight: 10 }}>
               <Text style={styles.label}>Clamp ID No.</Text>
               <View style={styles.readOnly}>
-                <Text style={styles.readOnlyText}>{clampCode}</Text>
+                <Text style={styles.readOnlyText} numberOfLines={1}>{clampCode}</Text>
               </View>
             </View>
             <View style={{ flex: 2 }}>
@@ -80,30 +150,31 @@ export default function ClampingDetailsScreen({ navigation, route }) {
             </View>
           </View>
 
-          <Text style={[styles.label, { marginTop: 12 }]}>Location</Text>
+          <Text style={[styles.label, { marginTop: 12 }]}>Location (District 3 / Sector 3)</Text>
           <Dropdown value={location} options={LOCATIONS} onSelect={setLocation} />
         </View>
 
+        {/* Violation Details Form */}
         <View style={[styles.card, { marginTop: 14 }]}>
-          <Text style={styles.cardTitle}>Violation Details</Text>
+          <Text style={styles.cardTitle}>Vehicle & Violation Details</Text>
 
-          <Text style={styles.smallLabel}>PLATE NUMBER</Text>
+          <Text style={styles.smallLabel}>PLATE / MV FILE NUMBER</Text>
           <TextInput
             style={styles.input}
             value={plate}
             onChangeText={(t) => setPlate(t.toUpperCase())}
-            placeholder="ABC 1234"
+            placeholder="ABC 1234 / 1234-56789"
             placeholderTextColor={colors.gray}
             autoCapitalize="characters"
           />
 
           <View style={[styles.row, { marginTop: 12 }]}>
             <View style={{ flex: 1, marginRight: 8 }}>
-              <Text style={styles.smallLabel}>MAKE</Text>
+              <Text style={styles.smallLabel}>MAKE / BRAND</Text>
               <Dropdown value={make} options={MAKES} onSelect={setMake} />
             </View>
             <View style={{ flex: 1, marginRight: 8 }}>
-              <Text style={styles.smallLabel}>TYPE</Text>
+              <Text style={styles.smallLabel}>VEHICLE TYPE</Text>
               <Dropdown value={type} options={TYPES} onSelect={setType} />
             </View>
             <View style={{ flex: 1 }}>
@@ -143,7 +214,7 @@ export default function ClampingDetailsScreen({ navigation, route }) {
                 onPress={() =>
                   navigation.navigate('CapturePhoto', {
                     returnTo: 'ClampingDetails',
-                    extraParams: { clampCode },
+                    extraParams: { clampCode, clampId: clampCode },
                   })
                 }
               >
@@ -153,15 +224,27 @@ export default function ClampingDetailsScreen({ navigation, route }) {
             </View>
 
             <View style={styles.thumbWrap}>
-              {photoUri ? <Image source={{ uri: photoUri }} style={styles.thumb} /> : <View style={styles.thumbEmpty} />}
+              {photoUri ? (
+                <Image source={{ uri: photoUri }} style={styles.thumb} />
+              ) : (
+                <View style={styles.thumbEmpty} />
+              )}
             </View>
           </View>
         </View>
 
-        <TouchableOpacity style={[styles.issueBtn, !canIssue && styles.issueBtnDisabled]} onPress={issueTicket} disabled={!canIssue}>
-          <Text style={[styles.issueBtnText, !canIssue && { color: colors.gray }]}>Issue Violation Ticket</Text>
+        {/* Submit Button */}
+        <TouchableOpacity
+          style={[styles.issueBtn, (!canIssue || submitting) && styles.issueBtnDisabled]}
+          onPress={issueTicket}
+          disabled={!canIssue || submitting}
+        >
+          <Text style={[styles.issueBtnText, !canIssue && { color: colors.gray }]}>
+            {submitting ? 'Submitting...' : 'Issue Violation Ticket'}
+          </Text>
         </TouchableOpacity>
 
+        {/* Cancel Button */}
         <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.navigate('ClampDashboard')}>
           <Text style={styles.cancelBtnText}>Cancel</Text>
         </TouchableOpacity>
@@ -182,7 +265,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 10, fontWeight: '600', color: colors.gray, marginBottom: 4 },
   smallLabel: { fontSize: 9, fontWeight: '700', color: colors.gray, letterSpacing: 0.4, marginBottom: 4 },
   readOnly: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, height: 36, justifyContent: 'center', backgroundColor: colors.offWhite },
-  readOnlyText: { fontSize: 11, color: colors.black },
+  readOnlyText: { fontSize: 11, color: colors.black, fontWeight: '600' },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, height: 36, fontSize: 12, color: colors.black },
   emptyText: { fontSize: 11, color: colors.gray, fontStyle: 'italic', paddingVertical: 6 },
   violationRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, height: 36, marginBottom: 6 },
