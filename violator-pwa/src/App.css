@@ -4520,3 +4520,26 @@ div.settings-row {
   width: 168px;
   height: 100px;
 }
+
+/* ---------- Tab pages: only the content scrolls ----------
+   Home, History, Vehicles and Profile fill exactly one screen: the page
+   content scrolls inside its own area and the bottom nav sits under it,
+   never moving. (A sticky nav scrolled along with the page in some
+   browsers.) Short pages don't scroll at all. */
+.tab-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.tab-layout > .app-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tab-layout > .bottom-nav {
+  position: relative;
+  flex: none;
+}
