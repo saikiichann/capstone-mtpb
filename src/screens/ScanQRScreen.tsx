@@ -5,16 +5,56 @@ import Icon from 'react-native-vector-icons/Feather';
 import { Camera } from 'react-native-camera-kit';
 import { colors } from '../theme/colors';
 
-export default function ScanQRScreen({ navigation }) {
-  const [flashOn, setFlashOn] = useState(false);
-  const [scanned, setScanned] = useState(false);
+interface ScanQRScreenProps {
+  navigation: any;
+}
 
-  const onReadCode = (event) => {
+export default function ScanQRScreen({ navigation }: ScanQRScreenProps) {
+  const [flashOn, setFlashOn] = useState<boolean>(false);
+  const [scanned, setScanned] = useState<boolean>(false);
+
+  // Helper function para mag-extract ng Clamp ID kung URL ang na-scan
+  const extractClampId = (rawData: string) => {
+    if (!rawData) return 'CLAMP-UNKNOWN';
+
+    // 1. Kung URL na may parameter na clampId=
+    if (rawData.includes('clampId=')) {
+      return rawData.split('clampId=')[1].split('&')[0];
+    }
+    // 2. Kung URL path (e.g., domain.com/clamp/CLAMP-001)
+    if (rawData.includes('/')) {
+      const parts = rawData.split('/');
+      return parts[parts.length - 1];
+    }
+    // 3. Kung plain text lang ang QR Code
+    return rawData;
+  };
+
+  const onReadCode = (event: any) => {
     if (scanned) return;
     setScanned(true);
-    const value = event?.nativeEvent?.codeStringValue;
-    navigation.navigate('ClampingDetails', { clampCode: value });
-    setTimeout(() => setScanned(false), 1000);
+
+    const rawValue = event?.nativeEvent?.codeStringValue || '';
+    const parsedId = extractClampId(rawValue);
+
+    // Ipasa ang parehong parsed ID at ang raw value para sa Clamping Details
+    navigation.navigate('ClampingDetails', {
+      clampId: parsedId,
+      clampCode: parsedId,
+      rawQrData: rawValue
+    });
+
+    setTimeout(() => setScanned(false), 1500);
+  };
+
+  // Function para sa Testing Button kapag walang ma-scan na physical QR
+  const handleTestBypass = () => {
+    const mockId = `CLAMP-TEST-${Math.floor(1000 + Math.random() * 9000)}`;
+    navigation.navigate('ClampingDetails', {
+      clampId: mockId,
+      clampCode: mockId,
+      rawQrData: `https://mtpb-clamping.ph/violator?clampId=${mockId}`
+    });
   };
 
   return (
@@ -49,13 +89,12 @@ export default function ScanQRScreen({ navigation }) {
           <Text style={styles.caption}>Scan the QR code on the clamp to apply</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={() => navigation.navigate('ClampingDetails', { clampCode: 'L-14' })}
-        >
-          <Text style={styles.primaryBtnText}>Scan QR</Text>
+        {/* Test Mode Button */}
+        <TouchableOpacity style={styles.primaryBtn} onPress={handleTestBypass}>
+          <Text style={styles.primaryBtnText}>⚡ Bypass & Test Scan</Text>
         </TouchableOpacity>
 
+        {/* Flashlight Toggle */}
         <TouchableOpacity style={styles.secondaryBtn} onPress={() => setFlashOn((v) => !v)}>
           <Icon name="zap" size={16} color={colors.black} style={{ marginRight: 8 }} />
           <Text style={styles.secondaryBtnText}>
