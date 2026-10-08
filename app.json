@@ -1,4 +1,6 @@
 {
+  "name": "ImpoundingApp",
+  "displayName": "MTPB Enforcement",
   "expo": {
     "name": "MTPB Enforcement",
     "slug": "mtpb-enforcement",

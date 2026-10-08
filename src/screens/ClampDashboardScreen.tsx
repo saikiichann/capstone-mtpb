@@ -30,6 +30,7 @@ interface NotificationItem {
   id: string;
   text: string;
   time: string;
+  isRead?: boolean;
 }
 
 interface ClampDashboardScreenProps {
@@ -39,6 +40,9 @@ interface ClampDashboardScreenProps {
 export default function ClampDashboardScreen({ navigation }: ClampDashboardScreenProps) {
   const [showLogout, setShowLogout] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
+
+  // Red dot indicator state (Nawawala kapag na-click)
+  const [hasUnread, setHasUnread] = useState(false);
 
   // Dynamic States
   const [activities, setActivities] = useState<ActivityItem[]>([]);
@@ -73,7 +77,7 @@ export default function ClampDashboardScreen({ navigation }: ClampDashboardScree
 
     fetchProfile();
 
-    // 2. Real-time Listener sa clampViolations para sa Activity at Notifications
+    // 2. Real-time Listener sa clampViolations
     const colRef = collection(db, 'clampViolations');
 
     const unsubscribe = onSnapshot(
@@ -128,6 +132,7 @@ export default function ClampDashboardScreen({ navigation }: ClampDashboardScree
                 text: `${plateNumber} was verified and in process for release`,
                 time: fullDateFormatted,
                 rawDate: rawDate,
+                isRead: false,
               });
             } else {
               fetchedNotifs.push({
@@ -135,13 +140,19 @@ export default function ClampDashboardScreen({ navigation }: ClampDashboardScree
                 text: `${plateNumber} was successfully clamped`,
                 time: fullDateFormatted,
                 rawDate: rawDate,
+                isRead: false,
               });
             }
           });
 
-          // Sort Mula Pinakabago Papuntang Pinakaluma (In-Memory)
+          // Sort Mula Pinakabago Papuntang Pinakaluma
           fetchedActivities.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
           fetchedNotifs.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
+
+          // Kapag may pumasok na panibagong listahan sa snapshot, sindihan ang red dot badge
+          if (snapshot.docChanges().length > 0) {
+            setHasUnread(true);
+          }
 
           setActivities(fetchedActivities.slice(0, 5));
           setNotifications(fetchedNotifs);
@@ -159,6 +170,11 @@ export default function ClampDashboardScreen({ navigation }: ClampDashboardScree
 
     return () => unsubscribe();
   }, []);
+
+  const handleOpenNotif = () => {
+    setShowNotif(true);
+    setHasUnread(false); // Awtomatikong tatanggalin ang red dot sa dashboard pagnapindot na
+  };
 
   const handleLogout = () => {
     setShowLogout(false);
@@ -184,10 +200,11 @@ export default function ClampDashboardScreen({ navigation }: ClampDashboardScree
               <TouchableOpacity
                 style={{ marginRight: 16, padding: 4 }}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                onPress={() => setShowNotif(true)}
+                onPress={handleOpenNotif}
               >
                 <Icon name="bell" size={20} color={colors.black} />
-                {notifications.length > 0 && (
+                {/* Ginagamit na rito ang hasUnread state sa halip na notifications.length */}
+                {hasUnread && (
                   <View style={styles.notifBadgeDot} pointerEvents="none" />
                 )}
               </TouchableOpacity>

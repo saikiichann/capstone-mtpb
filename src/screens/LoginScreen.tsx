@@ -24,7 +24,7 @@ interface LoginScreenProps {
 }
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
-  const [username, setUsername] = useState('juandelacruz@mtpb.ph');
+  const [username, setUsername] = useState('enforcerclamp@mtpb.ph');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
