@@ -12,7 +12,7 @@ import { formatDateTime, formatPeso } from '../utils/format'
 // vehicles.
 // - All: everything, paid ones with a PAID badge
 // - Clamped / Impounded: unpaid ones in that state
-// - Paid: settled ones (added; not in the design)
+// Paid ones have no tab of their own: Payment History already lists them.
 // `?plate=ABC 1234` narrows the list to one vehicle (from Vehicle Details).
 const isPaid = (v) => v.paymentStatus === 'paid'
 
@@ -30,7 +30,6 @@ const FILTERS = [
     test: (v) => v.status === 'impounded' && !isPaid(v),
     empty: 'No unpaid impounded violations.',
   },
-  { id: 'paid', label: 'Paid', test: isPaid, empty: 'No paid violations yet.' },
 ]
 
 export default function ViolationHistory() {
@@ -54,7 +53,7 @@ export default function ViolationHistory() {
       <PageHeader title="Violation History" back={backTo} />
 
       <main className="page__body history-body">
-        <div className="segmented segmented--4" role="group" aria-label="Filter violations">
+        <div className="segmented" role="group" aria-label="Filter violations">
           {FILTERS.map((f) => (
             <button
               key={f.id}
