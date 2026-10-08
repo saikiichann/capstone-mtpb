@@ -10,7 +10,8 @@ export default function CapturePhotoScreen({ navigation, route }) {
   const [flashOn, setFlashOn] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const returnTo = route?.params?.returnTo || 'ImpoundDetails';
+  // Default sa ClampingDetails — hindi ImpoundDetails
+  const returnTo = route?.params?.returnTo || 'ClampingDetails';
   const extraParams = route?.params?.extraParams || {};
 
   const capture = async () => {

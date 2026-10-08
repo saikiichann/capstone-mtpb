@@ -10,73 +10,128 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  ActivityIndicator,
+  Modal,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { colors } from '../theme/colors';
+import { auth, db } from '../firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function LoginScreen({ navigation }) {
-  const [username, setUsername] = useState('juandelacruz@mtpbclamp.ph');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSignIn = () => {
-    // TODO: wire up to your auth API / Firebase Auth
+  // Forgot password modal
+  const [showForgotModal, setShowForgotModal] = useState(false);
+
+  const handleSignIn = async () => {
+    setErrorMsg('');
+
     if (!username.trim() || !password.trim()) {
       setErrorMsg('Please enter both username and password.');
       return;
     }
 
-    const email = username.toLowerCase();
-    if (!email.includes('clamp')) {
-      setErrorMsg('This account is not registered to the Clamping Team.');
-      return;
-    }
+    setLoading(true);
 
-    setErrorMsg('');
-    navigation.replace('ClampDashboard');
+    try {
+      let email = username.trim().toLowerCase();
+      if (!email.includes('@')) {
+        email = `${email}@mtpb.gov.ph`;
+      }
+
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const uid = userCredential.user.uid;
+
+      const userDocRef = doc(db, 'users', uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (!userDocSnap.exists()) {
+        await auth.signOut();
+        setErrorMsg('Account not found in the system. Contact IT Admin.');
+        return;
+      }
+
+      const userData = userDocSnap.data();
+
+      if (userData.status !== 'active') {
+        await auth.signOut();
+        setErrorMsg(`Account is ${userData.status}. Contact IT Admin.`);
+        return;
+      }
+
+      if (userData.role !== 'clamping-staff') {
+        await auth.signOut();
+        setErrorMsg('This account is not registered to the Clamping Team.');
+        return;
+      }
+
+      await updateDoc(userDocRef, { lastLogin: serverTimestamp() });
+
+      navigation.replace('ClampDashboard', {
+        officerName: userData.name ?? 'Unknown Officer',
+        officerUid: uid,
+      });
+    } catch (err) {
+      console.error('Login error:', err);
+
+      if (err.code === 'auth/invalid-credential' ||
+          err.code === 'auth/wrong-password' ||
+          err.code === 'auth/user-not-found') {
+        setErrorMsg('Invalid username or password.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setErrorMsg('Too many attempts. Please try again later.');
+      } else if (err.code === 'auth/network-request-failed') {
+        setErrorMsg('Network error. Check your connection.');
+      } else {
+        setErrorMsg(err.message || 'Login failed. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleOpenForgot = () => setShowForgotModal(true);
+  const handleCloseForgot = () => setShowForgotModal(false);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={colors.navy} />
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.logoWrap}>
             <Image source={require('../../assets/mtpb_logo.png')} style={styles.logo} resizeMode="contain" />
           </View>
-
           <Text style={styles.headerTitle}>Manila Traffic and{'\n'}Parking Bureau</Text>
         </View>
 
-        {/* FORM CARD */}
         <View style={styles.formCard}>
           <Text style={styles.formTitle}>Enforcer App</Text>
 
-          {/* USERNAME */}
           <Text style={styles.label}>USERNAME</Text>
-
           <View style={styles.inputRow}>
             <Icon name="user" size={18} color={colors.gray} style={styles.inputIcon} />
-
             <TextInput
               style={styles.input}
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
               keyboardType="email-address"
-              placeholder="you@mtpb.ph"
+              placeholder="j.delacruz"
               placeholderTextColor={colors.gray}
+              editable={!loading}
             />
           </View>
 
-          {/* PASSWORD */}
           <Text style={[styles.label, { marginTop: 20 }]}>PASSWORD</Text>
-
           <View style={styles.inputRow}>
             <Icon name="lock" size={18} color={colors.gray} style={styles.inputIcon} />
-
             <TextInput
               style={styles.input}
               value={password}
@@ -84,8 +139,8 @@ export default function LoginScreen({ navigation }) {
               secureTextEntry={!showPassword}
               placeholder="••••••••••"
               placeholderTextColor={colors.gray}
+              editable={!loading}
             />
-
             <TouchableOpacity onPress={() => setShowPassword((v) => !v)} style={styles.eyeButton}>
               <Icon name={showPassword ? 'eye-off' : 'eye'} size={18} color={colors.gray} />
             </TouchableOpacity>
@@ -93,17 +148,26 @@ export default function LoginScreen({ navigation }) {
 
           {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
-          {/* SIGN IN */}
-          <TouchableOpacity style={styles.signInButton} onPress={handleSignIn}>
-            <Text style={styles.signInText}>Sign In</Text>
+          <TouchableOpacity
+            style={[styles.signInButton, loading && { opacity: 0.6 }]}
+            onPress={handleSignIn}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <Text style={styles.signInText}>Sign In</Text>
+            )}
           </TouchableOpacity>
 
-          {/* FORGOT PASSWORD */}
-          <TouchableOpacity style={styles.forgotButton}>
+          <TouchableOpacity
+            style={styles.forgotButton}
+            onPress={handleOpenForgot}
+            disabled={loading}
+          >
             <Text style={styles.forgotText}>Forgot password?</Text>
           </TouchableOpacity>
 
-          {/* FOOTER */}
           <View style={styles.footerPillWrap}>
             <View style={styles.footerPill}>
               <Text style={styles.footerPillText}>AUTHORIZED PERSONNEL ONLY</Text>
@@ -111,6 +175,49 @@ export default function LoginScreen({ navigation }) {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* FORGOT PASSWORD MODAL — Contact IT Admin via Call */}
+      <Modal
+        visible={showForgotModal}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseForgot}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Forgot Password</Text>
+              <TouchableOpacity onPress={handleCloseForgot}>
+                <Icon name="x" size={20} color={colors.black} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalIconWrap}>
+              <Icon name="shield" size={48} color={colors.navy} />
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              Please call the <Text style={styles.modalBold}>IT Admin</Text> to reset your password.
+            </Text>
+
+            <Text style={styles.modalBody}>
+              You are unable to reset your password on your own. The IT Admin will provide you with a new temporary password.
+            </Text>
+
+            <View style={styles.modalInfoBox}>
+              <Icon name="phone" size={16} color={colors.navy} />
+              <Text style={styles.modalInfoText}>(02) 8888-1234</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={handleCloseForgot}
+            >
+              <Text style={styles.modalButtonText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -120,11 +227,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.navy,
   },
-
-  /* =========================
-     HEADER
-  ========================= */
-
   header: {
     backgroundColor: colors.navy,
     paddingTop: 40,
@@ -132,7 +234,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomRightRadius: 60,
   },
-
   logoWrap: {
     width: 100,
     height: 100,
@@ -140,12 +241,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 12,
   },
-
-  logo: {
-    width: 96,
-    height: 96,
-  },
-
+  logo: { width: 96, height: 96 },
   headerTitle: {
     color: colors.white,
     fontSize: 20,
@@ -153,11 +249,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 26,
   },
-
-  /* =========================
-     FORM
-  ========================= */
-
   formCard: {
     flex: 1,
     backgroundColor: colors.white,
@@ -166,7 +257,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingTop: 32,
   },
-
   formTitle: {
     fontSize: 22,
     fontWeight: '700',
@@ -174,7 +264,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
-
   label: {
     fontSize: 11,
     fontWeight: '700',
@@ -183,7 +272,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 14,
   },
-
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -192,33 +280,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 48,
   },
-
-  inputIcon: {
-    marginRight: 10,
-  },
-
-  input: {
-    flex: 1,
-    fontSize: 14,
-    color: colors.black,
-  },
-
-  eyeButton: {
-    paddingLeft: 8,
-    paddingVertical: 4,
-  },
-
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, fontSize: 14, color: colors.black },
+  eyeButton: { paddingLeft: 8, paddingVertical: 4 },
   errorText: {
     color: colors.red,
     fontSize: 12,
     marginTop: 12,
     textAlign: 'center',
   },
-
-  /* =========================
-     SIGN IN
-  ========================= */
-
   signInButton: {
     backgroundColor: colors.black,
     borderRadius: 10,
@@ -227,38 +297,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 20,
   },
-
-  signInText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-
-  /* =========================
-     FORGOT PASSWORD
-  ========================= */
-
+  signInText: { color: colors.white, fontSize: 15, fontWeight: '700' },
   forgotButton: {
     alignSelf: 'center',
     marginTop: 18,
   },
-
-  forgotText: {
-    color: colors.gray,
-    fontSize: 13,
-  },
-
-  /* =========================
-     FOOTER
-  ========================= */
-
+  forgotText: { color: colors.gray, fontSize: 13 },
   footerPillWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingBottom: 24,
   },
-
   footerPill: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -266,11 +316,85 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 18,
   },
-
   footerPillText: {
     fontSize: 10,
     fontWeight: '600',
     color: colors.gray,
     letterSpacing: 0.5,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  modalContent: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 16,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: colors.black },
+  modalIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.offWhite,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.black,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  modalBody: {
+    fontSize: 13,
+    color: colors.gray,
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 20,
+  },
+  modalBold: { fontWeight: '700', color: colors.black },
+  modalInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.offWhite,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    width: '100%',
+    marginBottom: 8,
+  },
+  modalInfoText: {
+    fontSize: 13,
+    color: colors.black,
+    marginLeft: 10,
+    fontWeight: '600',
+  },
+  modalButton: {
+    backgroundColor: colors.black,
+    borderRadius: 10,
+    height: 48,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  modalButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

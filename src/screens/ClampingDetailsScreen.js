@@ -1,37 +1,196 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, StatusBar, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, StatusBar, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import Dropdown from '../components/Dropdown';
 import { colors } from '../theme/colors';
+import { db } from '../firebase';
+import { uploadViolationPhoto } from '../supabase';
+import {
+  collection,
+  getDocs,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  doc,
+  runTransaction,
+  serverTimestamp,
+} from 'firebase/firestore';
 
-const LOCATIONS = ['Sector 1 - Sample Street 1', 'Sector 1 - Sample Street 2', 'Sector 2 - Sample Street 1', 'Sector 3 - Sample Street 1'];
-const MAKES = ['Honda', 'Toyota', 'Mitsubishi', 'Nissan', 'Hyundai', 'Ford', 'Suzuki'];
-const TYPES = ['Sedan', 'SUV', 'Hatchback', 'Van', 'Pickup', 'Motorcycle', 'Truck'];
-const COLORS = ['Black', 'White', 'Silver', 'Gray', 'Red', 'Blue', 'Green'];
+// ============================================================================
+// SECTOR 3, MANILA (DISTRICT 3) — REAL LOCATIONS WITH COORDINATES
+// ============================================================================
+const LOCATIONS = [
+  // Sampaloc Area (District 3)
+  { name: 'Sampaloc - España Boulevard', lat: 14.6095, lng: 120.9890 },
+  { name: 'Sampaloc - Lacson Avenue', lat: 14.6118, lng: 120.9937 },
+  { name: 'Sampaloc - Earnshaw Street', lat: 14.6082, lng: 120.9856 },
+  { name: 'Sampaloc - Dapitan Street', lat: 14.6132, lng: 120.9876 },
+  { name: 'Sampaloc - P. Noval Street', lat: 14.6108, lng: 120.9895 },
+  { name: 'Sampaloc - A.H. Lacson Avenue', lat: 14.6118, lng: 120.9937 },
+  { name: 'Sampaloc - Legarda Street', lat: 14.6003, lng: 120.9925 },
+  { name: 'Sampaloc - Recto Avenue', lat: 14.6042, lng: 120.9889 },
 
-const VIOLATIONS = {
-  Obstruction: 900,
-  'Illegal Parking': 500,
-  'No Parking Zone': 1000,
-  'Blocking Driveway': 800,
-  'Double Parking': 700,
-  'Parking on Sidewalk': 1000,
-};
+  // Santa Cruz Area (District 3)
+  { name: 'Santa Cruz - Rizal Avenue', lat: 14.6172, lng: 120.9818 },
+  { name: 'Santa Cruz - Blumentritt Road', lat: 14.6229, lng: 120.9845 },
+  { name: 'Santa Cruz - Oroquieta Street', lat: 14.6104, lng: 120.9829 },
+  { name: 'Santa Cruz - Tayuman Street', lat: 14.6180, lng: 120.9828 },
+  { name: 'Santa Cruz - Bambang Street', lat: 14.6118, lng: 120.9819 },
+  { name: 'Santa Cruz - Fugoso Street', lat: 14.6106, lng: 120.9832 },
+
+  // Quiapo Area (District 3)
+  { name: 'Quiapo - Quezon Boulevard', lat: 14.5987, lng: 120.9853 },
+  { name: 'Quiapo - Hidalgo Street', lat: 14.5964, lng: 120.9865 },
+  { name: 'Quiapo - Villalobos Street', lat: 14.5977, lng: 120.9852 },
+  { name: 'Quiapo - Palanca Street', lat: 14.5971, lng: 120.9842 },
+  { name: 'Quiapo - Evangelista Street', lat: 14.5965, lng: 120.9848 },
+
+  // San Miguel Area (District 3)
+  { name: 'San Miguel - Ayala Bridge', lat: 14.5921, lng: 120.9898 },
+  { name: 'San Miguel - Malacañang Area', lat: 14.5941, lng: 120.9947 },
+  { name: 'San Miguel - Nepomuceno Street', lat: 14.5952, lng: 120.9935 },
+];
+
+const MAKES = ['Honda', 'Toyota', 'Mitsubishi', 'Nissan', 'Hyundai', 'Ford', 'Suzuki', 'Isuzu', 'Kia', 'Mazda'];
+const TYPES = ['Sedan', 'SUV', 'Hatchback', 'Van', 'Pickup', 'Motorcycle', 'Truck', 'AUV', 'MPV'];
+const COLORS = ['Black', 'White', 'Silver', 'Gray', 'Red', 'Blue', 'Green', 'Yellow', 'Brown', 'Orange'];
+
+function extractScanToken(scanned) {
+  if (!scanned) return null;
+  try {
+    const url = new URL(scanned);
+    const t = url.searchParams.get('t');
+    if (t) return t;
+  } catch {
+    // Not a URL — fall through to treating it as a raw token.
+  }
+  return scanned.trim();
+}
 
 export default function ClampingDetailsScreen({ navigation, route }) {
-  const clampCode = route?.params?.clampCode || 'L-14';
-  const photoUri = route?.params?.photoUri;
+  // ==========================================================================
+  // 1. LAHAT NG HOOKS — WALANG CONDITIONAL RETURN DITO
+  // ==========================================================================
 
-  const [location, setLocation] = useState(LOCATIONS[0]);
+  const rawScan = route?.params?.clampCode || '';
+  const photoUri = route?.params?.photoUri;
+  const officerName = route?.params?.officerName || 'Unknown Officer';
+  const officerUid = route?.params?.officerUid || null;
+
+  const [locationObj, setLocationObj] = useState(LOCATIONS[0]);
+  const [location, setLocation] = useState(LOCATIONS[0].name);
   const [plate, setPlate] = useState('');
   const [make, setMake] = useState('Honda');
   const [type, setType] = useState('Sedan');
   const [color, setColor] = useState('Black');
   const [selected, setSelected] = useState([]);
+  const [issuing, setIssuing] = useState(false);
 
-  const penalty = selected.reduce((sum, v) => sum + (VIOLATIONS[v] || 0), 0);
-  const canIssue = plate.trim().length > 0 && selected.length > 0 && !!photoUri;
+  const [clampData, setClampData] = useState(null);
+  const [clampLoading, setClampLoading] = useState(true);
+  const [clampError, setClampError] = useState('');
+
+  const [violationFines, setViolationFines] = useState({});
+  const [finesLoading, setFinesLoading] = useState(true);
+
+  // === EFFECT 1: Hanapin ang clamp base sa scanToken mula sa QR ===
+  useEffect(() => {
+    if (!rawScan) {
+      setClampError('No QR code data received.');
+      setClampLoading(false);
+      return;
+    }
+
+    const fetchClamp = async () => {
+      try {
+        const scanToken = extractScanToken(rawScan);
+        if (!scanToken) {
+          throw new Error('Could not read a valid token from the scanned QR code.');
+        }
+
+        const clampSnap = await getDocs(
+          query(collection(db, 'clamps'), where('scanToken', '==', scanToken))
+        );
+
+        if (clampSnap.empty) {
+          throw new Error('No clamp found for this QR code. It may not be registered yet.');
+        }
+
+        const clampDoc = clampSnap.docs[0];
+        const data = clampDoc.data();
+
+        if (data.cin || data.currentViolationId || data.deployedAt) {
+          throw new Error(
+            `This clamp (${data.clampId ?? clampDoc.id}) is already in use on another vehicle.`
+          );
+        }
+
+        setClampData({
+          docId: clampDoc.id,
+          clampId: data.clampId ?? clampDoc.id,
+          clampType: data.clampType ?? 'Car',
+          scanToken: data.scanToken,
+        });
+        setClampLoading(false);
+      } catch (err) {
+        console.error('Failed to load clamp:', err);
+        setClampError(err.message || 'Failed to load clamp data.');
+        setClampLoading(false);
+      }
+    };
+
+    fetchClamp();
+  }, [rawScan]);
+
+  // === EFFECT 2: Kunin ang clampingFines mula sa Firestore ===
+  useEffect(() => {
+    const q = query(
+      collection(db, 'clampingFines'),
+      orderBy('order', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        const fines = {};
+        snap.docs.forEach((d) => {
+          const data = d.data();
+          if (data.violationType) {
+            fines[data.violationType] = Number(data.amount ?? 0);
+          }
+        });
+        console.log('Loaded clampingFines:', fines);
+        setViolationFines(fines);
+        setFinesLoading(false);
+      },
+      (err) => {
+        console.error('Failed to load clamping fines:', err);
+        const fallbackQ = query(collection(db, 'clampingFines'));
+        onSnapshot(fallbackQ, (snap) => {
+          const fines = {};
+          snap.docs.forEach((d) => {
+            const data = d.data();
+            if (data.violationType) {
+              fines[data.violationType] = Number(data.amount ?? 0);
+            }
+          });
+          setViolationFines(fines);
+          setFinesLoading(false);
+        });
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // ==========================================================================
+  // 2. DERIVED VALUES AT FUNCTIONS
+  // ==========================================================================
+
+  const violationNames = Object.keys(violationFines);
+  const penalty = selected.reduce((sum, v) => sum + (violationFines[v] || 0), 0);
+  const canIssue = plate.trim().length > 0 && selected.length > 0 && !!photoUri && !!rawScan && !!clampData;
 
   const now = new Date();
   const dateIssued = [
@@ -43,13 +202,162 @@ export default function ClampingDetailsScreen({ navigation, route }) {
   const addViolation = (v) => { if (!selected.includes(v)) setSelected([...selected, v]); };
   const removeViolation = (v) => setSelected(selected.filter((x) => x !== v));
 
-  const issueTicket = () => {
-    navigation.navigate('Success', {
-      violationNo: clampCode,
-      dateIssued,
-      dashboardRoute: 'ClampDashboard',
-    });
+  const handleLocationSelect = (name) => {
+    const loc = LOCATIONS.find((l) => l.name === name);
+    if (loc) {
+      setLocation(name);
+      setLocationObj(loc);
+    }
   };
+
+  const issueTicket = async () => {
+    if (!canIssue || issuing) return;
+    setIssuing(true);
+
+    try {
+      if (!clampData) {
+        throw new Error('Clamp data not loaded. Please go back and scan again.');
+      }
+
+      const photoUrl = await uploadViolationPhoto(photoUri, `pending-${Date.now()}`);
+
+      const violationType = selected.join(', ');
+      const year = now.getFullYear();
+      const counterRef = doc(db, 'counters', 'cin');
+      const violationRef = doc(collection(db, 'violations'));
+
+      const cin = await runTransaction(db, async (tx) => {
+        const counterSnap = await tx.get(counterRef);
+        const last = counterSnap.exists() ? Number(counterSnap.data().lastValue ?? 0) : 0;
+        const next = last + 1;
+        const generatedCin = `CLMP-${year}-${String(next).padStart(4, '0')}`;
+
+        tx.set(
+          counterRef,
+          { lastValue: next, prefix: 'CLMP', updatedAt: serverTimestamp() },
+          { merge: true }
+        );
+
+        tx.set(violationRef, {
+          cin: generatedCin,
+          plateNo: plate.trim(),
+          vehicleMake: make,
+          vehicleType: type,
+          vehicleColor: color,
+          violationType,
+          enforcementType: 'clamped',
+          location,
+          locationCoords: {
+            lat: locationObj.lat,
+            lng: locationObj.lng,
+          },
+          officer: officerName,
+          officerUid,
+          fineAmount: penalty,
+          photoUrl,
+          clampId: clampData.clampId,
+          recordedAt: serverTimestamp(),
+          paymentStatus: 'Unpaid',
+          releaseStatus: 'Pending',
+        });
+
+        tx.update(doc(db, 'clamps', clampData.docId), {
+          cin: generatedCin,
+          currentViolationId: violationRef.id,
+          deployedAt: serverTimestamp(),
+          deployedBy: officerName,
+          status: 'unpaid',
+        });
+
+        tx.set(doc(collection(db, 'auditLogs')), {
+          userName: officerName,
+          action: `issued clamping violation ${generatedCin} on plate ${plate.trim()}`,
+          record: generatedCin,
+          type: 'clamping',
+          metadata: {
+            cin: generatedCin,
+            plateNo: plate.trim(),
+            violationType,
+            fineAmount: penalty,
+            clampId: clampData.clampId,
+            location,
+            locationCoords: { lat: locationObj.lat, lng: locationObj.lng },
+          },
+          timestamp: serverTimestamp(),
+        });
+
+        return generatedCin;
+      });
+
+      // ⚠️ FIX: Ipasok ang officerName at officerUid sa Success navigation
+      navigation.navigate('Success', {
+        violationNo: cin,
+        dateIssued,
+        dashboardRoute: 'ClampDashboard',
+        officerName,        // ← IDAGDAG
+        officerUid,         // ← IDAGDAG
+      });
+    } catch (err) {
+      console.error('Issue ticket failed:', err);
+      Alert.alert('Failed to issue ticket', err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setIssuing(false);
+    }
+  };
+
+  // ==========================================================================
+  // 3. CONDITIONAL RETURNS
+  // ==========================================================================
+
+  if (clampLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={colors.navy} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Icon name="arrow-left" size={20} color={colors.white} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Clamping Details</Text>
+          <View style={{ width: 20 }} />
+        </View>
+        <View style={[styles.body, { alignItems: 'center', justifyContent: 'center' }]}>
+          <ActivityIndicator size="large" color={colors.navy} />
+          <Text style={{ marginTop: 12, color: colors.gray }}>Loading clamp data...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (clampError) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={colors.navy} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Icon name="arrow-left" size={20} color={colors.white} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Clamping Details</Text>
+          <View style={{ width: 20 }} />
+        </View>
+        <View style={[styles.body, { alignItems: 'center', justifyContent: 'center', padding: 24 }]}>
+          <Icon name="alert-circle" size={48} color={colors.red} />
+          <Text style={{ marginTop: 16, fontSize: 14, color: colors.black, textAlign: 'center' }}>
+            {clampError}
+          </Text>
+          <TouchableOpacity
+            style={[styles.issueBtn, { marginTop: 24, paddingHorizontal: 32 }]}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.issueBtnText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ==========================================================================
+  // 4. MAIN RENDER
+  // ==========================================================================
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -69,7 +377,9 @@ export default function ClampingDetailsScreen({ navigation, route }) {
             <View style={{ flex: 1, marginRight: 10 }}>
               <Text style={styles.label}>Clamp ID No.</Text>
               <View style={styles.readOnly}>
-                <Text style={styles.readOnlyText}>{clampCode}</Text>
+                <Text style={styles.readOnlyText}>
+                  {clampData?.clampId || '—'}
+                </Text>
               </View>
             </View>
             <View style={{ flex: 2 }}>
@@ -81,7 +391,11 @@ export default function ClampingDetailsScreen({ navigation, route }) {
           </View>
 
           <Text style={[styles.label, { marginTop: 12 }]}>Location</Text>
-          <Dropdown value={location} options={LOCATIONS} onSelect={setLocation} />
+          <Dropdown
+            value={location}
+            options={LOCATIONS.map((l) => l.name)}
+            onSelect={handleLocationSelect}
+          />
         </View>
 
         <View style={[styles.card, { marginTop: 14 }]}>
@@ -95,6 +409,7 @@ export default function ClampingDetailsScreen({ navigation, route }) {
             placeholder="ABC 1234"
             placeholderTextColor={colors.gray}
             autoCapitalize="characters"
+            editable={!issuing}
           />
 
           <View style={[styles.row, { marginTop: 12 }]}>
@@ -113,12 +428,18 @@ export default function ClampingDetailsScreen({ navigation, route }) {
           </View>
 
           <Text style={[styles.smallLabel, { marginTop: 12 }]}>VIOLATION/S</Text>
-          <Dropdown
-            value={null}
-            placeholder="Add Violations"
-            options={Object.keys(VIOLATIONS).filter((v) => !selected.includes(v))}
-            onSelect={addViolation}
-          />
+          {finesLoading ? (
+            <Text style={styles.emptyText}>Loading violation types...</Text>
+          ) : violationNames.length === 0 ? (
+            <Text style={styles.emptyText}>No violation types configured. Contact IT Admin.</Text>
+          ) : (
+            <Dropdown
+              value={null}
+              placeholder="Add Violations"
+              options={violationNames.filter((v) => !selected.includes(v))}
+              onSelect={addViolation}
+            />
+          )}
 
           <Text style={[styles.smallLabel, { marginTop: 12 }]}>SELECTED VIOLATION/S</Text>
           {selected.length === 0 ? (
@@ -143,7 +464,7 @@ export default function ClampingDetailsScreen({ navigation, route }) {
                 onPress={() =>
                   navigation.navigate('CapturePhoto', {
                     returnTo: 'ClampingDetails',
-                    extraParams: { clampCode },
+                    extraParams: { ...route?.params },
                   })
                 }
               >
@@ -158,11 +479,19 @@ export default function ClampingDetailsScreen({ navigation, route }) {
           </View>
         </View>
 
-        <TouchableOpacity style={[styles.issueBtn, !canIssue && styles.issueBtnDisabled]} onPress={issueTicket} disabled={!canIssue}>
-          <Text style={[styles.issueBtnText, !canIssue && { color: colors.gray }]}>Issue Violation Ticket</Text>
+        <TouchableOpacity
+          style={[styles.issueBtn, (!canIssue || issuing) && styles.issueBtnDisabled]}
+          onPress={issueTicket}
+          disabled={!canIssue || issuing}
+        >
+          {issuing ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={[styles.issueBtnText, !canIssue && { color: colors.gray }]}>Issue Violation Ticket</Text>
+          )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.navigate('ClampDashboard')}>
+        <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.goBack()} disabled={issuing}>
           <Text style={styles.cancelBtnText}>Cancel</Text>
         </TouchableOpacity>
       </ScrollView>

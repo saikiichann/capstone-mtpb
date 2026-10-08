@@ -7,7 +7,17 @@ import { colors } from '../theme/colors';
 
 export default function ViolationDetailsScreen({ navigation, route }) {
   const record = route?.params?.record || {};
-  const isSettled = record.paymentStatus === 'SETTLED';
+
+  // Ang violation ay "settled" kung may kahit alinman sa mga sumusunod:
+  // - paymentStatus: "Paid" / "Verified" / "Settled"
+  // - releaseStatus: "Released" / "Approved by OIC"
+  // - May paidAt timestamp
+  // - May releasedAt timestamp
+  const isSettled =
+    ['paid', 'verified', 'settled'].includes(String(record.paymentStatus || '').toLowerCase()) ||
+    ['released', 'approved by oic'].includes(String(record.releaseStatus || '').toLowerCase()) ||
+    !!record.paidAt ||
+    !!record.releasedAt;
 
   const handlePrint = async () => {
     const photoBlock = record.photoUri
@@ -39,7 +49,7 @@ export default function ViolationDetailsScreen({ navigation, route }) {
     try {
       await RNPrint.print({ html });
     } catch (e) {
-      Alert.alert('Print failed', 'Hindi ma-print ang violation details. Subukan ulit.');
+      Alert.alert('Print failed', 'Failed to print violation details. Please try again.');
     }
   };
 
@@ -115,6 +125,25 @@ export default function ViolationDetailsScreen({ navigation, route }) {
 
           <Text style={[styles.smallLabel, { marginTop: 10 }]}>PENALTY</Text>
           <Text style={styles.penalty}>₱ {Number(record.amount || 0).toLocaleString()}</Text>
+
+          {/* Karagdagang info kung settled */}
+          {isSettled && record.totalPaid && (
+            <>
+              <Text style={[styles.smallLabel, { marginTop: 10 }]}>TOTAL PAID</Text>
+              <Text style={styles.penalty}>₱ {Number(record.totalPaid).toLocaleString()}</Text>
+            </>
+          )}
+
+          {isSettled && record.releasedAt && (
+            <>
+              <Text style={[styles.smallLabel, { marginTop: 10 }]}>RELEASED AT</Text>
+              <View style={styles.readOnly}>
+                <Text style={styles.readOnlyText}>
+                  {record.releasedAt?.toDate?.()?.toLocaleString?.('en-PH') || '—'}
+                </Text>
+              </View>
+            </>
+          )}
 
           {record.photoUri ? (
             <Image source={{ uri: record.photoUri }} style={styles.photo} />

@@ -5,9 +5,27 @@ import Icon from 'react-native-vector-icons/Feather';
 import { colors } from '../theme/colors';
 
 export default function SuccessScreen({ navigation, route }) {
-  const violationNo = route?.params?.violationNo || 'IM-000000';
+  const violationNo = route?.params?.violationNo || 'CLMP-0000';
   const dateIssued = route?.params?.dateIssued || '';
-  const dashboardRoute = route?.params?.dashboardRoute || 'ImpoundDashboard';
+  const dashboardRoute = route?.params?.dashboardRoute || 'ClampDashboard';
+  const officerName = route?.params?.officerName || 'Unknown Officer';
+  const officerUid = route?.params?.officerUid || null;
+
+  const handleDone = () => {
+    // I-reset ang navigation pabalik sa dashboard, dala ang officer info
+    navigation.reset({
+      index: 0,
+      routes: [
+        {
+          name: dashboardRoute,
+          params: {
+            officerName,
+            officerUid,
+          },
+        },
+      ],
+    });
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -23,10 +41,7 @@ export default function SuccessScreen({ navigation, route }) {
         <Text style={styles.violationNo}>Violation No. {violationNo}</Text>
         <Text style={styles.date}>{dateIssued}</Text>
 
-        <TouchableOpacity
-          style={styles.doneBtn}
-          onPress={() => navigation.reset({ index: 0, routes: [{ name: dashboardRoute }] })}
-        >
+        <TouchableOpacity style={styles.doneBtn} onPress={handleDone}>
           <Text style={styles.doneBtnText}>Done</Text>
         </TouchableOpacity>
       </View>
@@ -37,10 +52,45 @@ export default function SuccessScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.white },
   body: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  checkCircle: { width: 150, height: 150, borderRadius: 75, borderWidth: 8, borderColor: colors.green, alignItems: 'center', justifyContent: 'center', marginBottom: 40 },
-  title: { fontSize: 16, fontWeight: '800', color: colors.black, letterSpacing: 0.5, marginBottom: 40 },
-  violationNo: { fontSize: 14, fontWeight: '700', color: colors.black, marginBottom: 4 },
-  date: { fontSize: 13, color: colors.black, marginBottom: 60 },
-  doneBtn: { width: '100%', backgroundColor: colors.black, borderRadius: 10, height: 50, alignItems: 'center', justifyContent: 'center' },
-  doneBtnText: { color: colors.white, fontSize: 15, fontWeight: '700' },
+  checkCircle: {
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    borderWidth: 8,
+    borderColor: colors.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 40,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.black,
+    letterSpacing: 0.5,
+    marginBottom: 40,
+  },
+  violationNo: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.black,
+    marginBottom: 4,
+  },
+  date: {
+    fontSize: 13,
+    color: colors.black,
+    marginBottom: 60,
+  },
+  doneBtn: {
+    width: '100%',
+    backgroundColor: colors.black,
+    borderRadius: 10,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  doneBtnText: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: '700',
+  },
 });

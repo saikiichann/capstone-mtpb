@@ -1,32 +1,110 @@
-import React, { useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList, StatusBar } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList, StatusBar, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import MCIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../theme/colors';
 import ConfirmModal from '../components/ConfirmModal';
-import NotificationPanel from '../components/NotificationPanel';
+import { auth, db } from '../firebase';
+import { signOut } from 'firebase/auth';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 
-const RECENT_ACTIVITY = [
-  { id: 'CL-202603', time: '5:30 PM', status: 'CLAMPED' },
-  { id: 'CL-202602', time: '5:00 PM', status: 'CLAMPED' },
-  { id: 'CL-202601', time: '4:30 PM', status: 'CLAMPED' },
-];
-
-const CLAMP_NOTIFICATIONS = [
-  { id: '1', text: 'ABC 1235 was verified and in process for release', time: 'Wed, May 20, 05:30 PM' },
-  { id: '2', text: 'ABD 1234 was verified and in process for release', time: 'Wed, May 20, 05:30 PM' },
-];
-
-export default function ClampDashboardScreen({ navigation }) {
+export default function ClampDashboardScreen({ navigation, route }) {
+  // ============================================
+  // 1. LAHAT NG HOOKS DITO
+  // ============================================
   const [showLogout, setShowLogout] = useState(false);
-  const [showNotif, setShowNotif] = useState(false);
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [loadingActivity, setLoadingActivity] = useState(true);
 
-  const handleLogout = () => {
+  const officerName = route?.params?.officerName || 'Unknown Officer';
+  const officerUid = route?.params?.officerUid || null;
+
+  // === EFFECT: Recent Activity mula sa violations collection ===
+  useEffect(() => {
+    if (!officerUid) {
+      setLoadingActivity(false);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'violations'),
+      where('enforcementType', '==', 'clamped'),
+      where('officerUid', '==', officerUid)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        const fetched = snap.docs.map((d) => {
+          const data = d.data();
+          const date = data.recordedAt?.toDate?.() || new Date();
+          const time = date.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+
+          const isSettled =
+            ['paid', 'verified', 'settled'].includes(String(data.paymentStatus || '').toLowerCase()) ||
+            ['released', 'approved by oic'].includes(String(data.releaseStatus || '').toLowerCase()) ||
+            !!data.paidAt ||
+            !!data.releasedAt;
+
+          return {
+            id: data.cin || d.id,
+            time,
+            recordedAt: data.recordedAt || null,
+            status: isSettled ? 'SETTLED' : 'UNSETTLED',
+            isSettled,
+          };
+        });
+
+        fetched.sort((a, b) => {
+          const dateA = a.recordedAt?.toDate?.()?.getTime?.() || 0;
+          const dateB = b.recordedAt?.toDate?.()?.getTime?.() || 0;
+          return dateB - dateA;
+        });
+
+        setRecentActivity(fetched.slice(0, 3));
+        setLoadingActivity(false);
+      },
+      (err) => {
+        console.error('Failed to load recent activity:', err);
+        setLoadingActivity(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [officerUid]);
+
+  // ============================================
+  // 2. HANDLERS
+  // ============================================
+  const handleLogout = async () => {
     setShowLogout(false);
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
+  const goToScanQR = () => {
+    navigation.navigate('ScanQR', { officerName, officerUid });
+  };
+
+  const goToActivity = () => {
+    navigation.navigate('ClampActivity', { officerName, officerUid });
+  };
+
+  const goToEditProfile = () => {
+    navigation.navigate('EditProfile', {
+      officerUid,
+      officerName,
+    });
+  };
+
+  // ============================================
+  // 3. MAIN RENDER
+  // ============================================
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
@@ -42,9 +120,6 @@ export default function ClampDashboardScreen({ navigation }) {
               />
             </View>
             <View style={{ flexDirection: 'row' }}>
-              <TouchableOpacity style={{ marginRight: 16 }} onPress={() => setShowNotif(true)}>
-                <Icon name="bell" size={20} color={colors.black} />
-              </TouchableOpacity>
               <TouchableOpacity onPress={() => setShowLogout(true)}>
                 <Icon name="log-out" size={20} color={colors.black} />
               </TouchableOpacity>
@@ -55,24 +130,26 @@ export default function ClampDashboardScreen({ navigation }) {
             <View style={styles.avatarCircle}>
               <Icon name="user" size={56} color={colors.white} />
             </View>
-            <TouchableOpacity style={styles.editBadge}>
+            <TouchableOpacity style={styles.editBadge} onPress={goToEditProfile}>
               <Icon name="edit-2" size={12} color={colors.white} />
             </TouchableOpacity>
           </View>
 
           <View style={styles.namePill}>
             <View style={styles.onlineDot} />
-            <Text style={styles.nameText}>Juan Dela Cruz</Text>
+            <Text style={styles.nameText}>{officerName}</Text>
           </View>
 
-          <Text style={styles.idText}>ENFORCER ID: 00000</Text>
+          <Text style={styles.idText}>
+            ENFORCER ID: {officerUid ? officerUid.slice(0, 8).toUpperCase() : '--------'}
+          </Text>
           <View style={styles.locationRow}>
             <Icon name="map-pin" size={12} color={colors.gray} />
             <Text style={styles.locationText}>Sector 3 Manila</Text>
           </View>
         </View>
 
-        <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('ScanQR')}>
+        <TouchableOpacity style={styles.actionCard} onPress={goToScanQR}>
           <View style={styles.actionIconWrap}>
             <MCIcon name="qrcode-scan" size={26} color={colors.black} />
           </View>
@@ -82,37 +159,56 @@ export default function ClampDashboardScreen({ navigation }) {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.sectionHeaderRow} onPress={() => navigation.navigate('ClampActivity')}>
+        <TouchableOpacity style={styles.sectionHeaderRow} onPress={goToActivity}>
           <Text style={styles.sectionHeader}>Recent Activity</Text>
           <Icon name="chevron-right" size={18} color={colors.gray} />
         </TouchableOpacity>
 
-        <FlatList
-          data={RECENT_ACTIVITY}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 8 }}
-          renderItem={({ item }) => (
-            <View style={styles.activityRow}>
-              <View style={styles.activityIcon}>
-                <MCIcon name="shield-car" size={20} color={colors.navy} />
+        {loadingActivity ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="small" color={colors.navy} />
+            <Text style={styles.loadingText}>Loading activity...</Text>
+          </View>
+        ) : recentActivity.length === 0 ? (
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyText}>No clamping activity yet.</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={recentActivity}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ paddingBottom: 8 }}
+            scrollEnabled={false}
+            renderItem={({ item }) => (
+              <View style={styles.activityRow}>
+                <View style={styles.activityIcon}>
+                  <MCIcon name="shield-car" size={20} color={colors.navy} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.activityId}>{item.id}</Text>
+                  <Text
+                    style={[
+                      styles.activityStatus,
+                      { color: item.isSettled ? colors.green : colors.red },
+                    ]}
+                  >
+                    {item.status}
+                  </Text>
+                </View>
+                <Text style={styles.activityTime}>{item.time}</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.activityId}>{item.id}</Text>
-                <Text style={styles.activityStatus}>{item.status}</Text>
-              </View>
-              <Text style={styles.activityTime}>{item.time}</Text>
-            </View>
-          )}
-        />
+            )}
+          />
+        )}
       </View>
 
       <View style={styles.tabBar}>
-        <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('ClampActivity')}>
+        <TouchableOpacity style={styles.tabItem} onPress={goToActivity}>
           <Icon name="refresh-cw" size={20} color={colors.gray} />
           <Text style={styles.tabLabel}>ACTIVITY</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tabItemCenter} onPress={() => navigation.navigate('ScanQR')}>
+        <TouchableOpacity style={styles.tabItemCenter} onPress={goToScanQR}>
           <View style={styles.tabCenterCircle}>
             <MCIcon name="qrcode-scan" size={32} color={colors.white} />
           </View>
@@ -133,12 +229,6 @@ export default function ClampDashboardScreen({ navigation }) {
         confirmLabel="Logout"
         onCancel={() => setShowLogout(false)}
         onConfirm={handleLogout}
-      />
-
-      <NotificationPanel
-        visible={showNotif}
-        onClose={() => setShowNotif(false)}
-        notifications={CLAMP_NOTIFICATIONS}
       />
     </SafeAreaView>
   );
@@ -244,6 +334,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sectionHeader: { fontSize: 13, fontWeight: '700', color: colors.black },
+  loadingWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  loadingText: { marginLeft: 8, fontSize: 12, color: colors.gray },
+  emptyWrap: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  emptyText: { fontSize: 12, color: colors.gray, fontStyle: 'italic' },
   activityRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -264,7 +366,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   activityId: { fontSize: 13, fontWeight: '700', color: colors.black },
-  activityStatus: { fontSize: 11, fontWeight: '700', color: colors.red, marginTop: 2 },
+  activityStatus: { fontSize: 11, fontWeight: '700', marginTop: 2 },
   activityTime: { fontSize: 11, color: colors.gray },
   tabBar: {
     flexDirection: 'row',
@@ -275,15 +377,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    tabItemCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: -34 },
-    tabCenterCircle: {
-      width: 68,
-      height: 68,
-      borderRadius: 34,
-      backgroundColor: colors.black,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 4,
-    },
+  tabItemCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: -34 },
+  tabCenterCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: colors.black,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
   tabLabel: { fontSize: 9, fontWeight: '600', color: colors.gray, marginTop: 4 },
 });

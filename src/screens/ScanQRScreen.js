@@ -5,15 +5,25 @@ import Icon from 'react-native-vector-icons/Feather';
 import { Camera } from 'react-native-camera-kit';
 import { colors } from '../theme/colors';
 
-export default function ScanQRScreen({ navigation }) {
+export default function ScanQRScreen({ navigation, route }) {
   const [flashOn, setFlashOn] = useState(false);
   const [scanned, setScanned] = useState(false);
 
+  /**
+   * Forwards whatever was already in route.params (e.g. officerName,
+   * officerUid from LoginScreen → ClampDashboard, if ClampDashboard
+   * passes them along) plus clampCode — so ClampingDetailsScreen gets
+   * the officer identity without this screen needing to know its exact
+   * param names. If ClampDashboardScreen doesn't currently forward
+   * those through to here, this spread has nothing to pick up and
+   * ClampingDetailsScreen falls back to "Unknown Officer" — worth
+   * checking ClampDashboardScreen.js for this.
+   */
   const onReadCode = (event) => {
     if (scanned) return;
     setScanned(true);
     const value = event?.nativeEvent?.codeStringValue;
-    navigation.navigate('ClampingDetails', { clampCode: value });
+    navigation.navigate('ClampingDetails', { ...route?.params, clampCode: value });
     setTimeout(() => setScanned(false), 1000);
   };
 
@@ -49,12 +59,11 @@ export default function ScanQRScreen({ navigation }) {
           <Text style={styles.caption}>Scan the QR code on the clamp to apply</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={() => navigation.navigate('ClampingDetails', { clampCode: 'L-14' })}
-        >
-          <Text style={styles.primaryBtnText}>Scan QR</Text>
-        </TouchableOpacity>
+        {/* The old hardcoded "Scan QR" shortcut button (navigated with a
+            fake clampCode: 'L-14' that skips the camera entirely) has
+            been removed — it bypassed real scanning and would hit a
+            clamp lookup that doesn't exist in Firestore. Real scanning
+            via the camera above is now the only path. */}
 
         <TouchableOpacity style={styles.secondaryBtn} onPress={() => setFlashOn((v) => !v)}>
           <Icon name="zap" size={16} color={colors.black} style={{ marginRight: 8 }} />

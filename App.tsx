@@ -11,6 +11,7 @@ import CapturePhotoScreen from './src/screens/CapturePhotoScreen';
 import ClampActivityScreen from './src/screens/ClampActivityScreen';
 import ViolationDetailsScreen from './src/screens/ViolationDetailsScreen';
 import SuccessScreen from './src/screens/SuccessScreen';
+import EditProfileScreen from './src/screens/EditProfileScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -38,6 +39,11 @@ export default function App() {
           <Stack.Screen name="ClampActivity" component={ClampActivityScreen} />
           <Stack.Screen name="ViolationDetails" component={ViolationDetailsScreen} />
           <Stack.Screen name="Success" component={SuccessScreen} options={{ animation: 'fade' }} />
+          <Stack.Screen
+            name="EditProfile"
+            component={EditProfileScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

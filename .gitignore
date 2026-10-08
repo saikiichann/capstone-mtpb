@@ -1,56 +1,67 @@
-
 # ==================================================================
-# MONOREPO — Admin Web (added for capstone-mtpb)
+# capstone-mtpb — Enforcer App (React Native)
 # ==================================================================
 
-# Admin web dependencies
-admin-web/node_modules/
-admin-web/dist/
-admin-web/build/
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
 
-# Admin web Vite cache
-admin-web/.vite/
-admin-web/node_modules/.vite/
+# Android build outputs
+android/.gradle/
+android/app/.cxx/
+android/app/build/
+android/build/
+android/local.properties
+android/.idea/
+android/app/debug/
+android/app/release/
+android/**/.cxx/
+android/**/build/
 
-# Admin web environment variables — NEVER COMMIT
-admin-web/.env
-admin-web/.env.local
-admin-web/.env.development.local
-admin-web/.env.test.local
-admin-web/.env.production.local
+# Android keystores (sensitive)
+android/*.keystore
+android/*.jks
+android/app/*.keystore
+android/app/*.jks
 
-# Admin web logs
-admin-web/npm-debug.log*
-admin-web/yarn-debug.log*
-admin-web/yarn-error.log*
-admin-web/*.log
+# iOS build outputs
+ios/Pods/
+ios/build/
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+ios/*.mobileprovision
+ios/*.p8
+ios/*.p12
 
-# Admin web OS
-admin-web/.DS_Store
-admin-web/Thumbs.db
+# Metro / React Native
+.metro-health-check*
+metro-bundler-cache/
+.expo/
+web-build/
 
-# Admin web TypeScript
-admin-web/*.tsbuildinfo
-
-# Admin web Firebase
-admin-web/.firebase/
-admin-web/firebase-debug.log
-admin-web/firestore-debug.log
-
-# ==================================================================
-# SHARED — Environment variables (root level, if any)
-# ==================================================================
+# Environment variables
 .env
 .env.local
-.env.*.local
-.env.development
-.env.production
+.env.development.local
+.env.test.local
+.env.production.local
 
-# ==================================================================
-# SHARED — Firebase sensitive files
-# ==================================================================
+# Firebase sensitive
 serviceAccountKey.json
-*serviceAccountKey*.json
+*-firebase-adminsdk-*.json
 google-services.json
 GoogleService-Info.plist
-*.plist.bak
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
