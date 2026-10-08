@@ -6,11 +6,11 @@ import { SkeletonList } from '../components/Skeleton'
 import StatusBadge from '../components/StatusBadge'
 import useMyViolations from '../hooks/useMyViolations'
 import usePayments from '../hooks/usePayments'
-import { formatDateTime, formatPeso } from '../utils/format'
+import { formatDateTime, formatPeso, toMillis } from '../utils/format'
 
 // Figma "PAYMENT HISTORY". Only payments that went through are listed: an
 // attempt that failed or was abandoned took no money, so it isn't history.
-// - All: every completed payment
+// - All: both lists below together, newest first
 // - Paid: the ones that went through (each opens its receipt)
 // - Unpaid: violations with no payment yet, so they can be paid from here
 const TABS = [
@@ -29,9 +29,18 @@ export default function PaymentHistory() {
   const { violations, status: violationsStatus } = useMyViolations(user?.uid)
 
   const unpaid = violations.filter((v) => v.paymentStatus !== 'paid')
-  const shown = payments
-  const status = tab === 'unpaid' ? violationsStatus : paymentsStatus
-  const count = tab === 'unpaid' ? unpaid.length : shown.length
+  const rows = [
+    ...(tab !== 'unpaid'
+      ? payments.map((p) => ({ key: `pay-${p.referenceNumber}`, time: toMillis(p.paidAt ?? p.createdAt), payment: p }))
+      : []),
+    ...(tab !== 'paid'
+      ? unpaid.map((v) => ({ key: `vio-${v.id ?? v.cin}`, time: toMillis(v.clampedAt), violation: v }))
+      : []),
+  ].sort((a, b) => b.time - a.time)
+
+  const statuses = [tab !== 'unpaid' && paymentsStatus, tab !== 'paid' && violationsStatus].filter(Boolean)
+  const status = statuses.includes('error') ? 'error' : statuses.includes('loading') ? 'loading' : 'ready'
+  const count = rows.length
 
   return (
     <div className="page">
@@ -60,37 +69,46 @@ export default function PaymentHistory() {
         )}
         {status === 'ready' && count === 0 && (
           <p className="empty-text">
-            {tab === 'unpaid' ? 'Nothing left to pay. ' : 'No payments yet. '}
-            {tab !== 'unpaid' && <Link className="text-link" to="/violations">View your violations</Link>}
+            {tab === 'unpaid' ? 'Nothing left to pay. ' : tab === 'paid' ? 'No payments yet. ' : 'Nothing here yet. '}
+            {tab === 'paid' && <Link className="text-link" to="/violations">View your violations</Link>}
           </p>
         )}
 
         {status === 'ready' && count > 0 && (
           <ul className="history-list">
-            {tab === 'unpaid'
-              ? unpaid.map((v) => (
-                  <li key={v.id ?? v.cin}>
-                    <Link className="history-card" to={`/v/${encodeURIComponent(v.id ?? v.cin)}`}>
-                      <span className="history-card__main">
-                        <span className="history-card__cin">{v.cin}</span>
-                        <span className="history-card__date">{formatDateTime(v.clampedAt, { short: true })}</span>
-                        <span className="history-card__plate">{v.plateNumber}</span>
-                      </span>
-                      <span className="history-card__side">
-                        <span className="history-card__amount">{formatPeso(v.fineAmount)}</span>
-                        <StatusBadge status="unpaid" />
-                      </span>
-                      <span className="history-card__chevron" aria-hidden="true">
-                        &gt;
-                      </span>
-                    </Link>
-                  </li>
-                ))
-              : shown.map((p) => <PaymentRow key={p.referenceNumber} payment={p} />)}
+            {rows.map((row) =>
+              row.payment ? (
+                <PaymentRow key={row.key} payment={row.payment} />
+              ) : (
+                <UnpaidRow key={row.key} violation={row.violation} />
+              ),
+            )}
           </ul>
         )}
       </main>
     </div>
+  )
+}
+
+// A violation still to be paid: opens it, where Pay Now is.
+function UnpaidRow({ violation: v }) {
+  return (
+    <li>
+      <Link className="history-card" to={`/v/${encodeURIComponent(v.id ?? v.cin)}`}>
+        <span className="history-card__main">
+          <span className="history-card__cin">{v.cin}</span>
+          <span className="history-card__date">{formatDateTime(v.clampedAt, { short: true })}</span>
+          <span className="history-card__plate">{v.plateNumber}</span>
+        </span>
+        <span className="history-card__side">
+          <span className="history-card__amount">{formatPeso(v.fineAmount)}</span>
+          <StatusBadge status="unpaid" />
+        </span>
+        <span className="history-card__chevron" aria-hidden="true">
+          &gt;
+        </span>
+      </Link>
+    </li>
   )
 }
 
