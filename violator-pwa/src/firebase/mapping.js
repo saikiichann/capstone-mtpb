@@ -125,7 +125,8 @@ export function normalizeViolation(id, data) {
     vehicleMake: pick(data, FIELDS.vehicleMake, ''),
     vehicleType: pick(data, FIELDS.vehicleType, ''),
     vehicleColor: pick(data, FIELDS.vehicleColor, ''),
-    evidencePhotos: pick(data, FIELDS.evidencePhotos, []),
+    // The enforcer app saves one photo as `photoUrl` (a Supabase link).
+    evidencePhotos: pick(data, FIELDS.evidencePhotos) ?? (data.photoUrl ? [data.photoUrl] : []),
     // Kept so the admin app's extra fields (releaseStatus, verifiedBy, the
     // queue number) can be shown later without touching this file again.
     raw: data,
