@@ -103,13 +103,9 @@ export default function PaymentSuccess() {
 
   const rows = [
     [t('row.reference'), payment.referenceNumber],
-    // The CIN is the code printed on the clamp; the violation ID is the
-    // record itself, which is what MTPB staff look up. Both are shown here
-    // and on the receipt, and nowhere else.
+    // The violation number (CIN) only; the record's internal database id
+    // isn't shown (Marco's choice), same as on the receipt.
     [t('row.violationNumber'), payment.violationCin],
-    ...(payment.violationId && payment.violationId !== payment.violationCin
-      ? [[t('row.violationId'), payment.violationId]]
-      : []),
     [t('row.plate'), payment.plateNumber],
     [t('row.dateTime'), formatDateTime(payment.paidAt, { short: true })],
     ...breakdownRows(payment, { fine: t('row.fine'), fee: t('row.fee') }),
