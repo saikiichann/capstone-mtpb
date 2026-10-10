@@ -181,11 +181,6 @@ export default function Receipt() {
             <p>
               <strong>{t('receipt.guest.bold')}</strong> {t('receipt.guest.text')}
             </p>
-            {payment.email ? (
-              <p>{t('receipt.guest.emailed', { email: payment.email })}</p>
-            ) : (
-              <p>{t('receipt.guest.gcash')}</p>
-            )}
           </div>
         )}
 

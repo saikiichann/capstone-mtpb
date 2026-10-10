@@ -36,7 +36,7 @@ export const FAQ_ENTRIES_FIL = {
   'pay-receipt': {
     question: 'Makakakuha ba ako ng isa pang kopya ng aking resibo?',
     answer:
-      'Kung nagbayad ka bilang **guest**, makikita lang ang resibo habang bukas ang page na iyon, kaya i-download ito agad. Kapag naisara na ang page, kailangang humingi ng kopya sa opisina ng MTPB. Kung may account ka, nasa History → Payment History ang iyong mga resibo.',
+      'Kung naglagay ka ng email sa pagbabayad, ipapadala sa iyo ang resibo ng MTPB pagkatapos mismo ng bayad. Maaari mo rin itong i-download sa page ng resibo bago ito isara. Kung nagbayad ka bilang **guest** nang walang email at naisara na ang page, kailangang humingi ng kopya sa opisina ng MTPB. Kung may account ka, nasa History → Payment History ang iyong mga resibo.',
   },
   'pay-not-reflected': {
     question: 'Nabawasan na ang pera ko pero hindi pa bayad ang lumalabas sa paglabag.',
