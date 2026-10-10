@@ -1,6 +1,6 @@
 import { toBlob } from 'html-to-image'
 import { useEffect, useRef, useState } from 'react'
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useParams } from 'react-router-dom'
 import mtpbLogo from '../../assets/mtpb-logo.webp'
 import { useAuth } from '../../auth/auth-context'
 import Modal from '../../components/Modal'
@@ -51,6 +51,9 @@ function violationPath(payment) {
 export default function Receipt() {
   const { reference } = useParams()
   const { user } = useAuth()
+  // Payment History passes `from` so back returns there; elsewhere back
+  // goes to Violation History as before.
+  const backTo = useLocation().state?.from ?? '/violations'
   const isGuest = Boolean(user?.isGuest)
   const { status, payment } = usePayment(user.uid, reference)
   const cardRef = useRef(null)
@@ -121,7 +124,7 @@ export default function Receipt() {
     <div className="page">
       <PageHeader
         title="Receipt"
-        back={isGuest ? `/v/${encodeURIComponent(payment.violationId || payment.violationCin || '')}` : '/violations'}
+        back={isGuest ? `/v/${encodeURIComponent(payment.violationId || payment.violationCin || '')}` : backTo}
         action={
           <button
             type="button"
