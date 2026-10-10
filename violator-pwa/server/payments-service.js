@@ -1,6 +1,7 @@
 import { isPaymentSettled } from '../src/firebase/mapping.js'
 import { computeChargesCentavos, METHOD_FEES } from '../src/payments/fees.js'
 import { findPaidPayment, PAYMONGO_METHOD } from './paymongo.js'
+import { buildReceiptEmail } from './receipt-email.js'
 
 // Payment logic, kept separate from Firebase and HTTP so it can be tested
 // with fakes. `store` is the Firestore adapter (server/firestore-store.js),
@@ -51,7 +52,8 @@ function publicView(attempt) {
   }
 }
 
-export function createPaymentService({ store, paymongo, now = () => new Date() }) {
+// `mailer` (server/mailer.js) is optional: without it no receipt is emailed.
+export function createPaymentService({ store, paymongo, mailer = null, now = () => new Date() }) {
   // Step 3 "Confirm Payment": records the attempt and starts a PayMongo
   // checkout. The amount always comes from the violation in Firestore, never
   // from the browser.
@@ -159,7 +161,7 @@ export function createPaymentService({ store, paymongo, now = () => new Date() }
       return 'review'
     }
 
-    return store.completePayment(attemptId, {
+    const result = await store.completePayment(attemptId, {
       paidAt: paid.attributes.paid_at ? new Date(paid.attributes.paid_at * 1000) : now(),
       paymongoPaymentId: paid.id,
       paymongoFee: (paid.attributes.fee ?? 0) / 100,
@@ -167,6 +169,27 @@ export function createPaymentService({ store, paymongo, now = () => new Date() }
       paymongoSource: paid.attributes.source?.type ?? null,
       livemode: Boolean(paid.attributes.livemode ?? session.attributes.livemode),
     })
+    // Only the call that recorded the payment sends the receipt, so webhook
+    // retries and the success page asking again don't send it twice.
+    if (result === 'paid') await emailReceipt(attemptId)
+    return result
+  }
+
+  // Never fails the payment: a mail problem is noted on the attempt (our own
+  // collection, not the admin app's payments) and the payment stands.
+  async function emailReceipt(attemptId) {
+    if (!mailer) return
+    const attempt = await store.getAttempt(attemptId)
+    if (!attempt?.email || attempt.receiptEmailSentAt) return
+    try {
+      await mailer.send({ to: attempt.email, ...buildReceiptEmail(attempt) })
+      await store.updateAttempt(attemptId, { receiptEmailSentAt: now() })
+    } catch (err) {
+      console.error('Receipt email failed', err?.message ?? err)
+      await store
+        .updateAttempt(attemptId, { receiptEmailError: String(err?.message ?? err).slice(0, 300) })
+        .catch(() => {})
+    }
   }
 
   // The success page asks for this when it opens, so payments still get

@@ -350,6 +350,81 @@ describe('payment service', () => {
     assert.equal((await service.confirm({ uid: 'user-1', attemptId })).status, 'duplicate')
     assert.equal(store.payments.length, 0)
   })
+
+  // ---- receipt email ----
+  function fakeMailer({ fail = false } = {}) {
+    const sent = []
+    return {
+      sent,
+      async send(message) {
+        if (fail) throw new Error('SMTP down')
+        sent.push(message)
+      },
+    }
+  }
+
+  async function payAndConfirm(svc, input = baseInput) {
+    const { attemptId } = await svc.startCheckout(input)
+    payInFake(store.attempts.get(attemptId).checkoutSessionId)
+    return { attemptId, result: await svc.confirm({ uid: 'user-1', attemptId }) }
+  }
+
+  it('emails the MTPB receipt once, with the REF number', async () => {
+    const mailer = fakeMailer()
+    const svc = createPaymentService({ store, paymongo, mailer })
+    const { attemptId, result } = await payAndConfirm(svc)
+    assert.equal(result.status, 'paid')
+
+    assert.equal(mailer.sent.length, 1)
+    const mail = mailer.sent[0]
+    assert.equal(mail.to, 'juan@example.com')
+    assert.equal(mail.subject, 'MTPB payment received – REF-2026-00008')
+    for (const part of ['REF-2026-00008', 'CLMP-2026-0055', 'ABC 1234', 'Illegal Parking', '923.06', 'Sandbox transaction']) {
+      assert.ok(mail.text.includes(part), `text has ${part}`)
+      assert.ok(mail.html.includes(part), `html has ${part}`)
+    }
+    // The MTPB seal, inside the email, as on the receipt page.
+    assert.ok(mail.html.includes('src="cid:mtpb-logo"'))
+    const logo = mail.attachments.find((a) => a.cid === 'mtpb-logo')
+    assert.equal(logo.contentType, 'image/jpeg')
+    assert.deepEqual([...logo.content.subarray(0, 3)], [0xff, 0xd8, 0xff], 'a real JPEG')
+    assert.ok(store.attempts.get(attemptId).receiptEmailSentAt)
+
+    // The success page asking again, and the webhook, don't send it twice.
+    await svc.confirm({ uid: 'user-1', attemptId })
+    const sessionId = store.attempts.get(attemptId).checkoutSessionId
+    await svc.handleWebhookEvent({ data: { attributes: { type: 'checkout_session.payment.paid', data: { id: sessionId } } } })
+    assert.equal(mailer.sent.length, 1)
+  })
+
+  it('records the payment even when the email fails', async () => {
+    const svc = createPaymentService({ store, paymongo, mailer: fakeMailer({ fail: true }) })
+    const { attemptId, result } = await payAndConfirm(svc)
+    assert.equal(result.status, 'paid')
+    assert.equal(store.payments.length, 1)
+    const a = store.attempts.get(attemptId)
+    assert.equal(a.receiptEmailError, 'SMTP down')
+    assert.equal(a.receiptEmailSentAt, undefined)
+  })
+
+  it('sends nothing without an email address or without Gmail settings', async () => {
+    const mailer = fakeMailer()
+    const svc = createPaymentService({ store, paymongo, mailer })
+    await payAndConfirm(svc, { ...baseInput, email: '' })
+    assert.equal(mailer.sent.length, 0)
+
+    store = memoryStore()
+    const noMail = createPaymentService({ store, paymongo })
+    assert.equal((await payAndConfirm(noMail)).result.status, 'paid')
+  })
+
+  it('escapes text from the violation in the HTML email', async () => {
+    store.violations.set('v1', { ...store.violations.get('v1'), violationType: '<b>Illegal</b> & Parking' })
+    const mailer = fakeMailer()
+    await payAndConfirm(createPaymentService({ store, paymongo, mailer }))
+    assert.ok(mailer.sent[0].html.includes('&lt;b&gt;Illegal&lt;/b&gt; &amp; Parking'))
+    assert.ok(!mailer.sent[0].html.includes('<b>Illegal</b>'))
+  })
 })
 
 describe('webhook signature', () => {

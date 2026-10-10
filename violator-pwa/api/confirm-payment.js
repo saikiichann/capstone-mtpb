@@ -1,5 +1,6 @@
 import { adminAuth, createFirestoreStore } from '../server/firestore-store.js'
 import { corsHeaders, errorResponse, json, preflight, readJson, requireUser } from '../server/http.js'
+import { createMailer } from '../server/mailer.js'
 import { paymongo } from '../server/paymongo.js'
 import { createPaymentService } from '../server/payments-service.js'
 
@@ -20,7 +21,7 @@ export async function POST(request) {
   try {
     const user = await requireUser(request, adminAuth())
     const body = await readJson(request)
-    const service = createPaymentService({ store: createFirestoreStore(), paymongo })
+    const service = createPaymentService({ store: createFirestoreStore(), paymongo, mailer: createMailer() })
     const result = await service.confirm({ uid: user.uid, attemptId: body.attemptId })
     return json(200, result, headers)
   } catch (err) {
