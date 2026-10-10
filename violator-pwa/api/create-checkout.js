@@ -1,8 +1,22 @@
 import { config } from '../server/config.js'
 import { adminAuth, createFirestoreStore } from '../server/firestore-store.js'
-import { corsHeaders, errorResponse, json, preflight, readJson, requireUser, trustedOrigin } from '../server/http.js'
+import {
+  corsHeaders,
+  enforceRateLimit,
+  errorResponse,
+  json,
+  preflight,
+  readJson,
+  requireUser,
+  trustedOrigin,
+} from '../server/http.js'
 import { paymongo } from '../server/paymongo.js'
 import { createPaymentService } from '../server/payments-service.js'
+import { createRateLimiter } from '../server/rate-limit.js'
+
+// At most 10 payment starts a minute from one network address (checklist
+// S4). The per-person limit is in payments-service.js.
+const limiter = createRateLimiter({ limit: 10, windowMs: 60_000 })
 
 // POST /api/create-checkout
 // Body: { violationId, cin, method: 'gcash', mobileNumber, email }
@@ -19,6 +33,7 @@ export function OPTIONS(request) {
 export async function POST(request) {
   const headers = corsHeaders(request)
   try {
+    enforceRateLimit(limiter, request)
     const user = await requireUser(request, adminAuth())
     const body = await readJson(request)
     const service = createPaymentService({ store: createFirestoreStore(), paymongo })

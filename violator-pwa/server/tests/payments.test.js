@@ -92,6 +92,9 @@ function memoryStore() {
     async getViolatorProfile() {
       return { full_name: 'Juan Dela Cruz' }
     },
+    async countRecentAttempts(uid, since) {
+      return [...attempts.values()].filter((a) => a.uid === uid && a.createdAt >= since).length
+    },
     async createAttempt(data) {
       const id = `att_${attempts.size + 1}`
       attempts.set(id, { ...data })
@@ -424,6 +427,28 @@ describe('payment service', () => {
     await payAndConfirm(createPaymentService({ store, paymongo, mailer }))
     assert.ok(mailer.sent[0].html.includes('&lt;b&gt;Illegal&lt;/b&gt; &amp; Parking'))
     assert.ok(!mailer.sent[0].html.includes('<b>Illegal</b>'))
+  })
+
+  // ---- rate limit (checklist S4) ----
+  it('allows 5 Pay Now presses in 10 minutes per person, then refuses until the window passes', async () => {
+    let clock = new Date('2026-10-11T08:00:00Z').getTime()
+    const svc = createPaymentService({ store, paymongo, now: () => new Date(clock) })
+
+    for (let i = 0; i < 5; i += 1) {
+      await svc.startCheckout(baseInput)
+      clock += 60_000
+    }
+    const sessionsBefore = calls.filter((c) => c.method === 'POST').length
+    await assert.rejects(svc.startCheckout(baseInput), (e) => e.status === 429 && /Too many payment attempts/.test(e.message))
+    assert.equal(store.attempts.size, 5, 'no attempt saved')
+    assert.equal(calls.filter((c) => c.method === 'POST').length, sessionsBefore, 'PayMongo not called')
+
+    // Someone else isn't affected.
+    await svc.startCheckout({ ...baseInput, uid: 'user-2' })
+
+    // Ten minutes after the first press, it's allowed again.
+    clock = new Date('2026-10-11T08:10:00.001Z').getTime()
+    await svc.startCheckout(baseInput)
   })
 })
 

@@ -1,5 +1,6 @@
 import { config } from './config.js'
 import { HttpError } from './payments-service.js'
+import { clientIp } from './rate-limit.js'
 
 // Small helpers shared by the api/ functions.
 
@@ -53,6 +54,15 @@ export async function requireUser(request, auth) {
     throw new HttpError(403, 'Verify your email before paying.')
   }
   return { ...decoded, isGuest }
+}
+
+// Refuses the call when this address has used up its limit
+// (server/rate-limit.js). Checked before anything costs a database read.
+export function enforceRateLimit(limiter, request) {
+  const { ok, retryAfter } = limiter.take(clientIp(request))
+  if (!ok) {
+    throw new HttpError(429, 'Too many payment attempts. Please wait a few minutes and try again.', { retryAfter })
+  }
 }
 
 export async function readJson(request) {
