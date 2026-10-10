@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import { config } from './config.js'
 import { HttpError } from './payments-service.js'
 import { clientIp } from './rate-limit.js'
@@ -62,6 +63,18 @@ export function enforceRateLimit(limiter, request) {
   const { ok, retryAfter } = limiter.take(clientIp(request))
   if (!ok) {
     throw new HttpError(429, 'Too many payment attempts. Please wait a few minutes and try again.', { retryAfter })
+  }
+}
+
+// For endpoints only the scheduled GitHub check may call: the request must
+// carry `Authorization: Bearer <CRON_SECRET>`. Refuses everything while the
+// secret isn't set.
+export function requireCronSecret(request, secret = config.cronSecret) {
+  const header = request.headers.get('authorization') || ''
+  const given = Buffer.from(header.startsWith('Bearer ') ? header.slice(7) : '')
+  const expected = Buffer.from(secret)
+  if (!secret || given.length !== expected.length || !timingSafeEqual(given, expected)) {
+    throw new HttpError(401, 'Not allowed.')
   }
 }
 

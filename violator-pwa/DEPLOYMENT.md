@@ -45,6 +45,10 @@ Server (from `.env.server.example`), Production only:
 - [ ] `GMAIL_APP_PASSWORD`: an **app password** for that Gmail (Google Account → Security → 2-Step
   Verification on → App passwords), marked Sensitive. Without these two, payments still work and no email is
   sent.
+- [ ] `CRON_SECRET`: a long random value, marked Sensitive. The **same value** goes in GitHub → repository
+  Settings → Secrets and variables → Actions → `VIOLATOR_PWA_CRON_SECRET` (needs repo admin: Mira). Every
+  ~15 minutes `.github/workflows/violator-pwa-payment-updates.yml` then emails people whose payment MTPB
+  staff verified or rejected. Test it with **Actions → violator-pwa payment updates → Run workflow**.
 
 **Check the values, not just the names.** Once, `AUTH_DOMAIN` and `PROJECT_ID` were saved with their own names
 as values and logins hung on "Logging in…". `VITE_…` values are built into the app, so **redeploy after changing

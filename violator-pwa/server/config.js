@@ -39,6 +39,12 @@ export const config = {
   get gmailAppPassword() {
     return (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '')
   },
+  // Shared with the scheduled GitHub check that calls
+  // /api/notify-payment-updates (the same value as the repository secret
+  // VIOLATOR_PWA_CRON_SECRET). Without it the endpoint refuses every call.
+  get cronSecret() {
+    return (process.env.CRON_SECRET || '').trim()
+  },
   // Other sites allowed to call this API, comma-separated.
   // Add http://localhost:5173 to test the app on your computer against the
   // deployed API.

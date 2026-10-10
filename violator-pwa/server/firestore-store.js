@@ -91,6 +91,14 @@ export function createFirestoreStore() {
       return doc.exists ? { ...doc.data(), id: doc.id } : null
     },
 
+    // Payments MTPB staff verified or rejected since `since` that were made in
+    // this app (they carry our checkoutAttemptId). Read only; one range on a
+    // single field, so Firestore needs no extra index. For status-notifier.js.
+    async listDecidedAppPayments(since) {
+      const snap = await payments.where('verifiedAt', '>=', since).get()
+      return snap.docs.map((doc) => ({ ...doc.data(), id: doc.id })).filter((p) => p.checkoutAttemptId)
+    },
+
     async updateAttempt(attemptId, patch, { onlyIfStatus } = {}) {
       const ref = attempts.doc(attemptId)
       if (!onlyIfStatus) {
