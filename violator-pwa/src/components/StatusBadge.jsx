@@ -26,7 +26,7 @@ const TONES = {
 }
 
 // The violation and payment words have English and Filipino labels
-// (src/i18n/strings.js); "verifying" also reads better as a phrase. The
+// (src/i18n/strings.js), each kept to one word so every badge is the same size. The
 // rest show the status word itself.
 const TRANSLATED = ['unpaid', 'paid', 'verifying', 'clamped', 'impounded']
 

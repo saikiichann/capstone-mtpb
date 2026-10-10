@@ -61,7 +61,7 @@ export const FAQ_ENTRIES = [
     category: 'payment',
     question: 'My payment was deducted but the violation still shows unpaid.',
     answer:
-      'Please wait a moment and reopen the violation, as confirmation may take a few minutes. Once received, it shows as **Paid – awaiting verification** until MTPB staff verify it. If it still shows unpaid, visit the MTPB Office with your **reference number** or your GCash confirmation, and personnel will verify the transaction.',
+      'Please wait a moment and reopen the violation, as confirmation may take a few minutes. Once received, it shows as **Verifying** until MTPB staff verify it. If it still shows unpaid, visit the MTPB Office with your **reference number** or your GCash confirmation, and personnel will verify the transaction.',
   },
 
   // ---- Clamp ----
