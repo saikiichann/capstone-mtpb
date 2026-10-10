@@ -72,6 +72,12 @@ export function createFirestoreStore() {
       return doc.exists ? doc.data() : null
     },
 
+    // One payment by its document id (the cash slip's QR, payment-check.js).
+    async getPaymentById(paymentId) {
+      const doc = await payments.doc(paymentId).get()
+      return doc.exists ? doc.data() : null
+    },
+
     // ---- Reads for violation-access.js (checklist S2). The app no longer
     // reads clamps and violations itself; these run here instead, and
     // violation-access.js decides who may see what.

@@ -20,7 +20,7 @@ import { HttpError } from './payments-service.js'
 const NOT_FOUND = () => new HttpError(404, 'Violation not found.')
 
 // Firestore Timestamps don't survive JSON; the app reads ISO strings.
-function iso(value) {
+export function iso(value) {
   if (!value) return null
   const date = typeof value?.toDate === 'function' ? value.toDate() : new Date(value)
   return Number.isNaN(date.getTime()) ? null : date.toISOString()

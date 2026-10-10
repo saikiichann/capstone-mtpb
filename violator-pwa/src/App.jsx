@@ -9,6 +9,7 @@ import Home from './pages/Home'
 import ImpoundLocation from './pages/ImpoundLocation'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
+import PaymentCheck from './pages/PaymentCheck'
 import PaymentHistory from './pages/PaymentHistory'
 import PayConfirm from './pages/pay/PayConfirm'
 import PayDetails from './pages/pay/PayDetails'
@@ -42,6 +43,8 @@ export default function App() {
             (used by links inside the app). */}
         <Route path="q/:qrId" element={<ScanLanding />} />
         <Route path="scan" element={<ScanRedirect />} />
+        {/* The QR on a cash payment slip printed at the MTPB office. */}
+        <Route path="r/:paymentId" element={<PaymentCheck />} />
         <Route path="v/:violationRef" element={<ViolationDetails />} />
         <Route path="faq" element={<FaqChatbot />} />
         <Route path="impound" element={<ImpoundLocation />} />
