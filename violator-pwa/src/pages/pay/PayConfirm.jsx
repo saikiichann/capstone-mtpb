@@ -2,17 +2,20 @@ import { useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useAuth } from '../../auth/auth-context'
 import OptionalAsset from '../../components/OptionalAsset'
+import LanguageToggle from '../../components/LanguageToggle'
 import PageHeader from '../../components/PageHeader'
 import { PAYMENT_METHODS, startPayment } from '../../payments'
 import { computeCharges } from '../../payments/fees'
 import { formatPeso } from '../../utils/format'
 import StepIntro from '../../components/StepIntro'
+import { useT } from '../../i18n/language-context'
 
 // Figma "PAYMENT CONFIRMATION" (step 3) → "LOADING PAYMENT".
 // With PayMongo, confirming sends the browser to PayMongo's GCash
 // test page; PayMongo then returns to /payments/<ref>/success.
 export default function PayConfirm() {
   const { violation } = useOutletContext()
+  const t = useT()
   const { method: methodId } = useParams()
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -58,7 +61,7 @@ export default function PayConfirm() {
         return
       }
       console.error('Payment could not start', err)
-      setError(err?.message || 'The payment didn’t go through. Please try again.')
+      setError(err?.message || t('pay.confirm.failed'))
       setProcessing(false)
       submittedRef.current = false
     }
@@ -68,28 +71,28 @@ export default function PayConfirm() {
 
   return (
     <div className="page">
-      <PageHeader title="Pay Now" back />
+      <PageHeader title={t('pay.title')} back action={<LanguageToggle />} />
 
       <main className="page__body pay-body confirm-body">
-        <StepIntro step={3} title="Payment Confirmation">
-          Please confirm your payment to finalize the transaction.
+        <StepIntro step={3} title={t('pay.confirm.title')}>
+          {t('pay.confirm.text')}
         </StepIntro>
 
         <OptionalAsset name="payment-receipt" width={184} height={184} className="confirm-body__icon" />
 
-        <p className="confirm-body__label">Total Amount Due</p>
+        <p className="confirm-body__label">{t('pay.confirm.total')}</p>
         <p className="confirm-body__amount">{formatPeso(charges.total)}</p>
         {charges.fee > 0 && (
           <p className="confirm-body__breakdown">
-            Fine {formatPeso(charges.fine)} + {method.label} convenience fee {formatPeso(charges.fee)}
+            {t('pay.confirm.breakdown', { fine: formatPeso(charges.fine), method: method.label, fee: formatPeso(charges.fee) })}
           </p>
         )}
 
         <div className="confirm-body__footer">
           <p className="confirm-body__terms">
-            By continuing, you agree to our
+            {t('pay.confirm.agree')}
             <br />
-            <strong>Terms of Service</strong> and <strong>Privacy Policy.</strong>
+            <strong>{t('pay.confirm.terms')}</strong> {t('pay.confirm.and')} <strong>{t('pay.confirm.privacy')}</strong>
           </p>
           {error && (
             <p className="form-message form-message--error" role="alert">
@@ -97,14 +100,14 @@ export default function PayConfirm() {
             </p>
           )}
           <button type="button" className="btn btn--pay btn--primary" onClick={handleConfirm}>
-            Confirm Payment
+            {t('pay.confirm.button')}
           </button>
           <button
             type="button"
             className="btn btn--pay btn--outline"
             onClick={() => navigate(`/v/${encodeURIComponent(violation.id ?? violation.cin)}`)}
           >
-            Cancel
+            {t('pay.confirm.cancel')}
           </button>
         </div>
       </main>
@@ -112,14 +115,16 @@ export default function PayConfirm() {
   )
 }
 
-export function ProcessingPayment({ lines = ['Processing your payment...', 'Please wait.'] }) {
+export function ProcessingPayment({ lines }) {
+  const t = useT()
+  const [first, second] = lines ?? [t('pay.processing'), t('common.pleaseWait')]
   return (
     <div className="page processing-page" role="status" aria-live="polite">
       <div className="processing-ring" aria-hidden="true" />
       <p className="processing-page__text">
-        {lines[0]}
+        {first}
         <br />
-        {lines[1]}
+        {second}
       </p>
     </div>
   )

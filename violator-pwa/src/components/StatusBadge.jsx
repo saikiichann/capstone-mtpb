@@ -1,3 +1,5 @@
+import { useT } from '../i18n/language-context'
+
 // Small outlined labels from Violation History / Violation Details 2.
 // IMPOUNDED and UNPAID use the red style, CLAMPED the orange one.
 // PAID isn't in the design; it uses the green of the success screen.
@@ -23,13 +25,15 @@ const TONES = {
   saved: 'neutral',
 }
 
-// Shown instead of the status word where the word alone would be unclear.
-const LABELS = {
-  verifying: 'paid – awaiting verification',
-}
+// The violation and payment words have English and Filipino labels
+// (src/i18n/strings.js); "verifying" also reads better as a phrase. The
+// rest show the status word itself.
+const TRANSLATED = ['unpaid', 'paid', 'verifying', 'clamped', 'impounded']
 
 export default function StatusBadge({ status, className = '' }) {
+  const t = useT()
   if (!status) return null
   const tone = TONES[status] ?? 'neutral'
-  return <span className={`status-badge status-badge--${tone} ${className}`.trim()}>{LABELS[status] ?? status}</span>
+  const label = TRANSLATED.includes(status) ? t(`status.${status}`) : status
+  return <span className={`status-badge status-badge--${tone} ${className}`.trim()}>{label}</span>
 }

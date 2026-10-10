@@ -4585,3 +4585,36 @@ div.settings-row {
 @media (prefers-reduced-motion: reduce) {
   .update-prompt { animation: none; }
 }
+
+/* ---------- Language toggle (src/components/LanguageToggle.jsx) ---------- */
+.language-toggle {
+  min-width: 44px;
+  height: 30px;
+  margin-bottom: 5px;
+  padding: 0 10px;
+  border: 1.5px solid var(--color-on-ink);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-on-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.language-toggle:active {
+  background: var(--color-on-ink);
+  color: var(--color-ink);
+}
+.language-toggle:focus-visible {
+  outline: 2px solid var(--color-on-ink);
+  outline-offset: 2px;
+}
+/* Titles on screens with the language button leave room for it (and the
+   back button on the other side), shrinking a little on narrow phones so
+   longer Filipino titles stay on one line. */
+.page-header:has(.language-toggle) .page-header__title {
+  max-width: calc(100% - 80px);
+  font-size: clamp(18px, 5.4vw, 23px);
+  text-wrap: balance;
+}
