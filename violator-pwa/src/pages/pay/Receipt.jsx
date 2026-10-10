@@ -111,12 +111,9 @@ export default function Receipt() {
   const rows = [
     ['Reference Number', payment.referenceNumber],
     ['Date & Time', formatDateTime(payment.paidAt, { short: true })],
-    // The CIN is the code on the clamp; the violation ID is the record MTPB
-    // staff look up if someone queries this payment at the office.
+    // The violation number (CIN) is what people and MTPB staff use. The
+    // record's internal database id isn't shown (Marco's choice).
     ['Violation Number', payment.violationCin],
-    ...(payment.violationId && payment.violationId !== payment.violationCin
-      ? [['Violation ID', payment.violationId]]
-      : []),
     ['Plate Number', payment.plateNumber],
     ['Violation Type', payment.violationType],
     ['Location', payment.location],

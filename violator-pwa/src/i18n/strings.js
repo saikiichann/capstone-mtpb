@@ -167,7 +167,6 @@ const en = {
   // Payment rows (success screen)
   'row.reference': 'Reference Number',
   'row.violationNumber': 'Violation Number',
-  'row.violationId': 'Violation ID',
   'row.plate': 'Plate Number',
   'row.dateTime': 'Date & Time',
   'row.fine': 'Fine Amount',
@@ -367,7 +366,6 @@ const fil = {
   // Payment rows (success screen)
   'row.reference': 'Reference Number',
   'row.violationNumber': 'Numero ng Paglabag',
-  'row.violationId': 'ID ng Paglabag',
   'row.plate': 'Numero ng Plaka',
   'row.dateTime': 'Petsa at Oras',
   'row.fine': 'Halaga ng Multa',
