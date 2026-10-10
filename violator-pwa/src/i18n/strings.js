@@ -27,7 +27,8 @@ const en = {
   // Status badges
   'status.unpaid': 'unpaid',
   'status.paid': 'paid',
-  'status.verifying': 'paid – awaiting verification',
+  // One word like the other badges; the screens explain it in full beside it.
+  'status.verifying': 'verifying',
   'status.clamped': 'clamped',
   'status.impounded': 'impounded',
 
@@ -227,7 +228,7 @@ const fil = {
   // Status badges
   'status.unpaid': 'hindi pa bayad',
   'status.paid': 'bayad na',
-  'status.verifying': 'bayad – bineberipika',
+  'status.verifying': 'bineberipika',
   'status.clamped': 'naka-clamp',
   'status.impounded': 'na-impound',
 

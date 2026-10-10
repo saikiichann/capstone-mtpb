@@ -41,7 +41,7 @@ export const FAQ_ENTRIES_FIL = {
   'pay-not-reflected': {
     question: 'Nabawasan na ang pera ko pero hindi pa bayad ang lumalabas sa paglabag.',
     answer:
-      'Maghintay sandali at buksan muli ang paglabag, dahil maaaring tumagal nang ilang minuto ang kumpirmasyon. Kapag natanggap na, lalabas itong **Bayad – bineberipika** hanggang maberipika ng MTPB staff. Kung hindi pa rin bayad ang lumalabas, pumunta sa opisina ng MTPB dala ang iyong **reference number** o kumpirmasyon mula sa GCash, at susuriin ng aming mga tauhan ang transaksyon.',
+      'Maghintay sandali at buksan muli ang paglabag, dahil maaaring tumagal nang ilang minuto ang kumpirmasyon. Kapag natanggap na, lalabas itong **Bineberipika** hanggang maberipika ng MTPB staff. Kung hindi pa rin bayad ang lumalabas, pumunta sa opisina ng MTPB dala ang iyong **reference number** o kumpirmasyon mula sa GCash, at susuriin ng aming mga tauhan ang transaksyon.',
   },
 
   // ---- Clamp ----
