@@ -129,7 +129,8 @@ defense in case the rate changed.
 ## Deploying (Vercel + PayMongo test mode)
 
 Everything stays on free plans: Firebase Spark, Vercel Hobby and PayMongo
-test mode.
+test mode. The live setup and a step-by-step checklist are in
+[DEPLOYMENT.md](DEPLOYMENT.md).
 
 1. **Firebase (the admin app's project).** Security rules belong to the admin
    app; this repo doesn't ship any. Make sure **Authentication → Sign-in

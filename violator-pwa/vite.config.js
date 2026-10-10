@@ -15,7 +15,9 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === 'phone' && basicSsl(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // A new version waits until the user taps Refresh (src/components/
+      // UpdatePrompt.jsx), instead of old builds silently staying cached.
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'icons.svg'],
       manifest: {
         name: 'MTPB Violator Portal',

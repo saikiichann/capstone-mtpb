@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router-dom'
 import './App.css'
 import RequireAuth, { RedirectIfSignedIn, RequirePayer } from './auth/RequireAuth'
 import AppLayout from './components/AppLayout'
+import UpdatePrompt from './components/UpdatePrompt'
 import FaqChatbot from './pages/FaqChatbot'
 import History from './pages/History'
 import Home from './pages/Home'
@@ -93,6 +94,7 @@ export default function App() {
 
         <Route path="*" element={<NotFound />} />
       </Routes>
+      <UpdatePrompt />
     </div>
   )
 }

@@ -1,0 +1,42 @@
+# Checks the violator PWA on every pull request that changes it:
+# lint, tests and the production build (the same build Vercel runs).
+# Only runs when violator-pwa/ changes, so admin-web and the enforcer app
+# are not affected.
+name: violator-pwa
+
+on:
+  pull_request:
+    paths:
+      - 'violator-pwa/**'
+      - '.github/workflows/violator-pwa.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'violator-pwa/**'
+      - '.github/workflows/violator-pwa.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: violator-pwa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: violator-pwa/package-lock.json
+      - run: npm ci
+      - name: Lint
+        run: npx oxlint src server api
+      - name: Tests
+        run: npm test
+      # No Firebase env here, so the build uses sample data. It still catches
+      # anything that would break the Vercel build.
+      - name: Build
+        run: npm run build
