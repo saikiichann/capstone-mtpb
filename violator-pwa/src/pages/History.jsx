@@ -90,7 +90,7 @@ export default function History() {
             <ul className="recent__list">
               {recent.map((item) => (
                 <li key={item.key}>
-                  <Link className="recent__item" to={item.to}>
+                  <Link className="recent__item" to={item.to} state={item.state}>
                     <span className={`recent__dot recent__dot--${item.tone}`} aria-hidden="true" />
                     <span className="recent__text">
                       <span className="recent__label">{item.label}</span>
@@ -121,6 +121,8 @@ function recentActivity(violations, paidPayments) {
       badge: 'paid',
       tone: 'green',
       to: `/receipts/${encodeURIComponent(p.referenceNumber)}`,
+      // The receipt's back button returns here.
+      state: { from: '/history' },
     })),
     ...violations
       .filter((v) => v.paymentStatus !== 'paid')

@@ -78,7 +78,7 @@ export default function PaymentHistory() {
           <ul className="history-list">
             {rows.map((row) =>
               row.payment ? (
-                <PaymentRow key={row.key} payment={row.payment} />
+                <PaymentRow key={row.key} payment={row.payment} from={`/payments?tab=${tab}`} />
               ) : (
                 <UnpaidRow key={row.key} violation={row.violation} />
               ),
@@ -112,13 +112,14 @@ function UnpaidRow({ violation: v }) {
   )
 }
 
-function PaymentRow({ payment }) {
+// `from` makes the receipt's back button return here, on the same tab.
+function PaymentRow({ payment, from }) {
   // Every row here is a completed payment, so every row opens its receipt.
   const to = `/receipts/${encodeURIComponent(payment.referenceNumber)}`
 
   return (
     <li>
-      <Link className="history-card" to={to}>
+      <Link className="history-card" to={to} state={{ from }}>
         <span className="history-card__main">
           <span className="history-card__cin">{payment.referenceNumber}</span>
           <span className="history-card__date">
