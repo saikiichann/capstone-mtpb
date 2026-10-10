@@ -42,17 +42,8 @@ export const VERIFICATION = {
   rejected: 'rejected',
 }
 
-// "abc  1234 " → "ABC 1234". Violations are matched on the exact plate
-// text, so the enforcer app should save plates the same way.
-export function normalizePlate(value = '') {
-  return value.toUpperCase().trim().replace(/\s+/g, ' ')
-}
-
-// Same plate even if spaces or dashes differ ("ABC-1234" = "ABC 1234").
-export function samePlate(a, b) {
-  const key = (v) => normalizePlate(v).replace(/[\s-]/g, '')
-  return key(a) === key(b)
-}
+// Kept here too for the screens that already import them from this file.
+export { normalizePlate, samePlate } from '../utils/plates'
 
 
 // ---- Demo mode: changes kept on this device only ----

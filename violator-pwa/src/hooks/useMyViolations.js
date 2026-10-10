@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { isActiveVehicle, listVehicles } from '../firebase/vehicles'
-import { listViolationsForPlates } from '../firebase/violations'
+import { listMyViolations } from '../firebase/violations'
 import { withLocalPaymentStatus } from '../payments'
 import { toMillis } from '../utils/format'
 
@@ -24,7 +24,7 @@ export default function useMyViolations(uid) {
         const active = vehicles.filter(isActiveVehicle)
         const unverifiedPlates = vehicles.filter((v) => !isActiveVehicle(v)).map((v) => v.plateNumber)
         const plates = [...new Set(active.map((v) => v.plateNumber).filter(Boolean))]
-        const violations = (await listViolationsForPlates(plates))
+        const violations = (await listMyViolations(plates))
           .map((v) => withLocalPaymentStatus(uid, v))
           .sort((a, b) => toMillis(b.clampedAt) - toMillis(a.clampedAt))
         if (!cancelled) setResult({ uid, status: 'ready', violations, unverifiedPlates })

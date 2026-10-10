@@ -1,8 +1,15 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
-import { isPaymentSettled, normalizeViolation } from '../src/firebase/mapping.js'
+import {
+  CLAMP_TOKEN_FIELD,
+  isPaymentSettled,
+  normalizeClamp,
+  normalizeViolation,
+  PLATE_FIELDS,
+} from '../src/firebase/mapping.js'
 import { COLLECTIONS, PAYMENT_COUNTER_ID } from '../src/firebase/schema.js'
+import { plateSpellings } from '../src/utils/plates.js'
 import { config } from './config.js'
 
 // Firestore adapter for the payment service, using the Firebase Admin SDK.
@@ -63,6 +70,50 @@ export function createFirestoreStore() {
     async getViolatorProfile(uid) {
       const doc = await db.collection(COLLECTIONS.violators).doc(uid).get()
       return doc.exists ? doc.data() : null
+    },
+
+    // ---- Reads for violation-access.js (checklist S2). The app no longer
+    // reads clamps and violations itself; these run here instead, and
+    // violation-access.js decides who may see what.
+
+    // The clamp whose QR sticker carries this scan token. Only the token
+    // finds a clamp (Marco's choice: clamp numbers in links must not work).
+    async getClampByToken(token) {
+      if (!token) return null
+      const snap = await db.collection(COLLECTIONS.clamps).where(CLAMP_TOKEN_FIELD, '==', token).limit(1).get()
+      return snap.empty ? null : normalizeClamp(snap.docs[0].id, snap.docs[0].data())
+    },
+
+    // Plates of this owner's vehicles MTPB has verified ("active").
+    async listActivePlates(ownerUid) {
+      const snap = await db.collection(COLLECTIONS.vehicles).where('ownerUid', '==', ownerUid).get()
+      return snap.docs
+        .map((doc) => doc.data())
+        .filter((v) => (v.verificationStatus ?? 'pending') === 'active' && v.plateNumber)
+        .map((v) => v.plateNumber)
+    },
+
+    // Violations on any of these plates, however the enforcer app spelled
+    // them. One "in" query (max 30 values) per plate field name, merged.
+    async listViolationsForPlates(plates) {
+      const spellings = [...new Set(plates.flatMap(plateSpellings))]
+      const chunks = []
+      for (let i = 0; i < spellings.length; i += 30) chunks.push(spellings.slice(i, i + 30))
+      const snaps = await Promise.all(
+        PLATE_FIELDS.flatMap((field) =>
+          chunks.map((chunk) => db.collection(COLLECTIONS.violations).where(field, 'in', chunk).get()),
+        ),
+      )
+      const byId = new Map()
+      for (const snap of snaps) for (const doc of snap.docs) byId.set(doc.id, normalizeViolation(doc.id, doc.data()))
+      return [...byId.values()]
+    },
+
+    // Whether this person started a payment for this violation (so they can
+    // still open it, and its receipt details, after paying).
+    async hasAttemptFor(uid, violationId) {
+      const snap = await attempts.where('uid', '==', uid).select('violationId').get()
+      return snap.docs.some((doc) => doc.get('violationId') === violationId)
     },
 
     // Every Pay Now press gets its own attempt. No reference number yet:
