@@ -4584,6 +4584,8 @@ div.settings-row {
 }
 @media (prefers-reduced-motion: reduce) {
   .update-prompt { animation: none; }
+}
+
 /* ---------- Language toggle (src/components/LanguageToggle.jsx) ---------- */
 .language-toggle {
   min-width: 44px;
