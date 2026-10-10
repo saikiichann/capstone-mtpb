@@ -1,32 +1,16 @@
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
+import { callApi } from '../api'
 import { sampleViolations } from '../data/sample'
-import { ensureSignedIn } from './auth'
-import { db, shouldUseSampleData } from './config'
-import { normalizeSampleViolation, normalizeViolation, PLATE_FIELDS } from './mapping'
-import { COLLECTIONS } from './schema'
 import { toMillis } from '../utils/format'
-import { normalizePlate, samePlate } from './vehicles'
+import { samePlate } from '../utils/plates'
+import { ensureSignedIn } from './auth'
+import { shouldUseSampleData } from './config'
+import { normalizeSampleViolation } from './mapping'
+import { scanTokenFor } from './scan-tokens'
 
-// Every document read here goes through normalizeViolation (see mapping.js),
-// which is what lets the app run against both the team's shared project and
-// the test project even though they name fields differently.
-
-// A clamp's QR id stays with the clamp, so the same code appears on every
-// violation that clamp ever carries — deliberately, since the admin app
-// groups a clamp's history on it for the annual report. Only one is live at
-// a time, so looking one up by code means "the newest unpaid one", and
-// anything that has to be exact uses the violation's own document id.
-export async function getViolationByCin(cin) {
-  if (shouldUseSampleData) {
-    return newest(sampleViolations.filter((v) => v.cin === cin).map(normalizeSampleViolation))
-  }
-
-  await ensureSignedIn()
-  const q = query(collection(db, COLLECTIONS.violations), where('cin', '==', cin))
-  const snapshot = await getDocs(q)
-  if (snapshot.empty) return null
-  return newest(snapshot.docs.map((d) => normalizeViolation(d.id, d.data())))
-}
+// Violations come from the app's own server (api/violations.js), which only
+// returns the ones this person may see: the clamp they scanned, their own
+// verified vehicles', or one they paid (checklist S2). The database itself
+// is for MTPB staff. The offline demo still reads sample data on the phone.
 
 export function newest(list) {
   const items = list.filter(Boolean)
@@ -37,70 +21,36 @@ export function newest(list) {
   return [...pool].sort((a, b) => toMillis(b.clampedAt) - toMillis(a.clampedAt))[0]
 }
 
-// Accepts a violation document id or a QR id, so links inside the app stay
-// exact while a scanned code still works. In the shared project the document
-// id IS the CIN, so the first lookup usually succeeds.
+// One violation by its document id or violation number (links inside the app
+// use the id). null when it doesn't exist or this person may not see it.
 export async function getViolation(ref) {
   if (!ref) return null
-  const byId = await getViolationById(ref)
-  return byId ?? getViolationByCin(ref)
-}
-
-export async function getViolationById(id) {
   if (shouldUseSampleData) {
-    return normalizeSampleViolation(sampleViolations.find((v) => v.id === id))
+    return (
+      normalizeSampleViolation(sampleViolations.find((v) => v.id === ref)) ??
+      newest(sampleViolations.filter((v) => v.cin === ref).map(normalizeSampleViolation))
+    )
   }
 
   await ensureSignedIn()
-  const snapshot = await getDoc(doc(db, COLLECTIONS.violations, id))
-  return snapshot.exists() ? normalizeViolation(snapshot.id, snapshot.data()) : null
+  try {
+    const { violation } = await callApi('violations', { action: 'get', ref, token: scanTokenFor(ref) })
+    return violation
+  } catch (err) {
+    if (err?.status === 404) return null
+    throw err
+  }
 }
 
-// The ways a plate might have been typed by the enforcer app:
-// "ABC 1234", "ABC1234", "ABC-1234". Firestore only finds exact matches.
-function plateSpellings(plate) {
-  const clean = normalizePlate(plate)
-  const compact = clean.replace(/[\s-]/g, '')
-  const parts = clean.split(/[\s-]+/)
-  return [...new Set([plate, clean, compact, parts.join(' '), parts.join('-')])].filter(Boolean)
-}
-
-// Violations recorded against any of the owner's plate numbers.
-//
-// Firestore can't search two different fields in one query, and the plate
-// lives under `plateNumber` in one project and `plateNo` in the other — so
-// this runs a query per field name and merges by document id.
-export async function listViolationsForPlates(plateNumbers) {
+// Violations recorded against the signed-in owner's verified vehicles. The
+// server finds the plates itself; `plateNumbers` is only used for sample data.
+export async function listMyViolations(plateNumbers) {
   if (shouldUseSampleData) {
     return sampleViolations
       .filter((v) => plateNumbers.some((p) => samePlate(p, v.plateNumber)))
       .map(normalizeSampleViolation)
   }
   if (plateNumbers.length === 0) return []
-
-  const spellings = [...new Set(plateNumbers.flatMap(plateSpellings))]
-  // Firestore allows at most 30 values in one "in" query.
-  const chunks = []
-  for (let i = 0; i < spellings.length; i += 30) chunks.push(spellings.slice(i, i + 30))
-
-  const lookups = PLATE_FIELDS.flatMap((field) =>
-    chunks.map(async (plates) => {
-      try {
-        return await getDocs(query(collection(db, COLLECTIONS.violations), where(field, 'in', plates)))
-      } catch (error) {
-        // A field the project doesn't use can fail on rules or a missing
-        // index. That's expected here, so don't let it sink the others.
-        console.debug(`No violations matched on "${field}"`, error)
-        return null
-      }
-    }),
-  )
-
-  const results = await Promise.all(lookups)
-  const byId = new Map()
-  for (const snapshot of results) {
-    if (!snapshot) continue
-    for (const d of snapshot.docs) byId.set(d.id, normalizeViolation(d.id, d.data()))
-  }
-  return [...byId.values()]
+  const { violations } = await callApi('violations', { action: 'mine' })
+  return violations
 }

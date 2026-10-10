@@ -45,8 +45,9 @@ const FIELDS = {
 }
 
 // Field names a violation's plate might be stored under. Firestore can't
-// search two different fields in one query, so listViolationsForPlates runs
-// one query per name in this list.
+// search two different fields in one query, so the server's
+// listViolationsForPlates (server/firestore-store.js) runs one query per name
+// in this list.
 export const PLATE_FIELDS = FIELDS.plateNumber
 
 // ---------------------------------------------------------------- statuses

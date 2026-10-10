@@ -1,6 +1,9 @@
-import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from 'firebase/firestore'
-import { auth, db, isFirebaseConfigured } from '../firebase/config'
-import { normalizePayment, normalizeViolation } from '../firebase/mapping'
+import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore'
+import { callApi } from '../api'
+import { db, isFirebaseConfigured } from '../firebase/config'
+import { normalizePayment } from '../firebase/mapping'
+import { scanTokenFor } from '../firebase/scan-tokens'
+import { getViolation } from '../firebase/violations'
 import { COLLECTIONS } from '../firebase/schema'
 import { METHOD_FEES } from './fees'
 import * as demo from './sandbox'
@@ -13,47 +16,9 @@ import * as demo from './sandbox'
 export const paymentsMode =
   import.meta.env.VITE_PAYMENTS_MODE === 'paymongo' && isFirebaseConfigured ? 'paymongo' : 'demo'
 
-// Leave empty when the app and api/ are deployed together on Vercel.
-// Set it (e.g. https://your-app.vercel.app) to use the deployed API while
-// running the app on localhost.
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
-
 export const PAYMENT_METHODS = Object.fromEntries(
   Object.entries(METHOD_FEES).map(([id, m]) => [id, { id, label: m.label }]),
 )
-
-export class PaymentApiError extends Error {
-  constructor(message, status, data) {
-    super(message)
-    this.status = status
-    this.data = data
-  }
-}
-
-async function callApi(name, body) {
-  const token = await auth.currentUser?.getIdToken()
-  let res
-  try {
-    res = await fetch(`${API_BASE}/api/${name}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? ''}` },
-      body: JSON.stringify(body),
-    })
-  } catch {
-    throw new PaymentApiError('No internet connection. Check your connection and try again.', 0)
-  }
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    // A crashed function returns an HTML error page, so `data.error` is
-    // empty. Showing the status code at least says which end broke.
-    throw new PaymentApiError(
-      data.error || `Something went wrong (${res.status}). Please try again.`,
-      res.status,
-      data,
-    )
-  }
-  return data
-}
 
 // Step 3 "Confirm Payment".
 // Returns { paymentId, redirectUrl? }. With redirectUrl, send the browser
@@ -73,6 +38,8 @@ export async function startPayment({ uid, violation, method, mobileNumber, email
     method,
     mobileNumber,
     email,
+    // A guest may only pay a violation whose clamp they scanned.
+    token: scanTokenFor(violation.id) ?? scanTokenFor(violation.cin),
   })
   return { paymentId: data.attemptId, redirectUrl: data.checkoutUrl }
 }
@@ -148,9 +115,8 @@ async function withViolationDetails(payment) {
   if (!violationDetails.has(payment.violationId)) {
     violationDetails.set(
       payment.violationId,
-      getDoc(doc(db, COLLECTIONS.violations, payment.violationId))
-        .then((snap) => (snap.exists() ? normalizeViolation(snap.id, snap.data()) : null))
-        .catch(() => null),
+      // Through the server: the payer may still see the violation they paid.
+      getViolation(payment.violationId).catch(() => null),
     )
   }
   const violation = await violationDetails.get(payment.violationId)

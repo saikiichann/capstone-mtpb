@@ -1,14 +1,9 @@
-import { collection, doc, getDoc, getDocs, limit, query, where } from 'firebase/firestore'
+import { callApi } from '../api'
 import { sampleClamps, sampleViolations } from '../data/sample'
 import { ensureSignedIn } from './auth'
-import { db, shouldUseSampleData } from './config'
-import {
-  CLAMP_TOKEN_FIELD,
-  normalizeClamp,
-  normalizeClampStatusWord,
-  normalizeSampleViolation,
-} from './mapping'
-import { COLLECTIONS } from './schema'
+import { shouldUseSampleData } from './config'
+import { normalizeClamp, normalizeClampStatusWord, normalizeSampleViolation } from './mapping'
+import { rememberScanToken } from './scan-tokens'
 import { newest } from './violations'
 
 // The QR code printed on a clamp belongs to the CLAMP, not to a violation.
@@ -41,74 +36,58 @@ export const CLAMP_STATUS = {
 
 export const normalizeClampStatus = normalizeClampStatusWord
 
-// The QR sticker carries the clamp's secret scan token (see ScanRedirect).
-// Only that token finds a clamp; its document id or printed number don't.
-// Sample data (offline demo) has no tokens, so it still matches by code.
-async function readClamp(token) {
-  if (shouldUseSampleData) {
-    const found = sampleClamps.find((c) =>
-      [c.id, c.qrId, c.clampNumber].some((v) => v?.toUpperCase() === token.toUpperCase()),
-    )
-    return found ? normalizeClamp(found.id, found) : null
-  }
-
-  const found = await getDocs(
-    query(collection(db, COLLECTIONS.clamps), where(CLAMP_TOKEN_FIELD, '==', token), limit(1)),
+// Offline demo (sample data): the clamp and its violation are looked up on
+// the phone. Sample clamps have no scan tokens, so they match by code.
+function readSampleClamp(token) {
+  const found = sampleClamps.find((c) =>
+    [c.id, c.qrId, c.clampNumber].some((v) => v?.toUpperCase() === token.toUpperCase()),
   )
-  return found.empty ? null : normalizeClamp(found.docs[0].id, found.docs[0].data())
+  return found ? normalizeClamp(found.id, found) : null
 }
 
-async function readViolationForClamp(clamp, qrId) {
-  // Offline demo only: a sample code may be the violation's CIN itself.
-  const cin = clamp?.violationCin ?? (shouldUseSampleData ? qrId : null)
+function readSampleViolation(clamp, qrId) {
+  // A sample code may be the violation's CIN itself.
+  const cin = clamp?.violationCin ?? qrId
   const violationId = clamp?.violationId
-
-  if (shouldUseSampleData) {
-    return newest(
-      sampleViolations
-        .filter((v) => (violationId && v.id === violationId) || (cin && v.cin === cin))
-        .map(normalizeSampleViolation),
-    )
-  }
-
-  if (violationId) {
-    const byId = await getDoc(doc(db, COLLECTIONS.violations, violationId))
-    if (byId.exists()) return normalizeClampViolation(byId)
-  }
-  if (cin) {
-    // In the shared project the CIN is the document id, so try that first.
-    const byDocId = await getDoc(doc(db, COLLECTIONS.violations, cin))
-    if (byDocId.exists()) return normalizeClampViolation(byDocId)
-
-    const byCin = await getDocs(query(collection(db, COLLECTIONS.violations), where('cin', '==', cin)))
-    if (!byCin.empty) {
-      // A clamp's whole history shares this code, so this can return several
-      // years of violations. newest() takes the one still to be paid, and the
-      // most recent if more than one is unpaid.
-      return newest(byCin.docs.map((d) => normalizeClampViolation(d)))
-    }
-  }
-  return null
-}
-
-function normalizeClampViolation(snapshot) {
-  return normalizeSampleViolation({ id: snapshot.id, ...snapshot.data() })
+  return newest(
+    sampleViolations
+      .filter((v) => (violationId && v.id === violationId) || (cin && v.cin === cin))
+      .map(normalizeSampleViolation),
+  )
 }
 
 // What the violator app needs after someone scans a clamp's QR code.
 // Returns { found, qrId, clampNumber, status, violation }.
+//
+// With the real database the server does the lookup (api/violations.js):
+// the QR sticker carries the clamp's secret scan token (see ScanRedirect),
+// and only that token finds a clamp. The token is remembered for the
+// violation it opened, so the violation page and Pay Now can prove the scan.
 export async function resolveClamp(qrId) {
-  // The shared project only lets signed-in users read clamps and violations,
-  // so a guest straight off the QR code is signed in anonymously first.
-  if (!shouldUseSampleData) await ensureSignedIn()
+  if (!shouldUseSampleData) {
+    // A guest straight off the QR code is signed in anonymously first.
+    await ensureSignedIn()
+    const result = await callApi('violations', { action: 'scan', token: qrId })
+    if (!result.found) {
+      return { found: false, qrId, clampNumber: '', status: CLAMP_STATUS.unknown, violation: null }
+    }
+    const violation = result.violation
+    if (violation) rememberScanToken([violation.id, violation.cin], qrId)
+    const clampStatus = normalizeClampStatusWord(result.status)
+    return {
+      found: true,
+      qrId,
+      clampNumber: result.clampNumber,
+      status: violation ? violationStatus(violation, clampStatus) : clampStatus,
+      violation,
+    }
+  }
 
-  const clamp = await readClamp(qrId)
+  const clamp = readSampleClamp(qrId)
 
   if (!clamp) {
-    // No clamp has this token (mistyped, or re-issued by IT so the old
-    // sticker no longer works). In the offline demo a code can also be a
-    // sample violation's CIN; with Firestore that lookup is skipped.
-    const violation = shouldUseSampleData ? await readViolationForClamp(null, qrId) : null
+    // No sample clamp has this code; it may be a sample violation's CIN.
+    const violation = readSampleViolation(null, qrId)
     if (!violation) {
       return { found: false, qrId, clampNumber: '', status: CLAMP_STATUS.unknown, violation: null }
     }
@@ -121,7 +100,7 @@ export async function resolveClamp(qrId) {
     }
   }
 
-  const violation = clamp.status === CLAMP_STATUS.waiting ? null : await readViolationForClamp(clamp, qrId)
+  const violation = clamp.status === CLAMP_STATUS.waiting ? null : readSampleViolation(clamp, qrId)
 
   // A clamp left on "available" while a violation is live on it would hide
   // the violation, so trust the violation when the two disagree.
