@@ -20,8 +20,8 @@ export default function PrivacySettings() {
             <li>Your registered vehicles, added by MTPB when a violation is recorded against their plates.</li>
             <li>Violations recorded against your plates, and the payments you make for them.</li>
             <li>
-              Payments are processed by PayMongo. The app never sees your GCash password, and card or
-              wallet credentials are never stored here.
+              Payments are processed by MTPB's payment provider. The app never sees your GCash password, and
+              card or wallet credentials are never stored here.
             </li>
           </ul>
           <p className="privacy-card__note">
@@ -43,8 +43,8 @@ export default function PrivacySettings() {
           <ul className="privacy-list">
             <li>MTPB personnel handling your violation, its payment and the release of your vehicle.</li>
             <li>
-              PayMongo, only for a GCash payment: the amount, and the mobile number and email you enter
-              for it.
+              MTPB's payment provider, only for a GCash payment: the amount, and the mobile number and email
+              you enter for it.
             </li>
           </ul>
         </div>
