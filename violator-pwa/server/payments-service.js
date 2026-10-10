@@ -20,6 +20,13 @@ export class HttpError extends Error {
 
 const PH_MOBILE = /^(09|\+639)\d{9}$/
 
+// At most this many Pay Now presses per person (account or guest) in the
+// window (checklist S4). Counted from the checkout attempts already stored,
+// so it holds across Vercel instances. Someone who cancels and retries a
+// couple of times stays well under it.
+export const MAX_RECENT_ATTEMPTS = 5
+export const ATTEMPT_WINDOW_MS = 10 * 60 * 1000
+
 // The admin app's own word, when there is one: our mapping folds
 // "Pending Verification" into unpaid for display.
 const isSettled = (violation) => isPaymentSettled(violation.raw?.paymentStatus ?? violation.paymentStatus)
@@ -63,6 +70,11 @@ export function createPaymentService({ store, paymongo, mailer = null, now = () 
     if (!PH_MOBILE.test(mobile)) throw new HttpError(400, 'Enter a valid mobile number.')
     const cleanEmail = String(email ?? '').trim()
     if (cleanEmail && !/^\S+@\S+\.\S+$/.test(cleanEmail)) throw new HttpError(400, 'Enter a valid email.')
+
+    const since = new Date(now().getTime() - ATTEMPT_WINDOW_MS)
+    if ((await store.countRecentAttempts(uid, since)) >= MAX_RECENT_ATTEMPTS) {
+      throw new HttpError(429, 'Too many payment attempts. Please wait a few minutes and try again.')
+    }
 
     // A clamp's QR id stays with the clamp and is reused for its next
     // violation, so the id of the record itself is what we trust; the code

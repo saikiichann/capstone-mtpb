@@ -73,6 +73,18 @@ export function createFirestoreStore() {
       return ref.id
     },
 
+    // How many Pay Now presses this person made since `since` (the payment
+    // rate limit). Only filtered by uid, so Firestore needs no extra index;
+    // the time is compared here. Reads just the createdAt field.
+    async countRecentAttempts(uid, since) {
+      const snap = await attempts.where('uid', '==', uid).select('createdAt').get()
+      return snap.docs.filter((doc) => {
+        const created = doc.get('createdAt')
+        const time = typeof created?.toDate === 'function' ? created.toDate() : new Date(created)
+        return time >= since
+      }).length
+    },
+
     async getAttempt(attemptId) {
       if (!attemptId) return null
       const doc = await attempts.doc(attemptId).get()
