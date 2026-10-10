@@ -18,6 +18,12 @@ const en = {
   // Same hours as OFFICE_HOURS in src/data/contact.js: change both.
   'common.officeHours': 'Monday to Friday, 8:00 AM – 5:00 PM',
 
+  // Crash screen (any page, src/components/CrashScreen.jsx)
+  'crash.header': 'MTPB Violator Portal',
+  'crash.text': 'This screen stopped working. Reload to try again.',
+  'crash.reload': 'Reload',
+  'crash.home': 'Go to Home',
+
   // Status badges
   'status.unpaid': 'unpaid',
   'status.paid': 'paid',
@@ -211,6 +217,12 @@ const fil = {
   'common.pleaseWait': 'Sandali lang.',
   'common.mapShowing': 'Mapa ng {name}',
   'common.officeHours': 'Lunes hanggang Biyernes, 8:00 AM – 5:00 PM',
+
+  // Crash screen (any page, src/components/CrashScreen.jsx)
+  'crash.header': 'MTPB Violator Portal',
+  'crash.text': 'Huminto sa paggana ang screen na ito. I-reload para subukang muli.',
+  'crash.reload': 'I-reload',
+  'crash.home': 'Pumunta sa Home',
 
   // Status badges
   'status.unpaid': 'hindi pa bayad',
