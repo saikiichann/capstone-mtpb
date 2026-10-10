@@ -8,8 +8,14 @@ import { VitePWA } from 'vite-plugin-pwa'
 // `npm run dev:phone` (mode "phone") serves the app over https on your
 // local network, so you can open it on a phone and test installing the PWA.
 export default defineConfig(({ mode }) => ({
-  // Shown on Help & Support.
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  define: {
+    // Shown on Help & Support.
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    // For crash reports (src/monitoring.js): which Vercel environment and
+    // which commit the report came from.
+    __DEPLOY_ENV__: JSON.stringify(process.env.VERCEL_ENV || mode),
+    __APP_RELEASE__: JSON.stringify(`${pkg.version}+${(process.env.VERCEL_GIT_COMMIT_SHA || 'local').slice(0, 7)}`),
+  },
   server: mode === 'phone' ? { host: true } : undefined,
   plugins: [
     react(),

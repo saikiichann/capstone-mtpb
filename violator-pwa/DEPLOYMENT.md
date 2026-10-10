@@ -30,6 +30,9 @@ preview builds silently run on sample data.
 - [ ] `VITE_FIREBASE_MESSAGING_SENDER_ID`: digits only
 - [ ] `VITE_FIREBASE_APP_ID`
 - [ ] `VITE_PAYMENTS_MODE=paymongo`
+- [ ] `VITE_SENTRY_DSN`: crash reports, from Sentry (project `mtpb-violator-pwa`, team Gmail account).
+  **Production only**, so previews don't use up the free quota. Not a secret: it only lets the app send
+  reports. Crashes then show up at sentry.io with emails, mobile numbers and QR tokens removed.
 
 Server (from `.env.server.example`), Production only:
 
