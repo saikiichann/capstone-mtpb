@@ -1,13 +1,15 @@
 import { Link } from 'react-router-dom'
+import { useT } from '../i18n/language-context'
 import { Skeleton } from './Skeleton'
 
 // Loading / not found / error cards shared by the violation and payment pages.
 export default function ViolationStates({ status, cin }) {
+  const t = useT()
   if (status === 'loading') {
     // Shaped like the violation card that's about to replace it: the code,
     // then the row of details, then the Pay Now button.
     return (
-      <div className="card state-card" role="status" aria-label="Loading violation details">
+      <div className="card state-card" role="status" aria-label={t('violation.loading')}>
         <Skeleton width="55%" height={20} />
         <Skeleton width="40%" height={12} style={{ marginTop: 10 }} />
         <div style={{ marginTop: 22 }}>
@@ -22,18 +24,18 @@ export default function ViolationStates({ status, cin }) {
   if (status === 'not-found') {
     return (
       <div className="card state-card">
-        <h2 className="screen-title">No violation found</h2>
-        <p>We couldn't find a violation for {cin}. Double-check the QR code on the clamp.</p>
+        <h2 className="screen-title">{t('violation.notFound.title')}</h2>
+        <p>{t('violation.notFound.text', { cin })}</p>
         <Link className="text-link" to="/faq">
-          Read the FAQs
+          {t('common.readFaqs')}
         </Link>
       </div>
     )
   }
   return (
     <div className="card state-card" role="alert">
-      <h2 className="screen-title">Something went wrong</h2>
-      <p>We couldn't load this violation. Check your connection and try again.</p>
+      <h2 className="screen-title">{t('common.somethingWrong')}</h2>
+      <p>{t('violation.error')}</p>
     </div>
   )
 }

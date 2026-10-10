@@ -7,12 +7,15 @@ import Modal from '../../components/Modal'
 import OptionalAsset from '../../components/OptionalAsset'
 import PageHeader from '../../components/PageHeader'
 import usePayment from '../../hooks/usePayment'
+import { useT } from '../../i18n/language-context'
 import { isTestPayment } from '../../payments'
 import { formatDateTime, formatPeso } from '../../utils/format'
 import { breakdownRows } from '../../utils/paymentRows'
 import { ProcessingPayment } from './PayConfirm'
 
 // Figma "RECEIPT" + "RECEIPT OVERLAY".
+// The receipt card stays in English in both languages: it is the document
+// MTPB staff read. Only the text around it follows the language switch.
 // The download button saves the receipt card as a PNG with a plain download:
 // it lands in Downloads and the gallery on Android (the only phones this app
 // supports). No share sheet — Android's often has no "save" option at all.
@@ -55,6 +58,7 @@ export default function Receipt() {
   // goes to Violation History as before.
   const backTo = useLocation().state?.from ?? '/violations'
   const isGuest = Boolean(user?.isGuest)
+  const t = useT()
   const { status, payment } = usePayment(user.uid, reference)
   const cardRef = useRef(null)
   // The image is made as soon as the receipt is on screen. Building it takes
@@ -82,7 +86,7 @@ export default function Receipt() {
     }
   }, [receiptKey])
 
-  if (status === 'loading') return <ProcessingPayment lines={['Loading your receipt...', 'Please wait.']} />
+  if (status === 'loading') return <ProcessingPayment lines={[t('receipt.loading'), t('common.pleaseWait')]} />
   if (status !== 'ready') return <Navigate to="/violations" replace />
   // Only a paid payment has a receipt. Anything else goes back to the
   // violation, which still shows UNPAID and Pay Now.
@@ -95,10 +99,10 @@ export default function Receipt() {
       const blob = (await prepared.current) ?? (await renderReceipt(cardRef.current))
       if (!blob) throw new Error('The receipt image came out empty')
       downloadBlob(blob, `MTPB-receipt-${payment.referenceNumber}.png`)
-      setNotice({ text: 'Receipt saved to your Downloads.', ok: true })
+      setNotice({ text: t('receipt.saved'), ok: true })
     } catch (err) {
       console.error('Could not save receipt', err)
-      setNotice({ text: 'The receipt couldn’t be saved. Please try again.', ok: false })
+      setNotice({ text: t('receipt.saveFailed'), ok: false })
     } finally {
       setSaving(false)
     }
@@ -123,7 +127,7 @@ export default function Receipt() {
   return (
     <div className="page">
       <PageHeader
-        title="Receipt"
+        title={t('receipt.title')}
         back={isGuest ? `/v/${encodeURIComponent(payment.violationId || payment.violationCin || '')}` : backTo}
         action={
           <button
@@ -131,7 +135,7 @@ export default function Receipt() {
             className="header-icon-btn"
             onClick={handleDownload}
             disabled={saving}
-            aria-label="Save receipt as image"
+            aria-label={t('receipt.save')}
           >
             <OptionalAsset
               name="download"
@@ -175,14 +179,12 @@ export default function Receipt() {
         {isGuest && (
           <div className="info-note receipt-body__guest">
             <p>
-              <strong>Save this receipt now.</strong> You paid as a guest, so this receipt is only here while
-              this page is open. Once you close it you can’t open it again — you’d have to ask for a copy at the
-              MTPB office.
+              <strong>{t('receipt.guest.bold')}</strong> {t('receipt.guest.text')}
             </p>
             {payment.email ? (
-              <p>GCash also sends a copy to {payment.email}.</p>
+              <p>{t('receipt.guest.emailed', { email: payment.email })}</p>
             ) : (
-              <p>Your GCash app also keeps a record of the payment.</p>
+              <p>{t('receipt.guest.gcash')}</p>
             )}
           </div>
         )}
@@ -190,18 +192,18 @@ export default function Receipt() {
         {isGuest && (
           <div className="receipt-body__guest-actions">
             <button type="button" className="btn btn--pay btn--primary" onClick={handleDownload} disabled={saving}>
-              {saving ? 'Saving…' : 'Download receipt'}
+              {saving ? t('receipt.saving') : t('receipt.download')}
             </button>
             <Link className="text-button" to="/signup" state={{ returnTo: `/receipts/${reference}` }}>
-              Create an account to keep your receipts
+              {t('receipt.createAccount')}
             </Link>
           </div>
         )}
 
         <p className="receipt-body__thanks">
-          <strong>Thank you for your payment.</strong>
+          <strong>{t('receipt.thanks')}</strong>
           <br />
-          Please drive responsibly.
+          {t('receipt.drive')}
         </p>
       </main>
 
@@ -210,7 +212,7 @@ export default function Receipt() {
           {notice?.text}
         </p>
         <button type="button" className="btn btn--primary notice-modal__ok" onClick={() => setNotice(null)}>
-          Okay
+          {t('receipt.okay')}
         </button>
       </Modal>
     </div>

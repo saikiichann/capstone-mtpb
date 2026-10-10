@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { Navigate, useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import gcashLogo from '../../assets/pay-gcash.webp'
 import { useAuth } from '../../auth/auth-context'
+import LanguageToggle from '../../components/LanguageToggle'
 import PageHeader from '../../components/PageHeader'
 import { PAYMENT_METHODS } from '../../payments'
 import StepIntro from '../../components/StepIntro'
+import { useT } from '../../i18n/language-context'
 
 // Figma "PROCEED TO PAYMENT" (step 2).
 const LOGOS = { gcash: gcashLogo }
@@ -12,6 +14,7 @@ const PH_MOBILE = /^(09|\+639)\d{9}$/
 
 export default function PayDetails() {
   const { violation } = useOutletContext()
+  const t = useT()
   const { method: methodId } = useParams()
   const { user, profile } = useAuth()
   const navigate = useNavigate()
@@ -35,8 +38,8 @@ export default function PayDetails() {
     event.preventDefault()
     const found = {}
     const mobile = mobileNumber.replace(/[\s-]/g, '')
-    if (!PH_MOBILE.test(mobile)) found.mobileNumber = 'Use an 11-digit number like 09171234567.'
-    if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) found.email = 'Enter a valid email or leave it blank.'
+    if (!PH_MOBILE.test(mobile)) found.mobileNumber = t('pay.details.mobileError')
+    if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) found.email = t('pay.details.emailError')
     setErrors(found)
     if (Object.keys(found).length) return
 
@@ -49,21 +52,21 @@ export default function PayDetails() {
 
   return (
     <div className="page">
-      <PageHeader title="Pay Now" back />
+      <PageHeader title={t('pay.title')} back action={<LanguageToggle />} />
 
       <main className="page__body pay-body">
-        <StepIntro step={2} title="Payment Details">
-          Enter the required information to complete your payment.
+        <StepIntro step={2} title={t('pay.details.title')}>
+          {t('pay.details.text')}
         </StepIntro>
 
         <form className="card pay-form" onSubmit={handleSubmit} noValidate>
           <div className="pay-form__method">
             <img src={LOGOS[method.id]} width={42} height={42} alt="" />
-            <span>Payment via {method.label}</span>
+            <span>{t('pay.details.via', { method: method.label })}</span>
           </div>
 
           <div className="pay-field">
-            <label htmlFor="pay-mobile">Mobile Number</label>
+            <label htmlFor="pay-mobile">{t('pay.details.mobile')}</label>
             <input
               id="pay-mobile"
               type="tel"
@@ -86,7 +89,7 @@ export default function PayDetails() {
           </div>
 
           <div className="pay-field">
-            <label htmlFor="pay-email">Email (Optional)</label>
+            <label htmlFor="pay-email">{t('pay.details.email')}</label>
             <input
               id="pay-email"
               type="email"
@@ -103,17 +106,17 @@ export default function PayDetails() {
             />
             {errors.email && <p className="field__error">{errors.email}</p>}
             <p id="pay-email-note" className="pay-field__note">
-              You will receive the payment receipt in this email.
+              {t('pay.details.emailNote')}
             </p>
           </div>
 
           <p className="pay-form__banner">
-            You will be redirected to {method.label} to complete the payment.
+            {t('pay.details.redirect', { method: method.label })}
           </p>
 
           <div className="pay-form__actions">
             <button type="submit" className="btn btn--pay btn--primary">
-              Proceed to {method.label}
+              {t('pay.details.proceed', { method: method.label })}
             </button>
           </div>
         </form>

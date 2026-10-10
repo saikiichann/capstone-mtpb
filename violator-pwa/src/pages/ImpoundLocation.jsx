@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react'
+import LanguageToggle from '../components/LanguageToggle'
 import PageHeader from '../components/PageHeader'
 import { directionsUrl, IMPOUND_LOTS } from '../data/places'
+import { useT } from '../i18n/language-context'
 
 // Leaflet is only downloaded when a map is actually shown.
 const LocationMap = lazy(() => import('../components/LocationMap'))
@@ -9,10 +11,11 @@ const LocationMap = lazy(() => import('../components/LocationMap'))
 // Figma "IMPOUND DETAILS" / "OFFICE HOURS" screens, which aren't built yet.
 export default function ImpoundLocation() {
   const lot = IMPOUND_LOTS[0]
+  const t = useT()
 
   return (
     <div className="page">
-      <PageHeader title="Impound Location" back />
+      <PageHeader title={t('impound.title')} back action={<LanguageToggle />} />
 
       <main className="page__body">
         <section className="card map-card" aria-labelledby="impound-name">
@@ -20,7 +23,7 @@ export default function ImpoundLocation() {
             <LocationMap
               center={lot.position}
               markers={[{ id: lot.id, position: lot.position, label: lot.name }]}
-              label={`Map showing ${lot.name}`}
+              label={t('common.mapShowing', { name: lot.name })}
             />
           </Suspense>
 
@@ -30,7 +33,7 @@ export default function ImpoundLocation() {
             </h2>
             <p className="screen-subtitle">{lot.area}</p>
             <a className="btn btn--primary" href={directionsUrl(lot.position)} target="_blank" rel="noreferrer">
-              Get directions
+              {t('impound.directions')}
             </a>
           </div>
         </section>

@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { useT } from '../i18n/language-context'
 import OptionalAsset from './OptionalAsset'
 
 // Black header with rounded bottom corners, shared by every screen.
@@ -43,6 +44,7 @@ export default function PageHeader({ title, subtitle, greeting, name, size, back
 
 function BackButton({ to, state }) {
   const navigate = useNavigate()
+  const t = useT()
 
   function goBack() {
     if (to) navigate(to, { state })
@@ -52,7 +54,7 @@ function BackButton({ to, state }) {
   }
 
   return (
-    <button type="button" className="header-icon-btn page-header__back" onClick={goBack} aria-label="Go back">
+    <button type="button" className="header-icon-btn page-header__back" onClick={goBack} aria-label={t('common.goBack')}>
       <OptionalAsset
         name="back-arrow"
         width={20}
