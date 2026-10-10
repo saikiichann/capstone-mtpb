@@ -30,6 +30,15 @@ export const config = {
   get appUrl() {
     return required('APP_URL').replace(/\/+$/, '')
   },
+  // The app's Gmail, for receipt emails (server/mailer.js). Optional: without
+  // them no email is sent. The app password is 16 letters; Google shows it
+  // with spaces, which are dropped here.
+  get gmailUser() {
+    return (process.env.GMAIL_USER || '').trim()
+  },
+  get gmailAppPassword() {
+    return (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '')
+  },
   // Other sites allowed to call this API, comma-separated.
   // Add http://localhost:5173 to test the app on your computer against the
   // deployed API.
