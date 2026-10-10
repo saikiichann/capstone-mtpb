@@ -163,7 +163,7 @@ export function createFirestoreStore() {
           referenceNumber,
           method: 'GCash',
           status: 'pending',
-          recordedBy: 'Violator app (PayMongo)',
+          recordedBy: 'Violator app (GCash)',
           paidAt: patch.paidAt,
           createdAt: FieldValue.serverTimestamp(),
           // Not used by the admin app. `uid` lets the violator find their
@@ -183,7 +183,7 @@ export function createFirestoreStore() {
           referenceNumber,
           totalPaid: attempt.totalAmount,
           paidAt: patch.paidAt,
-          updatedBy: 'Violator app (PayMongo)',
+          updatedBy: 'Violator app (GCash)',
           ...stamp,
         })
 

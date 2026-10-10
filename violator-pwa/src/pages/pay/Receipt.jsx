@@ -8,7 +8,6 @@ import OptionalAsset from '../../components/OptionalAsset'
 import PageHeader from '../../components/PageHeader'
 import usePayment from '../../hooks/usePayment'
 import { useT } from '../../i18n/language-context'
-import { isTestPayment } from '../../payments'
 import { formatDateTime, formatPeso } from '../../utils/format'
 import { breakdownRows } from '../../utils/paymentRows'
 import { ProcessingPayment } from './PayConfirm'
@@ -155,9 +154,6 @@ export default function Receipt() {
           <h2 className="receipt-card__title">Official Receipt</h2>
           {payment.awaitingVerification && (
             <p className="receipt-card__sandbox">Payment received – awaiting verification by MTPB staff</p>
-          )}
-          {isTestPayment(payment) && (
-            <p className="receipt-card__sandbox">Sandbox transaction – not valid as an official receipt</p>
           )}
 
           <dl className="receipt-list">

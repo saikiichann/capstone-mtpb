@@ -9,8 +9,8 @@ import { CONTACT_LINE, renderEmail } from './email-layout.js'
 export function buildReceiptEmail(attempt) {
   const email = renderEmail({
     heading: 'OFFICIAL RECEIPT',
-    // Test-mode payments say so, like the receipt page does.
-    note: attempt.livemode === false ? 'Sandbox transaction – not valid as an official receipt' : '',
+    // No test-mode notice (Marco's choice, 2026-10-11): receipts look the same
+    // as they would with real payments.
     message:
       'Your payment was received and is waiting for verification by MTPB staff. Once it is verified, an enforcer will remove the clamp.',
     rows: [

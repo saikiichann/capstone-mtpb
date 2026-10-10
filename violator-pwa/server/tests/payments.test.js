@@ -382,10 +382,12 @@ describe('payment service', () => {
     const mail = mailer.sent[0]
     assert.equal(mail.to, 'juan@example.com')
     assert.equal(mail.subject, 'MTPB payment received – REF-2026-00008')
-    for (const part of ['REF-2026-00008', 'CLMP-2026-0055', 'ABC 1234', 'Illegal Parking', '923.06', 'Sandbox transaction']) {
+    for (const part of ['REF-2026-00008', 'CLMP-2026-0055', 'ABC 1234', 'Illegal Parking', '923.06']) {
       assert.ok(mail.text.includes(part), `text has ${part}`)
       assert.ok(mail.html.includes(part), `html has ${part}`)
     }
+    // Looks like a real receipt even for test payments (no sandbox notice).
+    assert.ok(!/sandbox/i.test(mail.text + mail.html))
     // The MTPB seal, inside the email, as on the receipt page.
     assert.ok(mail.html.includes('src="cid:mtpb-logo"'))
     const logo = mail.attachments.find((a) => a.cid === 'mtpb-logo')
