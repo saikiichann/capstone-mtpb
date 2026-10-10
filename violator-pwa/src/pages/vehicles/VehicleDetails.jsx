@@ -1,12 +1,9 @@
-import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../../auth/auth-context'
-import Modal from '../../components/Modal'
 import PageHeader from '../../components/PageHeader'
 import StatusBadge from '../../components/StatusBadge'
 import {
   VERIFICATION,
-  removeVehicle,
   vehicleDescription,
   vehiclePhoto,
   vehicleTypeLine,
@@ -18,7 +15,7 @@ import VehicleStates from './VehicleStates'
 
 // Not in the Figma file yet: opened by tapping a vehicle in My Vehicles.
 // Read-only: vehicles come from the enforcement side, so there is nothing
-// here for the owner to change.
+// here for the owner to change or remove.
 const STATUS_NOTES = {
   [VERIFICATION.pending]: 'MTPB is still checking this vehicle. Its violations will show once it’s approved.',
   [VERIFICATION.active]: 'Verified by MTPB. Violations on this plate show in your Violation History.',
@@ -29,11 +26,7 @@ const STATUS_NOTES = {
 export default function VehicleDetails() {
   const { vehicleId } = useParams()
   const { user } = useAuth()
-  const navigate = useNavigate()
   const { status, vehicle } = useVehicle(user?.uid, vehicleId)
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [removing, setRemoving] = useState(false)
-  const [removeError, setRemoveError] = useState('')
 
   if (status !== 'ready') {
     return (
@@ -59,19 +52,6 @@ export default function VehicleDetails() {
     // and OR/CR numbers belong to the enforcement side, not to this screen.
     ['Added On', formatDateTime(vehicle.createdAt, { short: true })],
   ]
-
-  async function handleRemove() {
-    setRemoving(true)
-    setRemoveError('')
-    try {
-      await removeVehicle(user.uid, vehicle)
-      navigate('/vehicles', { replace: true })
-    } catch (err) {
-      console.error('Could not remove vehicle', err)
-      setRemoveError('We couldn’t remove this vehicle. Check your connection and try again.')
-      setRemoving(false)
-    }
-  }
 
   return (
     <div className="page">
@@ -100,8 +80,8 @@ export default function VehicleDetails() {
 
         <DetailSection title="Vehicle Information" rows={info} />
 
-        <div className="vehicle-details__actions">
-          {verification === VERIFICATION.active && (
+        {verification === VERIFICATION.active && (
+          <div className="vehicle-details__actions">
             <Link
               className="btn btn--pay btn--primary"
               to={`/violations?plate=${encodeURIComponent(vehicle.plateNumber)}`}
@@ -109,45 +89,9 @@ export default function VehicleDetails() {
             >
               View Violations
             </Link>
-          )}
-          <button type="button" className="btn btn--pay btn--danger-outline" onClick={() => setConfirmOpen(true)}>
-            Remove Vehicle
-          </button>
-        </div>
-      </main>
-
-      <Modal
-        open={confirmOpen}
-        onClose={() => !removing && setConfirmOpen(false)}
-        labelledBy="remove-title"
-        className="confirm-modal"
-      >
-        <h2 id="remove-title" className="confirm-modal__title">
-          Remove {vehicle.plateNumber}?
-        </h2>
-        <p className="confirm-modal__text">
-          It will no longer appear in your account, and its violations will stop showing here. Your past payments
-          and receipts stay on record. To add it back, you’ll need to register it and wait for verification again.
-        </p>
-        {removeError && (
-          <p className="form-message form-message--error" role="alert">
-            {removeError}
-          </p>
+          </div>
         )}
-        <div className="confirm-modal__actions">
-          <button
-            type="button"
-            className="btn btn--pay btn--outline"
-            onClick={() => setConfirmOpen(false)}
-            disabled={removing}
-          >
-            Cancel
-          </button>
-          <button type="button" className="btn btn--pay btn--danger" onClick={handleRemove} disabled={removing}>
-            {removing ? 'Removing…' : 'Remove'}
-          </button>
-        </div>
-      </Modal>
+      </main>
     </div>
   )
 }

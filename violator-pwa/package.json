@@ -9,6 +9,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "test": "node --test \"server/tests/*.test.js\" \"src/**/*.test.js\"",
     "test:server": "node --test \"server/tests/*.test.js\""
   },
   "dependencies": {

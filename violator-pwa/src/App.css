@@ -4543,3 +4543,45 @@ div.settings-row {
   position: relative;
   flex: none;
 }
+
+/* ---------- Update prompt (src/components/UpdatePrompt.jsx) ---------- */
+.update-prompt {
+  position: fixed;
+  z-index: 50;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(min(100vw, var(--app-max-width)) - 32px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+  animation: update-prompt-in 0.25s ease-out;
+}
+.update-prompt__text { margin: 0; font-size: 14px; font-weight: 700; flex: 1 1 180px; }
+.update-prompt__actions { display: flex; gap: 8px; }
+.update-prompt__later,
+.update-prompt__refresh {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.update-prompt__later { background: transparent; border: 1px solid var(--color-border-muted); color: var(--color-ink); }
+.update-prompt__refresh { background: var(--color-tab-active); border: 1px solid var(--color-tab-active); color: var(--color-on-ink); }
+@keyframes update-prompt-in {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .update-prompt { animation: none; }
+}

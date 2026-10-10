@@ -1,6 +1,5 @@
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -30,7 +29,8 @@ import { COLLECTIONS } from './schema'
 //
 // Owners no longer add vehicles themselves. A vehicle arrives on the account
 // from the enforcement side when a violation is recorded against its plate,
-// so this file only reads, edits and removes.
+// so this file only reads. Owners can't remove them either: they couldn't
+// add one back.
 //
 // A vehicle may still arrive as "pending" and be set to "active" (or
 // "rejected") by MTPB. Only active vehicles show their violations, so nobody
@@ -68,16 +68,6 @@ function readDemo(uid) {
     return { added: [], edits: {}, removed: [], ...saved }
   } catch {
     return { added: [], edits: {}, removed: [] }
-  }
-}
-
-function changeDemo(uid, change) {
-  try {
-    const all = JSON.parse(localStorage.getItem(DEMO_KEY)) || {}
-    all[uid] = change(readDemo(uid))
-    localStorage.setItem(DEMO_KEY, JSON.stringify(all))
-  } catch {
-    // Storage unavailable: the change won't be remembered after a refresh.
   }
 }
 
@@ -126,22 +116,6 @@ export function verificationOf(vehicle) {
 
 export function isActiveVehicle(vehicle) {
   return verificationOf(vehicle) === VERIFICATION.active
-}
-
-// ---- Removing ----
-
-// Violations and payments stay in the records; they just stop showing in
-// the app once the vehicle is removed.
-export async function removeVehicle(ownerUid, vehicle) {
-  if (shouldUseSampleData) {
-    changeDemo(ownerUid, (demo) => ({
-      ...demo,
-      added: demo.added.filter((v) => v.id !== vehicle.id),
-      removed: [...demo.removed, vehicle.id],
-    }))
-    return
-  }
-  await deleteDoc(doc(db, COLLECTIONS.vehicles, vehicle.id))
 }
 
 // ---- Display helpers ----
