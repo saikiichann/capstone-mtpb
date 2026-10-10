@@ -67,7 +67,7 @@ const en = {
   'violation.alreadyPaid': 'This violation is already paid.',
   'violation.waitEnforcer': 'Please wait for an enforcer to remove the clamp.',
   'violation.guestReceipt':
-    'Paid as a guest? The receipt was only available right after paying. Ask the MTPB office for a copy.',
+    'Paid as a guest? Check your email for the MTPB receipt, if you entered one. Otherwise, ask the MTPB office for a copy.',
   'violation.avoid': 'Avoid penalties.',
   'violation.onTime': 'Pay your fine on time.',
   'violation.makeAccount': 'Make an Account',
@@ -154,7 +154,7 @@ const en = {
   'success.summary': 'Payment summary',
   'success.total': 'Total Amount',
   'success.guest':
-    'You paid as a guest, so this receipt is only here while this page is open. Open it and download a copy before you leave.',
+    'You paid as a guest. If you entered your email, the receipt was sent there too. Open the receipt and download a copy before you leave.',
   'success.seeReceipt': 'See Receipt',
 
   // Payment rows (success screen)
@@ -174,9 +174,7 @@ const en = {
   'receipt.saveFailed': 'The receipt couldn’t be saved. Please try again.',
   'receipt.guest.bold': 'Save this receipt now.',
   'receipt.guest.text':
-    'You paid as a guest, so this receipt is only here while this page is open. Once you close it you can’t open it again — you’d have to ask for a copy at the MTPB office.',
-  'receipt.guest.emailed': 'GCash also sends a copy to {email}.',
-  'receipt.guest.gcash': 'Your GCash app also keeps a record of the payment.',
+    'You paid as a guest, so this receipt is only here while this page is open. If you entered your email when paying, a copy was also sent there. Otherwise, ask the MTPB office for a copy.',
   'receipt.saving': 'Saving…',
   'receipt.download': 'Download receipt',
   'receipt.createAccount': 'Create an account to keep your receipts',
@@ -263,7 +261,7 @@ const fil = {
   'violation.alreadyPaid': 'Bayad na ang paglabag na ito.',
   'violation.waitEnforcer': 'Hintayin ang enforcer na mag-aalis ng clamp.',
   'violation.guestReceipt':
-    'Nagbayad bilang guest? Makikita lang ang resibo pagkatapos mismong magbayad. Humingi ng kopya sa opisina ng MTPB.',
+    'Nagbayad bilang guest? Tingnan ang iyong email para sa resibo ng MTPB, kung naglagay ka nito. Kung hindi, humingi ng kopya sa opisina ng MTPB.',
   'violation.avoid': 'Iwasan ang dagdag na multa.',
   'violation.onTime': 'Bayaran ang multa sa tamang oras.',
   'violation.makeAccount': 'Gumawa ng Account',
@@ -350,7 +348,7 @@ const fil = {
   'success.summary': 'Buod ng bayad',
   'success.total': 'Kabuuang Halaga',
   'success.guest':
-    'Nagbayad ka bilang guest, kaya makikita lang ang resibong ito habang bukas ang page na ito. Buksan ito at mag-download ng kopya bago umalis.',
+    'Nagbayad ka bilang guest. Kung naglagay ka ng email, ipinadala rin doon ang resibo. Buksan ang resibo at mag-download ng kopya bago umalis.',
   'success.seeReceipt': 'Tingnan ang Resibo',
 
   // Payment rows (success screen)
@@ -370,9 +368,7 @@ const fil = {
   'receipt.saveFailed': 'Hindi na-save ang resibo. Pakisubukang muli.',
   'receipt.guest.bold': 'I-save na ang resibong ito.',
   'receipt.guest.text':
-    'Nagbayad ka bilang guest, kaya makikita lang ang resibong ito habang bukas ang page na ito. Kapag isinara mo ito, hindi mo na ito mabubuksan muli — kailangan mong humingi ng kopya sa opisina ng MTPB.',
-  'receipt.guest.emailed': 'Nagpapadala rin ang GCash ng kopya sa {email}.',
-  'receipt.guest.gcash': 'May tala rin ng bayad sa iyong GCash app.',
+    'Nagbayad ka bilang guest, kaya makikita lang ang resibong ito habang bukas ang page na ito. Kung naglagay ka ng email sa pagbabayad, ipinadala rin doon ang kopya. Kung hindi, humingi ng kopya sa opisina ng MTPB.',
   'receipt.saving': 'Sine-save…',
   'receipt.download': 'I-download ang resibo',
   'receipt.createAccount': 'Gumawa ng account para maitabi ang iyong mga resibo',

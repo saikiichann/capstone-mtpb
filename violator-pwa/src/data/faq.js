@@ -54,7 +54,7 @@ export const FAQ_ENTRIES = [
     category: 'payment',
     question: 'Can I get another copy of my receipt?',
     answer:
-      'If you paid as a **guest**, the receipt is only available while that page is open, so please download it right away. Once the page is closed, a copy must be requested at the MTPB Office. With an account, your receipts remain in History → Payment History.',
+      'If you entered your email when paying, the MTPB receipt is emailed to you right after the payment. You can also download it from the receipt page before closing it. If you paid as a **guest** without an email and the page is closed, a copy must be requested at the MTPB Office. With an account, your receipts remain in History → Payment History.',
   },
   {
     id: 'pay-not-reflected',
