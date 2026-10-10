@@ -38,6 +38,10 @@ Server (from `.env.server.example`), Production only:
 - [ ] `FIREBASE_SERVICE_ACCOUNT` (the whole JSON key, as one value)
 - [ ] `APP_URL`: `https://mtpb-violators-pwa.vercel.app`
 - [ ] `ALLOWED_ORIGINS`: the same URL (comma-separate if there are more)
+- [ ] `GMAIL_USER`: `mtpb.violatorportal@gmail.com` (sends the MTPB receipt email; optional)
+- [ ] `GMAIL_APP_PASSWORD`: an **app password** for that Gmail (Google Account → Security → 2-Step
+  Verification on → App passwords), marked Sensitive. Without these two, payments still work and no email is
+  sent.
 
 **Check the values, not just the names.** Once, `AUTH_DOMAIN` and `PROJECT_ID` were saved with their own names
 as values and logins hung on "Logging in…". `VITE_…` values are built into the app, so **redeploy after changing
