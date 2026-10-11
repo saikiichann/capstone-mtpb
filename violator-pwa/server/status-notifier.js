@@ -1,9 +1,11 @@
 import { buildStatusEmail } from './status-email.js'
 
 // Emails people when MTPB staff verify or reject a GCash payment they made in
-// the app (checklist P2). Run every ~15 minutes by a scheduled GitHub check
-// (.github/workflows/violator-pwa-payment-updates.yml) calling
-// /api/notify-payment-updates.
+// the app (checklist P2). cron-job.org calls /api/notify-payment-updates every
+// 5 minutes; the scheduled GitHub check
+// (.github/workflows/violator-pwa-payment-updates.yml) calls it too, as a backup.
+// GitHub's schedule turned out to run only every few hours. Calling it twice is
+// harmless: each attempt remembers what was already sent.
 //
 // Mira's Payment Verification sets `verificationStatus` ("Verified" /
 // "Rejected"), `verifiedAt` and, when rejecting, `rejectionReason` on the
@@ -11,11 +13,9 @@ import { buildStatusEmail } from './status-email.js'
 // own checkout attempt (`statusEmailFor`). Cash payments recorded at the
 // office have no attempt and are skipped.
 
-// How far back each run looks: far longer than the 15-minute schedule, so a
-// late or skipped GitHub run loses nothing (the attempt remembers what was
-// sent), but short enough that switching this on doesn't email people about
-// payments decided days ago.
-export const LOOKBACK_MS = 6 * 60 * 60 * 1000
+// How far back each run looks: a full day, so even hours without a run lose
+// nothing (the attempt remembers what was sent).
+export const LOOKBACK_MS = 24 * 60 * 60 * 1000
 // Keeps one run well inside Vercel's time limit.
 export const MAX_EMAILS_PER_RUN = 20
 
