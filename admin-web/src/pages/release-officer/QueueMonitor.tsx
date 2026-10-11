@@ -189,7 +189,6 @@ export default function QueueMonitor() {
       return;
     }
 
-    // FIFO guard: warn kung may nauunang verified na case sa queue.
     const firstReleasable = rows.find((r) => r.canRelease);
     if (firstReleasable && firstReleasable.id !== row.id) {
       const proceed = window.confirm(
@@ -217,7 +216,7 @@ export default function QueueMonitor() {
         clampId: row.clampId,
         verifiedAt: row.verifiedAt,
         officerName: currentUser.name,
-        totalPaid: row.totalPaid ?? 0, // ✅ FIX: idinagdag — kailangan ng lib/release.ts
+        totalPaid: row.totalPaid ?? 0,
       });
     } catch (err: any) {
       console.error("Release failed:", err);

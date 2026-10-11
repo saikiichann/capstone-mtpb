@@ -386,17 +386,6 @@
   white-space: nowrap;
 }
 
-/* OR Number cell — same treatment as Reference for audit readability */
-.transaction-history-page .cell-or-number {
-  font-family: inherit;
-  font-weight: 500;
-  color: #111827;
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
 .transaction-history-page .cell-plate {
   font-weight: 600;
   color: #111827;
@@ -428,6 +417,61 @@
 .transaction-history-page .cell-empty {
   color: #9CA3AF;
   font-style: italic;
+}
+
+/* ==================================================================
+   VIOLATOR ID COLUMN
+================================================================== */
+.transaction-history-page .cell-violator {
+  min-width: 150px;
+  white-space: normal;
+}
+
+.transaction-history-page .violator-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.transaction-history-page .violator-name {
+  font-weight: 500;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.transaction-history-page .violator-tag {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.transaction-history-page .violator-tag.uid {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.transaction-history-page .violator-tag.guest {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+/* Buong UID/guestId nasa tooltip (title) kapag pinutol */
+.transaction-history-page .violator-id {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "Courier New", monospace;
+  font-size: 11px;
+  color: #6B7280;
 }
 
 /* ==================================================================
@@ -552,5 +596,18 @@
   .transaction-history-page .pagination {
     flex-wrap: wrap;
     justify-content: center;
+  }
+
+  .transaction-history-page .cell-violator {
+    min-width: 120px;
+  }
+
+  .transaction-history-page .violator-name {
+    font-size: 13px;
+  }
+
+  .transaction-history-page .violator-tag {
+    font-size: 11px;
+    padding: 3px 10px;
   }
 }

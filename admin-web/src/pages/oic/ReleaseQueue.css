@@ -407,6 +407,55 @@
 }
 
 /* ==================================================================
+   VIOLATOR CELL (⚠️ ADDED)
+================================================================== */
+.release-queue-page .cell-violator {
+  min-width: 140px;
+  white-space: normal;
+}
+
+.release-queue-page .violator-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.release-queue-page .violator-name {
+  font-weight: 500;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.release-queue-page .violator-tag {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.release-queue-page .violator-tag.uid {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.release-queue-page .violator-tag.guest {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.release-queue-page .cell-empty {
+  color: #9CA3AF;
+  font-style: italic;
+}
+
+/* ==================================================================
    STATUS PILL
 ================================================================== */
 .release-queue-page .status-pill {
@@ -530,5 +579,19 @@
   .release-queue-page .pagination {
     flex-wrap: wrap;
     justify-content: center;
+  }
+
+  /* ⚠️ ADDED: violator cell on mobile */
+  .release-queue-page .cell-violator {
+    min-width: 120px;
+  }
+
+  .release-queue-page .violator-name {
+    font-size: 13px;
+  }
+
+  .release-queue-page .violator-tag {
+    font-size: 11px;
+    padding: 3px 10px;
   }
 }

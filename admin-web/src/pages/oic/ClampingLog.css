@@ -316,8 +316,7 @@
 }
 
 /* ==================================================================
-   HEADER ROW — "Sector 3 / Clamping Log" on the left,
-   "Active clamps: N total" on the right (matches Figma)
+   HEADER ROW
 ================================================================== */
 .log-header {
   display: flex;
@@ -342,8 +341,6 @@
 
 /* ==================================================================
    SEARCH + FILTER TOOLBAR
-   Side-by-side layout: search bar (flex: 1) on the left, filter
-   dropdown (fixed width) on the right.
 ================================================================== */
 .clamping-page .clamping-toolbar {
   display: flex;
@@ -520,7 +517,57 @@
   color: #166534;
 }
 
-/* ---- Subject to Impound button ---- */
+/* ==================================================================
+   AUTO-FLAG IMPOUND BADGES
+================================================================== */
+
+/* "Within 24hr grace" — waiting for grace period to expire */
+.clamping-page .impound-pending {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #F0FDF4;
+  color: #166534;
+  border: 1px solid #22C55E;
+}
+
+/* "Subject to Impound" — flagged (manual or auto) */
+.clamping-page .badge-impound {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #FEE2E2;
+  color: #991B1B;
+  border: 1px solid #DC2626;
+}
+
+/* Auto-flagged variant — amber */
+.clamping-page .badge-impound-auto {
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #F59E0B;
+}
+
+/* "Impounded" — already towed */
+.clamping-page .badge-impounded {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #E5E7EB;
+  color: #374151;
+  border: 1px solid #9CA3AF;
+}
+
+/* ---- Legacy button (kept for backward compatibility) ---- */
 .btn-subject-impound {
   padding: 6px 14px;
   border-radius: 8px;
@@ -639,7 +686,7 @@
 }
 
 /* ==================================================================
-   CONFIRM MODAL
+   CONFIRM MODAL (legacy — kept for backup)
 ================================================================== */
 .clamping-page .modal-backdrop {
   position: fixed;

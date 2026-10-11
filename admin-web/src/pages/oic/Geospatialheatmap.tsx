@@ -61,10 +61,19 @@ type RoleSlug =
 
 type CurrentUser = { name: string; role: RoleSlug };
 
-/** Only the fields the heatmap needs from each violation. */
+/**
+ * ⚠️ CHANGED: Kinuha na ang exact location mula sa `locationCoords` (lat/lng)
+ * imbes na `barangay` text. Mas accurate ang pin position at hindi na
+ * aasa sa text field na madalas walang laman.
+ */
 type ViolationPoint = {
+  lat: number;
+  lng: number;
   barangay: string | null;
   violationType: string | null;
+  cin: string | null;
+  plateNo: string | null;
+  location: string | null;
 };
 
 type AreaStat = {
@@ -89,6 +98,7 @@ type NavGroup = { label: string; items: NavItem[] };
 ------------------------------------------------------------------ */
 const SECTOR_ID = "sector-3";
 const UNKNOWN_TYPE = "Not recorded";
+const UNKNOWN_AREA = "Unassigned";
 
 const ROLE_LABELS: Record<RoleSlug, string> = {
   oic: "Officer in Charge",
@@ -101,8 +111,7 @@ const ROLE_LABELS: Record<RoleSlug, string> = {
   "impounding-staff": "Impounding Staff",
 };
 
-/** Map pin positions for the Sector 3 areas. Areas not listed here still
- *  appear in the lists, just without a pin. */
+/** Map pin positions for the Sector 3 areas. */
 const AREA_CENTERS: Record<string, [number, number]> = {
   "San Nicolas": [14.6057, 120.9698],
   "Sta. Cruz": [14.6091, 120.9822],
@@ -255,6 +264,38 @@ const canonicalArea = (raw: string | null): string | null => {
 };
 
 /**
+ * ⚠️ ADDED: Derive area name from coordinates — para malaman kung saan
+ * area ng Sector 3 napupunta ang isang pin. Falls back to "Unassigned"
+ * kung labas sa boundary.
+ */
+const deriveAreaFromCoords = (lat: number, lng: number): string => {
+  // Simple bounding box check for the 4 known areas
+  // (in production, use actual barangay polygon data)
+  const distance = (
+    a: [number, number],
+    b: [number, number]
+  ): number => {
+    const dLat = a[0] - b[0];
+    const dLng = a[1] - b[1];
+    return Math.sqrt(dLat * dLat + dLng * dLng);
+  };
+
+  let closest: { name: string; dist: number } | null = null;
+  for (const [name, center] of Object.entries(AREA_CENTERS)) {
+    const d = distance([lat, lng], center);
+    if (!closest || d < closest.dist) {
+      closest = { name, dist: d };
+    }
+  }
+
+  // Kung ang closest area ay malayo (> 0.02 degrees ~ 2km), i-flag as unassigned
+  if (closest && closest.dist < 0.02) {
+    return closest.name;
+  }
+  return UNKNOWN_AREA;
+};
+
+/**
  * Green → yellow → red, scaled against the busiest area. The busiest area
  * is always red; everything else is placed relative to it. The legend bar in
  * the CSS uses the same hues.
@@ -288,6 +329,25 @@ const pinIcon = (color: string, label: string, value: number) =>
     `,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
+  });
+
+/**
+ * ⚠️ ADDED: Location pin icon for individual violations (smaller than area pin)
+ */
+const violationPinIcon = (color: string) =>
+  L.divIcon({
+    className: "",
+    html: `
+      <div style="
+        width:12px;height:12px;
+        background:${color};
+        border:2px solid white;
+        border-radius:50%;
+        box-shadow:0 1px 4px rgba(0,0,0,0.4);
+      "></div>
+    `,
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
   });
 
 function InvalidateSizeOnMount() {
@@ -341,8 +401,9 @@ export default function GeospatialHeatmap() {
   }, []);
 
   /**
-   * Sector 3 violations only. A violation without `sectorId` is not part of
-   * the heatmap at all, so the enforcer flow has to write it.
+   * ⚠️ CHANGED: Kinuha na ang `locationCoords` (lat/lng) imbes na `barangay`
+   * text field. Real location data na — kasama ang CIN, plate, at location
+   * description para may context ang bawat pin.
    */
   useEffect(() => {
     const q = query(
@@ -353,15 +414,37 @@ export default function GeospatialHeatmap() {
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        setPoints(
-          snap.docs.map((d) => {
-            const data = d.data();
-            return {
-              barangay: (data.barangay as string) ?? null,
-              violationType: (data.violationType as string) ?? null,
-            };
-          })
-        );
+        const fetched: ViolationPoint[] = [];
+
+        snap.docs.forEach((d) => {
+          const data = d.data();
+
+          // ⚠️ CHANGED: Basahin ang locationCoords (map) imbes na barangay
+          const coords = data.locationCoords as
+            | { lat: number; lng: number }
+            | undefined;
+
+          if (
+            !coords ||
+            typeof coords.lat !== "number" ||
+            typeof coords.lng !== "number"
+          ) {
+            // Skip violations na walang valid coordinates
+            return;
+          }
+
+          fetched.push({
+            lat: coords.lat,
+            lng: coords.lng,
+            barangay: (data.barangay as string) ?? null,
+            violationType: (data.violationType as string) ?? null,
+            cin: (data.cin as string) ?? null,
+            plateNo: (data.plateNo as string) ?? null,
+            location: (data.location as string) ?? null,
+          });
+        });
+
+        setPoints(fetched);
         setLoading(false);
       },
       (err) => {
@@ -411,22 +494,34 @@ export default function GeospatialHeatmap() {
     [currentUser.role]
   );
 
-  /* Group violations by area */
+  /**
+   * ⚠️ CHANGED: Nag-group na base sa canonical area (derived from coords
+   * kung walang barangay text). Mas accurate na ang area assignment.
+   */
   const { areas, unassigned } = useMemo(() => {
-    const groups = new Map<string, { count: number; types: Map<string, number> }>();
+    const groups = new Map<
+      string,
+      { count: number; types: Map<string, number> }
+    >();
     let missing = 0;
 
     points.forEach((point) => {
-      const name = canonicalArea(point.barangay);
-      if (!name) {
+      // ⚠️ CHANGED: Canonical area — gamitin ang barangay text kung meron,
+      // otherwise derive mula sa coordinates
+      const rawArea =
+        canonicalArea(point.barangay) ??
+        deriveAreaFromCoords(point.lat, point.lng);
+
+      if (!rawArea || rawArea === UNKNOWN_AREA) {
         missing++;
         return;
       }
-      const group = groups.get(name) ?? { count: 0, types: new Map() };
+
+      const group = groups.get(rawArea) ?? { count: 0, types: new Map() };
       group.count++;
       const type = point.violationType?.trim() || UNKNOWN_TYPE;
       group.types.set(type, (group.types.get(type) ?? 0) + 1);
-      groups.set(name, group);
+      groups.set(rawArea, group);
     });
 
     const max = Math.max(1, ...Array.from(groups.values()).map((g) => g.count));
@@ -575,6 +670,41 @@ export default function GeospatialHeatmap() {
                   pathOptions={{ color: "#2547d0", weight: 3, fillOpacity: 0 }}
                 />
 
+                {/* ⚠️ ADDED: Individual violation pins (real location) */}
+                {points.map((point, idx) => (
+                  <Marker
+                    key={`violation-${idx}-${point.cin ?? idx}`}
+                    position={[point.lat, point.lng]}
+                    icon={violationPinIcon("#dc2626")}
+                  >
+                    <Popup>
+                      <div className="map-popup">
+                        <div className="map-popup-title">
+                          {point.cin ?? "Unknown CIN"}
+                        </div>
+                        {point.plateNo && (
+                          <div>
+                            <strong>Plate:</strong> {point.plateNo}
+                          </div>
+                        )}
+                        <div>
+                          <strong>Type:</strong>{" "}
+                          {point.violationType ?? UNKNOWN_TYPE}
+                        </div>
+                        {point.location && (
+                          <div className="map-popup-muted">
+                            {point.location}
+                          </div>
+                        )}
+                        <div className="map-popup-muted">
+                          📍 {point.lat.toFixed(5)}, {point.lng.toFixed(5)}
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+
+                {/* Area pins (aggregated) */}
                 {pinnedAreas.map((area) => (
                   <Marker
                     key={area.name}
@@ -608,7 +738,9 @@ export default function GeospatialHeatmap() {
                   </div>
                 ) : densityTiles.length === 0 ? (
                   <div className="geo-empty">
-                    <p>No Sector 3 violations with a barangay recorded yet.</p>
+                    <p>
+                      No Sector 3 violations with location data recorded yet.
+                    </p>
                   </div>
                 ) : (
                   <>
@@ -635,9 +767,10 @@ export default function GeospatialHeatmap() {
 
                 {unassigned > 0 && (
                   <p className="geo-note">
-                    {unassigned} Sector 3 violation{unassigned === 1 ? "" : "s"}{" "}
-                    {unassigned === 1 ? "has" : "have"} no barangay recorded and{" "}
-                    {unassigned === 1 ? "is" : "are"} not counted.
+                    {unassigned} Sector 3 violation
+                    {unassigned === 1 ? "" : "s"}{" "}
+                    {unassigned === 1 ? "has" : "have"} no location inside a
+                    known area and {unassigned === 1 ? "is" : "are"} not counted.
                   </p>
                 )}
               </div>

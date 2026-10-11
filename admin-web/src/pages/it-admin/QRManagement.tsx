@@ -22,6 +22,10 @@ import {
   Bike,
   AlertTriangle,
   RefreshCw,
+  Wrench,
+  MapPin,
+  UserCheck,
+  MoreVertical,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
@@ -88,13 +92,14 @@ type ClampState =
 
 type ClampType = "Car" | "Motorcycle";
 
+type ClampCondition = "good" | "damaged" | "needs-repair" | "lost";
+
 type EnforcementType = "clamped" | "impounded";
 
 type ClampRow = {
   id: string;
   clampId: string;
   clampType: ClampType;
-  /** Opaque random token encoded in the printed QR. Null on older clamps. */
   scanToken: string | null;
   storedStatus: ClampState | null;
   state: ClampState;
@@ -108,6 +113,17 @@ type ClampRow = {
   paidAt: Timestamp | null;
   readyAt: Timestamp | null;
   releasedAt: Timestamp | null;
+  condition: ClampCondition;
+  physicalLocation: string | null;
+  assignedTo: string | null;
+  assignedAt: Timestamp | null;
+  notes: string | null;
+  lastViolatorUid: string | null;
+  lastGuestId: string | null;
+  lastViolatorName: string | null;
+  lastPlateNo: string | null;
+  lastViolationAt: Timestamp | null;
+  lastCin: string | null;
 };
 
 type ViolationDetails = {
@@ -152,6 +168,21 @@ const STATUS_LABELS: Record<ClampState, string> = {
   released: "Released",
 };
 
+const CONDITION_OPTIONS: Array<ClampCondition | "All Conditions"> = [
+  "All Conditions",
+  "good",
+  "damaged",
+  "needs-repair",
+  "lost",
+];
+
+const CONDITION_LABELS: Record<ClampCondition, string> = {
+  good: "Good",
+  damaged: "Damaged",
+  "needs-repair": "Needs Repair",
+  lost: "Lost",
+};
+
 const TYPE_OPTIONS: Array<ClampType | "All Types"> = [
   "All Types",
   "Car",
@@ -177,39 +208,22 @@ const navGroups: NavGroup[] = [
   {
     title: "Monitoring",
     items: [
-      {
-        label: "System Health",
-        icon: Activity,
-        path: "/it-admin/system-health",
-      },
-      {
-        label: "Backup & Restore",
-        icon: DatabaseBackup,
-        path: "/it-admin/backup",
-      },
+      { label: "System Health", icon: Activity, path: "/it-admin/system-health" },
+      { label: "Backup & Restore", icon: DatabaseBackup, path: "/it-admin/backup" },
     ],
   },
   {
     title: "Access Control",
     items: [
       { label: "User Management", icon: Users, path: "/it-admin/users" },
-      {
-        label: "Roles & Permissions",
-        icon: ShieldCheck,
-        path: "/it-admin/roles",
-      },
+      { label: "Roles & Permissions", icon: ShieldCheck, path: "/it-admin/roles" },
       { label: "Session Monitor", icon: Monitor, path: "/it-admin/sessions" },
     ],
   },
   {
     title: "Enforcement Tools",
     items: [
-      {
-        label: "QR Codes",
-        icon: QrCode,
-        path: "/it-admin/qr-codes",
-        active: true,
-      },
+      { label: "QR Codes", icon: QrCode, path: "/it-admin/qr-codes", active: true },
     ],
   },
   {
@@ -227,10 +241,6 @@ const navGroups: NavGroup[] = [
 
 // ---------------------------------------------------------------------------
 // HELPERS
-//
-// CIN generation and issueViolationForClamp live in src/lib/enforcement.ts.
-// They cannot be exported from here: a .tsx file with non-component exports
-// loses Fast Refresh.
 // ---------------------------------------------------------------------------
 const formatDateTime = (ts: Timestamp | null): string => {
   if (!ts) return "—";
@@ -265,15 +275,16 @@ const getStatusClass = (status: ClampState): string => {
   return map[status] ?? "";
 };
 
-/**
- * Generates the opaque token that goes into the QR code.
- *
- * 24 random bytes (192 bits) from the browser's cryptographically secure
- * generator, base64url-encoded to 32 characters. It carries no meaning and
- * cannot be guessed or derived from the Clamp ID — the only way to use it is
- * to look it up in the database. Math.random() must NOT be used here: it is
- * predictable.
- */
+const getConditionClass = (condition: ClampCondition): string => {
+  const map: Record<ClampCondition, string> = {
+    good: "condition-good",
+    damaged: "condition-damaged",
+    "needs-repair": "condition-needs-repair",
+    lost: "condition-lost",
+  };
+  return map[condition] ?? "";
+};
+
 const generateScanToken = (): string => {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
@@ -287,7 +298,6 @@ const generateScanToken = (): string => {
     .replace(/=+$/, "");
 };
 
-/** The QR encodes only the token. The Clamp ID is never part of the URL. */
 const buildScanUrl = (token: string): string =>
   `${QR_BASE_URL}?t=${encodeURIComponent(token)}`;
 
@@ -308,25 +318,15 @@ const deriveState = (data: {
 
 const detectClampType = (clampId: string): ClampType | null => {
   const trimmed = clampId.trim().toUpperCase();
-
-  if (/^[A-Z]+-\d+$/.test(trimmed)) {
-    return "Motorcycle";
-  }
-
-  if (/^\d{2}-\d{2}$/.test(trimmed)) {
-    return "Car";
-  }
-
+  if (/^[A-Z]+-\d+$/.test(trimmed)) return "Motorcycle";
+  if (/^\d{2}-\d{2}$/.test(trimmed)) return "Car";
   return null;
 };
 
 const validateClampId = (id: string): { valid: boolean; message?: string } => {
   const trimmed = id.trim().toUpperCase();
 
-  if (!trimmed) {
-    return { valid: false, message: "Clamp ID is required." };
-  }
-
+  if (!trimmed) return { valid: false, message: "Clamp ID is required." };
   if (!/^[A-Z0-9-]+$/.test(trimmed)) {
     return { valid: false, message: "Use only letters, numbers, and dashes." };
   }
@@ -335,15 +335,13 @@ const validateClampId = (id: string): { valid: boolean; message?: string } => {
   if (!type) {
     return {
       valid: false,
-      message:
-        "Format must be like A-20, R-4, RA-05 (Motorcycle) or 20-04 (Car).",
+      message: "Format must be like A-20, R-4, RA-05 (Motorcycle) or 20-04 (Car).",
     };
   }
 
   return { valid: true };
 };
 
-/** Opens the print window with the QR (token URL) and the clamp label. */
 const openPrintWindow = (clampId: string, token: string): void => {
   const printWindow = window.open("", "_blank", "width=600,height=800");
   if (!printWindow) {
@@ -364,37 +362,10 @@ const openPrintWindow = (clampId: string, token: string): void => {
           <style>
             @page { size: auto; margin: 5mm; }
             * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            body {
-              font-family: Arial, sans-serif;
-              margin: 0;
-              padding: 20px;
-              background: #fff;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              min-height: 100vh;
-            }
-            .qr-block {
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              gap: 8px;
-            }
-            .qr-block svg {
-              display: block;
-              width: 300px;
-              height: 300px;
-            }
-            .qr-id {
-              font-size: 20px;
-              font-weight: 700;
-              color: #000;
-              margin: 0;
-              letter-spacing: 1px;
-              font-family: 'Courier New', monospace;
-              text-align: center;
-            }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #fff; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+            .qr-block { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+            .qr-block svg { display: block; width: 300px; height: 300px; }
+            .qr-id { font-size: 20px; font-weight: 700; color: #000; margin: 0; letter-spacing: 1px; font-family: 'Courier New', monospace; text-align: center; }
             @media print { body { padding: 0; } }
           </style>
         </head>
@@ -424,6 +395,8 @@ export default function QRManagement() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "it-admin",
@@ -435,6 +408,7 @@ export default function QRManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All Status");
   const [typeFilter, setTypeFilter] = useState<string>("All Types");
+  const [conditionFilter, setConditionFilter] = useState<string>("All Conditions");
 
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
   const [clampIdInput, setClampIdInput] = useState("");
@@ -442,14 +416,11 @@ export default function QRManagement() {
   const [generateError, setGenerateError] = useState("");
   const [generatedQrs, setGeneratedQrs] = useState<ClampRow[]>([]);
 
-  const [viewingViolation, setViewingViolation] =
-    useState<ViolationDetails | null>(null);
+  const [viewingViolation, setViewingViolation] = useState<ViolationDetails | null>(null);
   const [isLoadingViolation, setIsLoadingViolation] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Fetch current user
-  // -----------------------------------------------------------------------
+  /* Current user */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
       if (!loggedUser) {
@@ -478,9 +449,7 @@ export default function QRManagement() {
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Real-time listener for clamps
-  // -----------------------------------------------------------------------
+  /* Real-time listener for clamps */
   useEffect(() => {
     const ref = collection(db, "clamps");
     const q = query(ref, orderBy("createdAt", "desc"));
@@ -501,20 +470,9 @@ export default function QRManagement() {
             currentViolationId: (data.currentViolationId as string) ?? null,
           };
 
-          // No "available" fallback — null when truly missing, so a write
-          // that forgot the status field is visible instead of hidden.
           const storedStatus = (data.status as ClampState | undefined) ?? null;
           const state = deriveState(timestamps);
-          const hasStateMismatch =
-            storedStatus !== null && storedStatus !== state;
-
-          if (hasStateMismatch) {
-            console.warn(
-              `[clamps] State desync sa ${data.clampId ?? d.id}: ` +
-                `stored="${storedStatus}" pero derived="${state}". ` +
-                `May write na hindi nag-update ng status field.`
-            );
-          }
+          const hasStateMismatch = storedStatus !== null && storedStatus !== state;
 
           return {
             id: d.id,
@@ -527,6 +485,17 @@ export default function QRManagement() {
             createdBy: data.createdBy ?? "—",
             deployedBy: data.deployedBy ?? null,
             ...timestamps,
+            condition: (data.condition as ClampCondition) ?? "good",
+            physicalLocation: (data.physicalLocation as string) ?? null,
+            assignedTo: (data.assignedTo as string) ?? null,
+            assignedAt: (data.assignedAt as Timestamp) ?? null,
+            notes: (data.notes as string) ?? null,
+            lastViolatorUid: (data.lastViolatorUid as string) ?? null,
+            lastGuestId: (data.lastGuestId as string) ?? null,
+            lastViolatorName: (data.lastViolatorName as string) ?? null,
+            lastPlateNo: (data.lastPlateNo as string) ?? null,
+            lastViolationAt: (data.lastViolationAt as Timestamp) ?? null,
+            lastCin: (data.lastCin as string) ?? null,
           };
         });
         setClamps(fetched);
@@ -540,9 +509,7 @@ export default function QRManagement() {
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Click-outside for dropdown
-  // -----------------------------------------------------------------------
+  /* Click outside for avatar dropdown + row menus */
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -551,24 +518,41 @@ export default function QRManagement() {
       ) {
         setIsMenuOpen(false);
       }
+      const target = event.target as HTMLElement;
+      if (!target.closest(".row-menu-wrapper")) {
+        setOpenMenuId(null);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // -----------------------------------------------------------------------
-  // COMPUTED: Stats
-  // -----------------------------------------------------------------------
+  /* Stats */
   const stats = useMemo(() => {
     const total = clamps.length;
     const available = clamps.filter((c) => c.state === "available").length;
     const unpaid = clamps.filter((c) => c.state === "unpaid").length;
     const verified = clamps.filter((c) => c.state === "verified").length;
-    const readyForRelease = clamps.filter(
-      (c) => c.state === "ready-for-release"
-    ).length;
+    const readyForRelease = clamps.filter((c) => c.state === "ready-for-release").length;
     const released = clamps.filter((c) => c.state === "released").length;
-    return { total, available, unpaid, verified, readyForRelease, released };
+
+    const good = clamps.filter((c) => c.condition === "good").length;
+    const damaged = clamps.filter((c) => c.condition === "damaged").length;
+    const needsRepair = clamps.filter((c) => c.condition === "needs-repair").length;
+    const lost = clamps.filter((c) => c.condition === "lost").length;
+
+    return {
+      total,
+      available,
+      unpaid,
+      verified,
+      readyForRelease,
+      released,
+      good,
+      damaged,
+      needsRepair,
+      lost,
+    };
   }, [clamps]);
 
   const mismatchedClamps = useMemo(
@@ -582,23 +566,22 @@ export default function QRManagement() {
       const matchesSearch =
         !q ||
         c.clampId.toLowerCase().includes(q) ||
-        (c.cin && c.cin.toLowerCase().includes(q));
-      const matchesStatus =
-        statusFilter === "All Status" || c.state === statusFilter;
-      const matchesType =
-        typeFilter === "All Types" || c.clampType === typeFilter;
-      return matchesSearch && matchesStatus && matchesType;
+        (c.cin && c.cin.toLowerCase().includes(q)) ||
+        (c.lastPlateNo && c.lastPlateNo.toLowerCase().includes(q));
+      const matchesStatus = statusFilter === "All Status" || c.state === statusFilter;
+      const matchesType = typeFilter === "All Types" || c.clampType === typeFilter;
+      const matchesCondition =
+        conditionFilter === "All Conditions" || c.condition === conditionFilter;
+      return matchesSearch && matchesStatus && matchesType && matchesCondition;
     });
-  }, [clamps, searchQuery, statusFilter, typeFilter]);
+  }, [clamps, searchQuery, statusFilter, typeFilter, conditionFilter]);
 
   const detectedType = useMemo(() => {
     if (!clampIdInput.trim()) return null;
     return detectClampType(clampIdInput);
   }, [clampIdInput]);
 
-  // -----------------------------------------------------------------------
-  // HANDLERS
-  // -----------------------------------------------------------------------
+  /* Handlers */
   const handleLogout = async () => {
     try {
       await firebaseSignOut(auth);
@@ -619,11 +602,6 @@ export default function QRManagement() {
     setIsMenuOpen(false);
   };
 
-  /**
-   * Writes the derived state of desynced clamps back to Firestore.
-   * This is an IT Admin maintenance action — it should not be needed in
-   * normal operation once the issuance code is correct.
-   */
   const handleRepairStates = async () => {
     if (mismatchedClamps.length === 0) return;
 
@@ -631,11 +609,7 @@ export default function QRManagement() {
       .map((c) => `${c.clampId}: ${c.storedStatus ?? "(wala)"} → ${c.state}`)
       .join("\n");
 
-    if (
-      !confirm(
-        `I-sync ang ${mismatchedClamps.length} clamp(s) base sa timestamps?\n\n${summary}`
-      )
-    ) {
+    if (!confirm(`I-sync ang ${mismatchedClamps.length} clamp(s) base sa timestamps?\n\n${summary}`)) {
       return;
     }
 
@@ -655,17 +629,10 @@ export default function QRManagement() {
     }
   };
 
-  /**
-   * Step 1 of the QR flow: the IT Admin registers the clamp (Clamp ID + a
-   * freshly generated token) BEFORE anything is printed. The clamp starts as
-   * "available"; the enforcer's violation record later moves it to "unpaid"
-   * and issues the CIN.
-   */
   const handleGenerate = async () => {
     setGenerateError("");
 
     const trimmedId = clampIdInput.trim().toUpperCase();
-
     const validation = validateClampId(trimmedId);
     if (!validation.valid) {
       setGenerateError(validation.message || "Invalid Clamp ID.");
@@ -681,22 +648,15 @@ export default function QRManagement() {
     setIsGenerating(true);
 
     try {
-      const dupQuery = query(
-        collection(db, "clamps"),
-        where("clampId", "==", trimmedId)
-      );
+      const dupQuery = query(collection(db, "clamps"), where("clampId", "==", trimmedId));
       const dupSnap = await getDocs(dupQuery);
 
       if (!dupSnap.empty) {
-        setGenerateError(
-          `Clamp ID "${trimmedId}" already exists. Please check the physical clamp number.`
-        );
+        setGenerateError(`Clamp ID "${trimmedId}" already exists. Please check the physical clamp number.`);
         setIsGenerating(false);
         return;
       }
 
-      // 192 random bits — a collision is not a realistic concern, so there
-      // is no extra uniqueness query.
       const scanToken = generateScanToken();
 
       const docRef = await addDoc(collection(db, "clamps"), {
@@ -715,6 +675,17 @@ export default function QRManagement() {
         paidAt: null,
         readyAt: null,
         releasedAt: null,
+        condition: "good",
+        physicalLocation: "Stock Room",
+        assignedTo: null,
+        assignedAt: null,
+        notes: null,
+        lastViolatorUid: null,
+        lastGuestId: null,
+        lastViolatorName: null,
+        lastPlateNo: null,
+        lastViolationAt: null,
+        lastCin: null,
       });
 
       const newQr: ClampRow = {
@@ -734,6 +705,17 @@ export default function QRManagement() {
         paidAt: null,
         readyAt: null,
         releasedAt: null,
+        condition: "good",
+        physicalLocation: "Stock Room",
+        assignedTo: null,
+        assignedAt: null,
+        notes: null,
+        lastViolatorUid: null,
+        lastGuestId: null,
+        lastViolatorName: null,
+        lastPlateNo: null,
+        lastViolationAt: null,
+        lastCin: null,
       };
 
       setGeneratedQrs([newQr]);
@@ -746,21 +728,7 @@ export default function QRManagement() {
     }
   };
 
-  /**
-   * Writes a fresh token and an audit log entry in one batch.
-   *
-   *  - "issue":   the clamp was registered before tokens existed.
-   *  - "reissue": the current token must stop working (tag lost, stolen,
-   *               copied, or damaged). The old token is dead the moment this
-   *               batch commits, because the server always compares against
-   *               the token stored on the clamp.
-   *
-   * Returns the new token, or null on failure.
-   */
-  const issueScanToken = async (
-    clamp: ClampRow,
-    mode: "issue" | "reissue"
-  ): Promise<string | null> => {
+  const issueScanToken = async (clamp: ClampRow, mode: "issue" | "reissue"): Promise<string | null> => {
     const token = generateScanToken();
     try {
       const batch = writeBatch(db);
@@ -792,16 +760,10 @@ export default function QRManagement() {
     }
   };
 
-  /**
-   * Revokes the current token and issues a new one. Only allowed while the
-   * clamp is idle: on a clamped vehicle the violator needs the existing QR
-   * to keep working until release.
-   */
   const handleReissueToken = async (clamp: ClampRow) => {
+    setOpenMenuId(null);
     if (clamp.state !== "available") {
-      alert(
-        `${clamp.clampId} is currently in use. Its QR has to keep working until the vehicle is released — re-issue the token after release.`
-      );
+      alert(`${clamp.clampId} is currently in use. Its QR has to keep working until the vehicle is released.`);
       return;
     }
 
@@ -827,12 +789,12 @@ export default function QRManagement() {
   };
 
   const handlePrintSingle = async (qr: ClampRow) => {
+    setOpenMenuId(null);
     let token = qr.scanToken;
 
     if (!token) {
       const proceed = confirm(
-        `${qr.clampId} has no secure QR token yet (it was registered before tokens existed).\n\n` +
-          `Issue one now and print? Any QR already printed for this clamp with the old link format will need to be replaced.`
+        `${qr.clampId} has no secure QR token yet.\n\n` + `Issue one now and print?`
       );
       if (!proceed) return;
 
@@ -844,13 +806,9 @@ export default function QRManagement() {
   };
 
   const handleDelete = async (clamp: ClampRow) => {
-    // Based on derived state, not the stored status — otherwise a clamp with
-    // an active violation could be deleted just because its status field
-    // happens to say "available".
+    setOpenMenuId(null);
     if (clamp.state !== "available") {
-      alert(
-        "Cannot delete a clamp that has been used. Only 'available' clamps can be deleted."
-      );
+      alert("Cannot delete a clamp that has been used. Only 'available' clamps can be deleted.");
       return;
     }
     if (!confirm(`Delete ${clamp.clampId}? This cannot be undone.`)) return;
@@ -864,7 +822,110 @@ export default function QRManagement() {
     }
   };
 
+  const handleReportDamage = async (clamp: ClampRow) => {
+    setOpenMenuId(null);
+    const reason = prompt(
+      `Report damage for ${clamp.clampId}?\n\nReason (e.g. "Broken lock", "Bent shackle"):`
+    );
+    if (!reason || !reason.trim()) return;
+
+    try {
+      const batch = writeBatch(db);
+
+      batch.update(doc(db, "clamps", clamp.id), {
+        condition: "damaged",
+        notes: reason.trim(),
+        damagedAt: serverTimestamp(),
+        damagedBy: currentUser.name,
+      });
+
+      batch.set(doc(collection(db, "auditLogs")), {
+        userName: currentUser.name,
+        action: `reported damage for clamp ${clamp.clampId}: ${reason.trim()}`,
+        record: clamp.clampId,
+        type: "clamp-damage",
+        metadata: { clampId: clamp.clampId, reason: reason.trim() },
+        timestamp: serverTimestamp(),
+      });
+
+      await batch.commit();
+      alert(`✅ ${clamp.clampId} marked as damaged.`);
+    } catch (err: any) {
+      console.error("Damage report failed:", err);
+      alert(err.message || "Failed to report damage.");
+    }
+  };
+
+  const handleReportLost = async (clamp: ClampRow) => {
+    setOpenMenuId(null);
+    const location = prompt(
+      `Report lost clamp ${clamp.clampId}?\n\nLast seen location:`
+    );
+    if (location === null) return;
+
+    try {
+      const batch = writeBatch(db);
+
+      batch.update(doc(db, "clamps", clamp.id), {
+        condition: "lost",
+        physicalLocation: location.trim() || "Unknown",
+        lostAt: serverTimestamp(),
+        lostBy: currentUser.name,
+      });
+
+      batch.set(doc(collection(db, "auditLogs")), {
+        userName: currentUser.name,
+        action: `reported clamp ${clamp.clampId} as LOST (last seen: ${location.trim() || "Unknown"})`,
+        record: clamp.clampId,
+        type: "clamp-lost",
+        metadata: { clampId: clamp.clampId, lastSeen: location.trim() },
+        timestamp: serverTimestamp(),
+      });
+
+      await batch.commit();
+      alert(`⚠️ ${clamp.clampId} marked as lost.`);
+    } catch (err: any) {
+      console.error("Lost report failed:", err);
+      alert(err.message || "Failed to report lost clamp.");
+    }
+  };
+
+  const handleAssignToTeam = async (clamp: ClampRow) => {
+    setOpenMenuId(null);
+    const teamName = prompt(
+      `Assign ${clamp.clampId} to team?\n\nTeam name (e.g. "Team A", "Team B"):`
+    );
+    if (!teamName || !teamName.trim()) return;
+
+    try {
+      const batch = writeBatch(db);
+
+      batch.update(doc(db, "clamps", clamp.id), {
+        assignedTo: teamName.trim(),
+        assignedAt: serverTimestamp(),
+        assignedBy: currentUser.name,
+        physicalLocation: teamName.trim(),
+      });
+
+      batch.set(doc(collection(db, "auditLogs")), {
+        userName: currentUser.name,
+        action: `assigned clamp ${clamp.clampId} to ${teamName.trim()}`,
+        record: clamp.clampId,
+        type: "clamp-assignment",
+        metadata: { clampId: clamp.clampId, teamName: teamName.trim() },
+        timestamp: serverTimestamp(),
+      });
+
+      await batch.commit();
+      alert(`✅ ${clamp.clampId} assigned to ${teamName.trim()}.`);
+    } catch (err: any) {
+      console.error("Assignment failed:", err);
+      alert(err.message || "Failed to assign clamp.");
+    }
+  };
+
   const handleViewViolation = async (clamp: ClampRow) => {
+    setOpenMenuId(null);
     if (!clamp.currentViolationId) {
       alert("No violation linked to this clamp.");
       return;
@@ -894,8 +955,7 @@ export default function QRManagement() {
         color: data.color ?? null,
         violationType: data.violationType ?? "—",
         fineAmount: Number(data.fineAmount ?? 0),
-        convenienceFee:
-          data.convenienceFee != null ? Number(data.convenienceFee) : null,
+        convenienceFee: data.convenienceFee != null ? Number(data.convenienceFee) : null,
         totalPaid: data.totalPaid != null ? Number(data.totalPaid) : null,
         referenceNumber: data.referenceNumber ?? null,
         officer: data.officer ?? "—",
@@ -903,8 +963,6 @@ export default function QRManagement() {
         recordedAt: data.recordedAt ?? null,
         paidAt: data.paidAt ?? null,
         paymentStatus: data.paymentStatus ?? "Unpaid",
-        // || instead of ?? so an empty string and the old "—" written by the
-        // first version of the issuance code are also treated as missing.
         paymentMethod: data.paymentMethod || null,
         paymentReference: data.paymentReference || null,
         releaseStatus: data.releaseStatus ?? "Pending",
@@ -924,9 +982,9 @@ export default function QRManagement() {
     setViewingViolation(null);
   };
 
-  // -----------------------------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------------------------
+  /* ------------------------------------------------------------------
+     RENDER
+  ------------------------------------------------------------------ */
   return (
     <div className="it-admin-page">
       <div className="dashboard">
@@ -992,23 +1050,13 @@ export default function QRManagement() {
                   <div className="profile-dropdown" role="menu">
                     <div className="dropdown-header">
                       <p className="dropdown-name">{currentUser.name}</p>
-                      <p className="dropdown-role">
-                        {ROLE_LABELS[currentUser.role]}
-                      </p>
+                      <p className="dropdown-role">{ROLE_LABELS[currentUser.role]}</p>
                     </div>
-                    <button
-                      type="button"
-                      className="dropdown-item"
-                      onClick={handleChangePassword}
-                    >
+                    <button type="button" className="dropdown-item" onClick={handleChangePassword}>
                       <img src={keyIcon} alt="" className="dropdown-icon" />
                       <span>Change Password</span>
                     </button>
-                    <button
-                      type="button"
-                      className="dropdown-item logout"
-                      onClick={handleLogout}
-                    >
+                    <button type="button" className="dropdown-item logout" onClick={handleLogout}>
                       <img src={logoutIcon} alt="" className="dropdown-icon" />
                       <span>Log Out</span>
                     </button>
@@ -1028,9 +1076,7 @@ export default function QRManagement() {
                     {mismatchedClamps.length} clamp(s) may out-of-sync state
                   </p>
                   <p className="desync-sub">
-                    The saved <code>status</code> field does not match the
-                    timestamps. What is shown in the table is the correct state
-                    based on the timestamps.
+                    The saved <code>status</code> field does not match the timestamps.
                   </p>
                 </div>
                 <button
@@ -1044,8 +1090,9 @@ export default function QRManagement() {
               </div>
             )}
 
-            {/* STATS */}
+            {/* COMBINED STATS — 6-column grid, aligned rows */}
             <section className="qr-stats-grid">
+              {/* Row 1: State stats */}
               <div className="qr-stat-card">
                 <p className="qr-stat-label">Total Clamps</p>
                 <p className="qr-stat-value">{stats.total}</p>
@@ -1070,6 +1117,24 @@ export default function QRManagement() {
                 <p className="qr-stat-label">Released</p>
                 <p className="qr-stat-value">{stats.released}</p>
               </div>
+
+              {/* Row 2: Condition stats — aligned sa row 1 */}
+              <div className="qr-stat-card condition-good-card">
+                <p className="qr-stat-label">Good Condition</p>
+                <p className="qr-stat-value">{stats.good}</p>
+              </div>
+              <div className="qr-stat-card condition-damaged-card">
+                <p className="qr-stat-label">Damaged</p>
+                <p className="qr-stat-value">{stats.damaged}</p>
+              </div>
+              <div className="qr-stat-card condition-repair-card">
+                <p className="qr-stat-label">Needs Repair</p>
+                <p className="qr-stat-value">{stats.needsRepair}</p>
+              </div>
+              <div className="qr-stat-card condition-lost-card">
+                <p className="qr-stat-label">Lost</p>
+                <p className="qr-stat-value">{stats.lost}</p>
+              </div>
             </section>
 
             {/* TOOLBAR */}
@@ -1079,7 +1144,7 @@ export default function QRManagement() {
                   <Search size={16} className="qr-search-icon" />
                   <input
                     type="text"
-                    placeholder="Search Clamp ID or CIN..."
+                    placeholder="Search Clamp ID, CIN, or Plate..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="qr-search-input"
@@ -1093,9 +1158,7 @@ export default function QRManagement() {
                 >
                   {STATUS_OPTIONS.map((s) => (
                     <option key={s} value={s}>
-                      {s === "All Status"
-                        ? "All Status"
-                        : STATUS_LABELS[s as ClampState]}
+                      {s === "All Status" ? "All Status" : STATUS_LABELS[s as ClampState]}
                     </option>
                   ))}
                 </select>
@@ -1108,6 +1171,20 @@ export default function QRManagement() {
                   {TYPE_OPTIONS.map((t) => (
                     <option key={t} value={t}>
                       {t}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={conditionFilter}
+                  onChange={(e) => setConditionFilter(e.target.value)}
+                  className="qr-filter-select"
+                >
+                  {CONDITION_OPTIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {c === "All Conditions"
+                        ? "All Conditions"
+                        : CONDITION_LABELS[c as ClampCondition]}
                     </option>
                   ))}
                 </select>
@@ -1146,11 +1223,14 @@ export default function QRManagement() {
                       <tr>
                         <th>Clamp ID</th>
                         <th>Type</th>
+                        <th>Condition</th>
+                        <th>Location</th>
+                        <th>Assigned To</th>
                         <th>CIN</th>
+                        <th>Last Plate</th>
                         <th>State</th>
                         <th>QR Token</th>
                         <th>Created</th>
-                        <th>Deployed</th>
                         <th aria-label="Actions"></th>
                       </tr>
                     </thead>
@@ -1159,17 +1239,18 @@ export default function QRManagement() {
                         <tr key={row.id}>
                           <td className="cell-qr-id">{row.clampId}</td>
                           <td>
-                            <span
-                              className={`type-pill type-${row.clampType.toLowerCase()}`}
-                            >
-                              {row.clampType === "Car" ? (
-                                <Car size={13} />
-                              ) : (
-                                <Bike size={13} />
-                              )}
+                            <span className={`type-pill type-${row.clampType.toLowerCase()}`}>
+                              {row.clampType === "Car" ? <Car size={13} /> : <Bike size={13} />}
                               {row.clampType}
                             </span>
                           </td>
+                          <td>
+                            <span className={`condition-pill ${getConditionClass(row.condition)}`}>
+                              {CONDITION_LABELS[row.condition]}
+                            </span>
+                          </td>
+                          <td className="cell-location">{row.physicalLocation ?? "—"}</td>
+                          <td className="cell-assigned">{row.assignedTo ?? "—"}</td>
                           <td className="cell-cin">
                             {row.cin ? (
                               <span className="cin-pill">{row.cin}</span>
@@ -1177,12 +1258,9 @@ export default function QRManagement() {
                               <span className="cell-empty">—</span>
                             )}
                           </td>
+                          <td className="cell-plate">{row.lastPlateNo ?? "—"}</td>
                           <td>
-                            <span
-                              className={`status-pill ${getStatusClass(
-                                row.state
-                              )}`}
-                            >
+                            <span className={`status-pill ${getStatusClass(row.state)}`}>
                               {STATUS_LABELS[row.state]}
                             </span>
                             {row.hasStateMismatch && (
@@ -1190,86 +1268,112 @@ export default function QRManagement() {
                                 size={14}
                                 className="state-warning-icon"
                                 aria-label="State out of sync"
-                                title={`Saved in Firestore: "${
-                                  row.storedStatus ?? "(none)"
-                                }". The state shown is derived from the timestamps.`}
+                                title={`Saved: "${row.storedStatus ?? "(none)"}" — derived: "${row.state}"`}
                               />
                             )}
                           </td>
                           <td>
                             {row.scanToken ? (
-                              <span
-                                className="status-pill status-released"
-                                title="This clamp has a secure QR token."
-                              >
+                              <span className="status-pill status-released" title="Has secure QR token.">
                                 Issued
                               </span>
                             ) : (
-                              <span
-                                className="status-pill status-pay"
-                                title="Registered before tokens existed. Print the QR to issue one."
-                              >
+                              <span className="status-pill status-pay" title="No token yet.">
                                 Missing
                               </span>
                             )}
                           </td>
-                          <td className="cell-datetime">
-                            {formatDateTime(row.createdAt)}
-                          </td>
-                          <td className="cell-datetime">
-                            {formatDateTime(row.deployedAt)}
-                          </td>
+                          <td className="cell-datetime">{formatDateTime(row.createdAt)}</td>
                           <td className="cell-actions">
-                            {row.currentViolationId && (
+                            <div className="row-menu-wrapper">
                               <button
                                 type="button"
-                                className="btn-icon"
-                                title="View Violation"
-                                onClick={() => handleViewViolation(row)}
-                                disabled={isLoadingViolation}
+                                className="btn-icon btn-more"
+                                title="Actions"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuId(openMenuId === row.id ? null : row.id);
+                                }}
                               >
-                                <ExternalLink size={16} />
+                                <MoreVertical size={16} />
                               </button>
-                            )}
 
-                            <button
-                              type="button"
-                              className="btn-icon"
-                              title={
-                                !row.scanToken
-                                  ? "No token yet — use Print QR to issue one"
-                                  : row.state === "available"
-                                  ? "Re-issue QR token"
-                                  : "Cannot re-issue while the clamp is in use"
-                              }
-                              onClick={() => handleReissueToken(row)}
-                              disabled={!row.scanToken || row.state !== "available"}
-                            >
-                              <RefreshCw size={16} />
-                            </button>
+                              {openMenuId === row.id && (
+                                <div className="row-menu" onClick={(e) => e.stopPropagation()}>
+                                  {row.currentViolationId && (
+                                    <button
+                                      type="button"
+                                      className="row-menu-item"
+                                      onClick={() => handleViewViolation(row)}
+                                      disabled={isLoadingViolation}
+                                    >
+                                      <ExternalLink size={14} />
+                                      <span>View Violation</span>
+                                    </button>
+                                  )}
 
-                            <button
-                              type="button"
-                              className="btn-icon"
-                              title="Print QR"
-                              onClick={() => handlePrintSingle(row)}
-                            >
-                              <Printer size={16} />
-                            </button>
+                                  <button
+                                    type="button"
+                                    className="row-menu-item"
+                                    onClick={() => handleAssignToTeam(row)}
+                                  >
+                                    <UserCheck size={14} />
+                                    <span>Assign to Team</span>
+                                  </button>
 
-                            <button
-                              type="button"
-                              className="btn-icon danger"
-                              title={
-                                row.state === "available"
-                                  ? "Delete"
-                                  : "Cannot delete a clamp that has been used"
-                              }
-                              onClick={() => handleDelete(row)}
-                              disabled={row.state !== "available"}
-                            >
-                              <Trash2 size={16} />
-                            </button>
+                                  <button
+                                    type="button"
+                                    className="row-menu-item"
+                                    onClick={() => handleReportDamage(row)}
+                                  >
+                                    <Wrench size={14} />
+                                    <span>Report Damage</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="row-menu-item"
+                                    onClick={() => handleReportLost(row)}
+                                  >
+                                    <MapPin size={14} />
+                                    <span>Report Lost</span>
+                                  </button>
+
+                                  <div className="row-menu-divider" />
+
+                                  <button
+                                    type="button"
+                                    className="row-menu-item"
+                                    onClick={() => handleReissueToken(row)}
+                                    disabled={!row.scanToken || row.state !== "available"}
+                                  >
+                                    <RefreshCw size={14} />
+                                    <span>Re-issue Token</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="row-menu-item"
+                                    onClick={() => handlePrintSingle(row)}
+                                  >
+                                    <Printer size={14} />
+                                    <span>Print QR</span>
+                                  </button>
+
+                                  <div className="row-menu-divider" />
+
+                                  <button
+                                    type="button"
+                                    className="row-menu-item row-menu-item-danger"
+                                    onClick={() => handleDelete(row)}
+                                    disabled={row.state !== "available"}
+                                  >
+                                    <Trash2 size={14} />
+                                    <span>Delete</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1288,9 +1392,7 @@ export default function QRManagement() {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">
-                {generatedQrs.length > 0
-                  ? "QR Code Registered"
-                  : "Register Clamp QR"}
+                {generatedQrs.length > 0 ? "QR Code Registered" : "Register Clamp QR"}
               </h3>
               <button className="modal-close-btn" onClick={handleCloseGenerate}>
                 <X size={20} />
@@ -1320,14 +1422,8 @@ export default function QRManagement() {
                 </div>
 
                 {detectedType && (
-                  <div
-                    className={`detected-type detected-${detectedType.toLowerCase()}`}
-                  >
-                    {detectedType === "Car" ? (
-                      <Car size={18} />
-                    ) : (
-                      <Bike size={18} />
-                    )}
+                  <div className={`detected-type detected-${detectedType.toLowerCase()}`}>
+                    {detectedType === "Car" ? <Car size={18} /> : <Bike size={18} />}
                     <span>
                       <strong>{detectedType}</strong> clamp detected
                     </span>
@@ -1337,35 +1433,21 @@ export default function QRManagement() {
                 {generateError && <p className="form-error">{generateError}</p>}
 
                 <p className="modal-note">
-                  Registering creates a random, unguessable token for this
-                  clamp. The QR code contains only that token — the Clamp ID is
-                  not in the link. The clamp starts as{" "}
-                  <strong>"available"</strong>. When an enforcer records a
-                  violation it becomes <strong>"unpaid"</strong> and a Citation
-                  Number (CIN) is issued, then:{" "}
-                  <strong>
-                    verified → ready-for-release → released
-                  </strong>
-                  .
+                  Registering creates a random, unguessable token for this clamp.
+                  The clamp starts as <strong>"available"</strong>.
                 </p>
               </div>
             ) : (
               <div className="modal-body">
                 <p className="modal-success">
-                  Successfully registered{" "}
-                  <strong>{generatedQrs[0].clampId}</strong> (
-                  {generatedQrs[0].clampType}) in <strong>available</strong>{" "}
-                  state.
+                  Successfully registered <strong>{generatedQrs[0].clampId}</strong> (
+                  {generatedQrs[0].clampType}) in <strong>available</strong> state.
                 </p>
 
                 <div className="generated-qr-grid">
                   {generatedQrs.map((qr) => (
                     <div key={qr.id} className="generated-qr-item">
-                      <QRCodeSVG
-                        value={buildScanUrl(qr.scanToken ?? "")}
-                        size={160}
-                        level="H"
-                      />
+                      <QRCodeSVG value={buildScanUrl(qr.scanToken ?? "")} size={160} level="H" />
                       <p className="generated-qr-label">{qr.clampId}</p>
                       <p className="generated-qr-type">
                         {qr.clampType === "Car" ? "🚗 Car" : "🏍️ Motorcycle"}
@@ -1375,8 +1457,7 @@ export default function QRManagement() {
                 </div>
 
                 <p className="modal-note">
-                  Next: print or engrave this QR on the metal tag, then attach
-                  it to the physical clamp (rivet or screw).
+                  Next: print or engrave this QR on the metal tag, then attach it to the physical clamp.
                 </p>
               </div>
             )}
@@ -1394,19 +1475,14 @@ export default function QRManagement() {
                   <button
                     className="btn-primary"
                     onClick={handleGenerate}
-                    disabled={
-                      isGenerating || !clampIdInput.trim() || !detectedType
-                    }
+                    disabled={isGenerating || !clampIdInput.trim() || !detectedType}
                   >
                     {isGenerating ? "Registering..." : "Register & Generate QR"}
                   </button>
                 </>
               ) : (
                 <>
-                  <button
-                    className="btn-secondary"
-                    onClick={handleCloseGenerate}
-                  >
+                  <button className="btn-secondary" onClick={handleCloseGenerate}>
                     Close
                   </button>
                   <button
@@ -1431,10 +1507,7 @@ export default function QRManagement() {
               <h3 className="modal-title">
                 Violation Details — {viewingViolation.cin}
               </h3>
-              <button
-                className="modal-close-btn"
-                onClick={handleCloseViolationModal}
-              >
+              <button className="modal-close-btn" onClick={handleCloseViolationModal}>
                 <X size={20} />
               </button>
             </div>
@@ -1447,8 +1520,7 @@ export default function QRManagement() {
                     className={`status-pill ${
                       viewingViolation.paymentStatus === "Verified"
                         ? "status-released"
-                        : viewingViolation.paymentStatus ===
-                          "Pending Verification"
+                        : viewingViolation.paymentStatus === "Pending Verification"
                         ? "status-paid"
                         : "status-pay"
                     }`}
@@ -1457,14 +1529,10 @@ export default function QRManagement() {
                   </span>
                   <span
                     className={`status-pill ${
-                      viewingViolation.enforcementType === "clamped"
-                        ? "status-pay"
-                        : "status-ready"
+                      viewingViolation.enforcementType === "clamped" ? "status-pay" : "status-ready"
                     }`}
                   >
-                    {viewingViolation.enforcementType === "clamped"
-                      ? "Clamped"
-                      : "Impounded"}
+                    {viewingViolation.enforcementType === "clamped" ? "Clamped" : "Impounded"}
                   </span>
                   <span
                     className={`status-pill ${
@@ -1472,8 +1540,7 @@ export default function QRManagement() {
                         ? "status-released"
                         : viewingViolation.releaseStatus === "Approved by OIC"
                         ? "status-ready"
-                        : viewingViolation.releaseStatus ===
-                          "Awaiting OIC Approval"
+                        : viewingViolation.releaseStatus === "Awaiting OIC Approval"
                         ? "status-paid"
                         : "status-waiting"
                     }`}
@@ -1492,28 +1559,24 @@ export default function QRManagement() {
                   <label>Plate Number</label>
                   <p>{viewingViolation.plateNo}</p>
                 </div>
-
                 {viewingViolation.make && (
                   <div className="violation-item">
                     <label>Make</label>
                     <p>{viewingViolation.make}</p>
                   </div>
                 )}
-
                 {viewingViolation.vehicleType && (
                   <div className="violation-item">
                     <label>Vehicle Type</label>
                     <p>{viewingViolation.vehicleType}</p>
                   </div>
                 )}
-
                 {viewingViolation.color && (
                   <div className="violation-item">
                     <label>Color</label>
                     <p>{viewingViolation.color}</p>
                   </div>
                 )}
-
                 <div className="violation-item">
                   <label>Violation</label>
                   <p>{viewingViolation.violationType}</p>
@@ -1528,14 +1591,12 @@ export default function QRManagement() {
                     {formatCurrency(viewingViolation.fineAmount)}
                   </p>
                 </div>
-
                 {viewingViolation.convenienceFee !== null && (
                   <div className="violation-item">
                     <label>Convenience Fee</label>
                     <p>{formatCurrency(viewingViolation.convenienceFee)}</p>
                   </div>
                 )}
-
                 {viewingViolation.totalPaid !== null && (
                   <div className="violation-item">
                     <label>Total Paid</label>
@@ -1544,7 +1605,6 @@ export default function QRManagement() {
                     </p>
                   </div>
                 )}
-
                 <div className="violation-item">
                   <label>Officer</label>
                   <p>{viewingViolation.officer}</p>
@@ -1553,21 +1613,18 @@ export default function QRManagement() {
                   <label>Recorded</label>
                   <p>{formatDateTime(viewingViolation.recordedAt)}</p>
                 </div>
-
                 {viewingViolation.paidAt && (
                   <div className="violation-item">
                     <label>Paid At</label>
                     <p>{formatDateTime(viewingViolation.paidAt)}</p>
                   </div>
                 )}
-
                 {viewingViolation.referenceNumber && (
                   <div className="violation-item">
                     <label>Reference Number</label>
                     <p>{viewingViolation.referenceNumber}</p>
                   </div>
                 )}
-
                 <div className="violation-item">
                   <label>Payment Method</label>
                   <p>{viewingViolation.paymentMethod ?? "—"}</p>
@@ -1578,17 +1635,11 @@ export default function QRManagement() {
                 </div>
               </div>
 
-              <p className="modal-note">
-                📖 Read-only view. Full violation management is on the Record
-                Officer page.
-              </p>
+              <p className="modal-note">📖 Read-only view. Full violation management is on the Record Officer page.</p>
             </div>
 
             <div className="modal-footer">
-              <button
-                className="btn-secondary"
-                onClick={handleCloseViolationModal}
-              >
+              <button className="btn-secondary" onClick={handleCloseViolationModal}>
                 Close
               </button>
             </div>

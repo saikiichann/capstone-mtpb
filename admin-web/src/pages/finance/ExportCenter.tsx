@@ -481,6 +481,8 @@ const downloadPdf = (
     { key: "orNumber", label: "OR NO." },
     { key: "cin", label: "CIN" },
     { key: "plateNo", label: "PLATE NO." },
+    // ⚠️ ADDED: Violator column
+    { key: "violatorDisplay", label: "VIOLATOR" },
     { key: "amount", label: "AMOUNT" },
     { key: "method", label: "METHOD" },
     { key: "status", label: "STATUS" },
@@ -493,6 +495,8 @@ const downloadPdf = (
   const fallbackColumnKeys = [
     { key: "cin", label: "CIN" },
     { key: "plateNo", label: "PLATE NO." },
+    // ⚠️ ADDED: Violator column sa fallback (Release Log)
+    { key: "violatorDisplay", label: "VIOLATOR" },
     { key: "location", label: "LOCATION" },
     { key: "releasedBy", label: "RELEASED BY" },
     { key: "releasedAt", label: "DATE & TIME" },
@@ -505,7 +509,7 @@ const downloadPdf = (
   const tableMargin = 40;
   const availableWidth = pageWidth - tableMargin * 2;
 
-  // ─── getCellValue: handles fallbacks for amount, recordedAt, plateNo ───
+  // ─── getCellValue: handles fallbacks for amount, recordedAt, plateNo, at violatorDisplay ───
   const getCellValue = (row: Record<string, any>, key: string): string => {
     // Amount — fallback chain
     if (key === "amount") {
@@ -529,6 +533,22 @@ const downloadPdf = (
     if (key === "plateNo") {
       const v = row.plateNo ?? row.plateNumber ?? "";
       return v ? String(v) : "";
+    }
+
+    // ⚠️ ADDED: Violator display — name + type tag
+    if (key === "violatorDisplay") {
+      const name = row.violatorName;
+      const uid = row.violatorUid;
+      const gid = row.guestId;
+
+      if (name) {
+        if (uid) return `${name} (Registered)`;
+        if (gid) return `${name} (Guest)`;
+        return String(name);
+      }
+      if (uid) return "Registered User";
+      if (gid) return "Guest";
+      return "";
     }
 
     const v = row[key];
@@ -769,13 +789,29 @@ export default function ExportCenter() {
         ...d.data(),
       }));
 
-      // ─── ENRICH: Fetch plateNo mula sa violations kung wala sa payments ───
+      // ─── ENRICH: Fetch plateNo + violator fields mula sa violations ───
+      // ⚠️ CHANGED: Kasama na ang violator fields sa enrichment
       if (dataType === "Transactions" || dataType === "Revenue") {
         const needsLookup = data.filter(
-          (item) => !item.plateNo && (item.violationId || item.cin)
+          (item) =>
+            (!item.plateNo && (item.violationId || item.cin)) ||
+            // ⚠️ ADDED: kailangan din lookup kung walang violator info
+            (!item.violatorUid &&
+              !item.guestId &&
+              !item.violatorName &&
+              (item.violationId || item.cin))
         );
 
-        const violationCache = new Map<string, { plateNo: string | null }>();
+        const violationCache = new Map<
+          string,
+          {
+            plateNo: string | null;
+            // ⚠️ ADDED: violator fields sa cache
+            violatorUid: string | null;
+            guestId: string | null;
+            violatorName: string | null;
+          }
+        >();
 
         // Fetch by violationId
         const vIds = Array.from(
@@ -791,8 +827,13 @@ export default function ExportCenter() {
             try {
               const vSnap = await getDoc(doc(db, "violations", vId));
               if (vSnap.exists()) {
+                const v = vSnap.data();
                 violationCache.set(`id:${vId}`, {
-                  plateNo: (vSnap.data().plateNo as string) ?? null,
+                  plateNo: (v.plateNo as string) ?? null,
+                  // ⚠️ ADDED: violator fields
+                  violatorUid: (v.violatorUid as string) ?? null,
+                  guestId: (v.guestId as string) ?? null,
+                  violatorName: (v.violatorName as string) ?? null,
                 });
               }
             } catch (err) {
@@ -819,8 +860,13 @@ export default function ExportCenter() {
               );
               const snap = await getDocs(q);
               if (!snap.empty) {
+                const v = snap.docs[0].data();
                 violationCache.set(`cin:${cin}`, {
-                  plateNo: (snap.docs[0].data().plateNo as string) ?? null,
+                  plateNo: (v.plateNo as string) ?? null,
+                  // ⚠️ ADDED: violator fields
+                  violatorUid: (v.violatorUid as string) ?? null,
+                  guestId: (v.guestId as string) ?? null,
+                  violatorName: (v.violatorName as string) ?? null,
                 });
               }
             } catch (err) {
@@ -829,18 +875,26 @@ export default function ExportCenter() {
           })
         );
 
-        // Apply plateNo fallback
+        // Apply fallbacks (plateNo + violator fields)
+        // ⚠️ CHANGED: Idinagdag ang violator fields sa fallback
         data = data.map((item) => {
-          if (item.plateNo) return item;
-          if (item.violationId) {
-            const cached = violationCache.get(`id:${item.violationId}`);
-            if (cached?.plateNo) return { ...item, plateNo: cached.plateNo };
-          }
-          if (item.cin) {
-            const cached = violationCache.get(`cin:${item.cin}`);
-            if (cached?.plateNo) return { ...item, plateNo: cached.plateNo };
-          }
-          return item;
+          const linked =
+            item.violationId
+              ? violationCache.get(`id:${item.violationId}`)
+              : item.cin
+              ? violationCache.get(`cin:${item.cin}`)
+              : undefined;
+
+          if (!linked) return item;
+
+          return {
+            ...item,
+            plateNo: item.plateNo ?? linked.plateNo,
+            // ⚠️ ADDED: violator fields fallback
+            violatorUid: item.violatorUid ?? linked.violatorUid,
+            guestId: item.guestId ?? linked.guestId,
+            violatorName: item.violatorName ?? linked.violatorName,
+          };
         });
       }
 

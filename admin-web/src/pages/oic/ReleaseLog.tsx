@@ -64,6 +64,10 @@ type ReleaseLogRow = {
   location: string;
   releasedAt: Timestamp | null;
   finePaid: number | null;
+  // ⚠️ ADDED: violator identity fields
+  violatorUid: string | null;
+  guestId: string | null;
+  violatorName: string | null;
 };
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
@@ -313,6 +317,10 @@ export default function ReleaseLog() {
                   : typeof data.fineAmount === "number"
                   ? data.fineAmount
                   : null,
+              // ⚠️ ADDED: violator identity (null-safe fallbacks)
+              violatorUid: (data.violatorUid as string) ?? null,
+              guestId: (data.guestId as string) ?? null,
+              violatorName: (data.violatorName as string) ?? null,
             };
           })
           .sort((a, b) => millis(b.releasedAt) - millis(a.releasedAt));
@@ -375,7 +383,9 @@ export default function ReleaseLog() {
         row.orderId.toLowerCase().includes(q) ||
         row.plateNo.toLowerCase().includes(q) ||
         row.clearedBy.toLowerCase().includes(q) ||
-        row.location.toLowerCase().includes(q)
+        row.location.toLowerCase().includes(q) ||
+        // ⚠️ ADDED: search by violator name
+        (row.violatorName?.toLowerCase().includes(q) ?? false)
     );
   }, [rows, searchQuery]);
 
@@ -490,7 +500,7 @@ export default function ReleaseLog() {
               <input
                 type="text"
                 className="search-bar-input"
-                placeholder="Search Order ID, Plate No..."
+                placeholder="Search Order ID, Plate No., Violator..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -525,6 +535,7 @@ export default function ReleaseLog() {
                       <tr>
                         <th>Order ID</th>
                         <th>Plate No.</th>
+                        <th>Violator</th>{/* ⚠️ ADDED */}
                         <th>Cleared by</th>
                         <th>Location</th>
                         <th>Date &amp; Time</th>
@@ -536,6 +547,39 @@ export default function ReleaseLog() {
                         <tr key={row.id}>
                           <td className="cell-order-id">{row.orderId}</td>
                           <td className="cell-plate">{row.plateNo}</td>
+
+                          {/* ⚠️ ADDED: Violator cell */}
+                          <td className="cell-violator">
+                            {row.violatorName ? (
+                              <div className="violator-cell">
+                                <span className="violator-name">
+                                  {row.violatorName}
+                                </span>
+                                {row.violatorUid && (
+                                  <span className="violator-tag uid">
+                                    Registered
+                                  </span>
+                                )}
+                                {row.guestId && (
+                                  <span className="violator-tag guest">
+                                    Guest
+                                  </span>
+                                )}
+                              </div>
+                            ) : row.violatorUid ? (
+                              <span className="violator-tag uid">
+                                Registered User
+                              </span>
+                            ) : row.guestId ? (
+                              <span className="violator-tag guest">
+                                Guest
+                              </span>
+                            ) : (
+                              <span className="cell-empty">—</span>
+                            )}
+                          </td>
+                          {/* End */}
+
                           <td className="cell-cleared-by">{row.clearedBy}</td>
                           <td className="cell-location">{row.location}</td>
                           <td className="cell-time">
