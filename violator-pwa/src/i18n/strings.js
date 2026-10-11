@@ -206,6 +206,27 @@ const en = {
   // Impound location
   'impound.title': 'Impound Location',
   'impound.directions': 'Get directions',
+
+  // Payment check (a cash slip's QR, /r/<code>)
+  'check.title': 'Payment Check',
+  'check.loading': 'Checking this payment…',
+  'check.valid': 'MTPB payment on record',
+  'check.status.paid': 'Verified by MTPB.',
+  'check.status.verifying': 'Received. Waiting for verification by MTPB staff.',
+  'check.status.rejected': 'Not accepted by MTPB. Please contact the MTPB office.',
+  'check.status.unpaid': 'Not settled. Please contact the MTPB office.',
+  'check.badge.rejected': 'not accepted',
+  'check.badge.unpaid': 'not settled',
+  'check.row.reference': 'Reference Number',
+  'check.row.method': 'Payment Method',
+  'check.row.amount': 'Amount Paid',
+  'check.row.date': 'Date Paid',
+  'check.row.violation': 'Violation Number',
+  'check.row.plate': 'Plate Number',
+  'check.match': 'Check that the violation and plate match the vehicle.',
+  'check.notFound.title': 'No payment found',
+  'check.notFound.text': 'This code doesn’t match any MTPB payment. The slip may not be genuine. Please contact the MTPB office.',
+  'check.error': 'We couldn’t check this payment. Check your connection and try again.',
 }
 
 const fil = {
@@ -405,6 +426,27 @@ const fil = {
   // Impound location
   'impound.title': 'Lugar ng Impound',
   'impound.directions': 'Kumuha ng direksyon',
+
+  // Payment check (a cash slip's QR, /r/<code>)
+  'check.title': 'Pagsusuri ng Bayad',
+  'check.loading': 'Sinusuri ang bayad na ito…',
+  'check.valid': 'May tala ng bayad sa MTPB',
+  'check.status.paid': 'Naberipika na ng MTPB.',
+  'check.status.verifying': 'Natanggap na. Hinihintay ang beripikasyon ng MTPB staff.',
+  'check.status.rejected': 'Hindi tinanggap ng MTPB. Makipag-ugnayan sa opisina ng MTPB.',
+  'check.status.unpaid': 'Hindi pa bayad. Makipag-ugnayan sa opisina ng MTPB.',
+  'check.badge.rejected': 'tinanggihan',
+  'check.badge.unpaid': 'hindi pa bayad',
+  'check.row.reference': 'Reference Number',
+  'check.row.method': 'Paraan ng Pagbabayad',
+  'check.row.amount': 'Halagang Ibinayad',
+  'check.row.date': 'Petsa ng Bayad',
+  'check.row.violation': 'Numero ng Paglabag',
+  'check.row.plate': 'Numero ng Plaka',
+  'check.match': 'Tiyaking tugma ang paglabag at plaka sa sasakyan.',
+  'check.notFound.title': 'Walang nahanap na bayad',
+  'check.notFound.text': 'Walang bayad sa MTPB na tumutugma sa code na ito. Maaaring hindi tunay ang slip. Makipag-ugnayan sa opisina ng MTPB.',
+  'check.error': 'Hindi masuri ang bayad na ito. Tingnan ang iyong koneksyon at subukang muli.',
 }
 
 export const STRINGS = { en, fil }
