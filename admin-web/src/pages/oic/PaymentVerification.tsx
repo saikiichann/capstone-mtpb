@@ -5,6 +5,9 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
+  X,
+  Building2,
+  Landmark,
 } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
@@ -63,6 +66,7 @@ type CurrentUser = { name: string; role: RoleSlug };
 type WaitingBand = "Over 24 hrs" | "6-24 hrs" | "Under 6 hrs";
 type PaymentMethod = "GCash" | "Cash";
 type PaymentStatus = "Pending Verification" | "Verified" | "Rejected";
+type PaymentLocation = "City Hall" | "Central";
 
 type PaymentRow = {
   id: string;
@@ -72,6 +76,7 @@ type PaymentRow = {
   plateNo: string | null;
   amount: number;
   method: PaymentMethod;
+  paymentLocation: PaymentLocation;
   waiting: WaitingBand;
   status: PaymentStatus;
   verifiedAt: Timestamp | null;
@@ -80,12 +85,17 @@ type PaymentRow = {
   clampId: string | null;
   recordedBy: string | null;
   orphaned: boolean;
+  amountInWords: string | null;
+  cashReceived: number | null;
+  createdAt: Timestamp | null;
 };
 
 type Metrics = {
   pendingReview: number;
   approvedToday: number;
   rejectedToday: number;
+  cityHallCount: number;
+  centralCount: number;
 };
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
@@ -107,104 +117,65 @@ const ROLE_LABELS: Record<RoleSlug, string> = {
   "impounding-staff": "Impounding Staff",
 };
 
+// ⚠️ CHANGED: Removed "Unknown"
+const LOCATION_OPTIONS: Array<PaymentLocation | "All Locations"> = [
+  "All Locations",
+  "City Hall",
+  "Central",
+];
+
+// ⚠️ CHANGED: Removed "Unknown" key
+const LOCATION_LABELS: Record<PaymentLocation, string> = {
+  "City Hall": "City Hall",
+  Central: "Central (MTPB)",
+};
+
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
     items: [
       { label: "Overview", icon: overviewIcon, path: "/dashboard" },
-      {
-        label: "Sector Analytics",
-        icon: sectorAnalyticsIcon,
-        path: "/dashboard/sector-analytics",
-      },
-      {
-        label: "Geospatial Heatmap",
-        icon: mapIcon,
-        path: "/dashboard/heatmap",
-      },
+      { label: "Sector Analytics", icon: sectorAnalyticsIcon, path: "/dashboard/sector-analytics" },
+      { label: "Geospatial Heatmap", icon: mapIcon, path: "/dashboard/heatmap" },
     ],
   },
   {
     label: "Enforcement",
     items: [
       { label: "Clamping Log", icon: clampingIcon, path: "/dashboard/clamping" },
-      {
-        label: "Impounding Log",
-        icon: impoundingIcon,
-        path: "/dashboard/impounding",
-      },
-      {
-        label: "Vehicle History",
-        icon: historyIcon,
-        path: "/dashboard/vehicle-history",
-      },
+      { label: "Impounding Log", icon: impoundingIcon, path: "/dashboard/impounding" },
+      { label: "Vehicle History", icon: historyIcon, path: "/dashboard/vehicle-history" },
     ],
   },
   {
     label: "Payment/Finance",
     items: [
-      {
-        label: "Pending Payments",
-        icon: pendingPaymentsIcon,
-        path: "/dashboard/pending-payments",
-      },
+      { label: "Pending Payments", icon: pendingPaymentsIcon, path: "/dashboard/pending-payments" },
       {
         label: "Payment Verification",
         icon: paymentVerificationIcon,
         path: "/dashboard/verification",
         active: true,
       },
-      {
-        label: "Transaction History",
-        icon: transactionIcon,
-        path: "/dashboard/transactions",
-      },
+      { label: "Transaction History", icon: transactionIcon, path: "/dashboard/transactions" },
       { label: "Revenue Reports", icon: revenueIcon, path: "/dashboard/revenue" },
     ],
   },
   {
     label: "Vehicle Release",
     items: [
-      {
-        label: "Release Requests",
-        icon: releaseRequestIcon,
-        path: "/dashboard/release-requests",
-      },
-      {
-        label: "Release Queue",
-        icon: queueIcon,
-        path: "/dashboard/release-queue",
-      },
-      {
-        label: "Release Log",
-        icon: releaseLogIcon,
-        path: "/dashboard/release-log",
-      },
+      { label: "Release Requests", icon: releaseRequestIcon, path: "/dashboard/release-requests" },
+      { label: "Release Queue", icon: queueIcon, path: "/dashboard/release-queue" },
+      { label: "Release Log", icon: releaseLogIcon, path: "/dashboard/release-log" },
     ],
   },
   {
     label: "Operations",
     items: [
-      {
-        label: "Active Clamping Teams",
-        icon: clampingTeamsIcon,
-        path: "/dashboard/clamping-teams",
-      },
-      {
-        label: "Active Impounding",
-        icon: towTruckIcon,
-        path: "/dashboard/active-impounding",
-      },
-      {
-        label: "Field Updates",
-        icon: fieldUpdateIcon,
-        path: "/dashboard/field-updates",
-      },
-      {
-        label: "Operation Scheduler",
-        icon: operationSchedulerIcon,
-        path: "/dashboard/operation-scheduler",
-      },
+      { label: "Active Clamping Teams", icon: clampingTeamsIcon, path: "/dashboard/clamping-teams" },
+      { label: "Active Impounding", icon: towTruckIcon, path: "/dashboard/active-impounding" },
+      { label: "Field Updates", icon: fieldUpdateIcon, path: "/dashboard/field-updates" },
+      { label: "Operation Scheduler", icon: operationSchedulerIcon, path: "/dashboard/operation-scheduler" },
     ],
   },
 ];
@@ -256,6 +227,23 @@ const getWaitingClass = (band: WaitingBand): string => {
   return map[band] ?? "";
 };
 
+// ⚠️ CHANGED: Added fallback return to prevent `undefined`
+const deriveLocation = (data: any): PaymentLocation => {
+  const raw = String(data.paymentLocation ?? data.location ?? "").toLowerCase();
+  if (raw.includes("city") || raw.includes("hall")) return "City Hall";
+  if (raw.includes("central") || raw.includes("mtpb")) return "Central";
+  // Fallback — treats missing/unknown location as Central (MTPB default)
+  return "Central";
+};
+
+const getLocationClass = (location: PaymentLocation): string => {
+  const map: Record<PaymentLocation, string> = {
+    "City Hall": "location-city-hall",
+    Central: "location-central",
+  };
+  return map[location] ?? "";
+};
+
 /* ------------------------------------------------------------------
    COMPONENT
 ------------------------------------------------------------------ */
@@ -274,10 +262,24 @@ export default function PaymentVerification() {
     pendingReview: 0,
     approvedToday: 0,
     rejectedToday: 0,
+    cityHallCount: 0,
+    centralCount: 0,
   });
   const [loading, setLoading] = useState(true);
   const [actioning, setActioning] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  /* Location filter */
+  const [locationFilter, setLocationFilter] = useState<
+    PaymentLocation | "All Locations"
+  >("All Locations");
+
+  /* SCAN BOX STATE */
+  const [scanInput, setScanInput] = useState("");
+  const [scanError, setScanError] = useState("");
+  const [scannedPayment, setScannedPayment] = useState<PaymentRow | null>(null);
+  const [scanLoading, setScanLoading] = useState(false);
+  const scanInputRef = useRef<HTMLInputElement>(null);
 
   /* Current user */
   useEffect(() => {
@@ -307,6 +309,11 @@ export default function PaymentVerification() {
     return () => unsubscribe();
   }, []);
 
+  /* Auto-focus scan input on mount */
+  useEffect(() => {
+    scanInputRef.current?.focus();
+  }, []);
+
   /* Payments listener */
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -323,9 +330,11 @@ export default function PaymentVerification() {
             data.verificationStatus ?? data.status ?? ""
           ).toLowerCase();
 
-          const status: PaymentStatus = ["verified", "succeeded", "approved"].includes(
-            rawStatus
-          )
+          const status: PaymentStatus = [
+            "verified",
+            "succeeded",
+            "approved",
+          ].includes(rawStatus)
             ? "Verified"
             : ["rejected", "failed", "declined"].includes(rawStatus)
             ? "Rejected"
@@ -344,6 +353,7 @@ export default function PaymentVerification() {
             plateNo: ((data.plateNo ?? data.plateNumber) as string) ?? null,
             amount: Number(data.totalAmount ?? data.amount ?? 0),
             method,
+            paymentLocation: deriveLocation(data),
             waiting: computeWaitingBand(paidAt),
             status,
             verifiedAt: (data.verifiedAt as Timestamp) ?? null,
@@ -352,6 +362,9 @@ export default function PaymentVerification() {
             clampId: (data.clampId as string) ?? null,
             recordedBy: (data.recordedBy as string) ?? null,
             orphaned: false,
+            amountInWords: (data.amountInWords as string) ?? null,
+            cashReceived: (data.cashReceived as number) ?? null,
+            createdAt: (data.createdAt as Timestamp) ?? null,
           } as PaymentRow;
         });
 
@@ -412,6 +425,12 @@ export default function PaymentVerification() {
           rejectedToday: enriched.filter(
             (p) => p.status === "Rejected" && isToday(p.verifiedAt)
           ).length,
+          cityHallCount: enriched.filter(
+            (p) => p.paymentLocation === "City Hall"
+          ).length,
+          centralCount: enriched.filter(
+            (p) => p.paymentLocation === "Central"
+          ).length,
         });
         setLoading(false);
       },
@@ -461,6 +480,137 @@ export default function PaymentVerification() {
     [currentUser.role]
   );
 
+  /* SCAN HANDLER */
+  const handleScanSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setScanError("");
+    setScannedPayment(null);
+
+    const text = scanInput.trim();
+    if (!text) return;
+
+    setScanLoading(true);
+
+    try {
+      let paymentId: string | null = null;
+      let paymentDoc: any = null;
+
+      const urlMatch = text.match(/\/r\/([A-Za-z0-9_-]+)/);
+      if (urlMatch) {
+        paymentId = urlMatch[1];
+        const snap = await getDoc(doc(db, "payments", paymentId));
+        if (snap.exists()) {
+          paymentDoc = { id: snap.id, ...snap.data() };
+        }
+      } else if (/^REF-\d{4}-\d{5}$/.test(text)) {
+        const q = query(
+          collection(db, "payments"),
+          where("referenceNumber", "==", text)
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          paymentDoc = { id: snap.docs[0].id, ...snap.docs[0].data() };
+        }
+      } else {
+        setScanError("Not a payment code.");
+        setScanInput("");
+        setScanLoading(false);
+        scanInputRef.current?.focus();
+        return;
+      }
+
+      if (!paymentDoc) {
+        setScanError("No payment found for this code.");
+        setScanInput("");
+        setScanLoading(false);
+        scanInputRef.current?.focus();
+        return;
+      }
+
+      const method = String(paymentDoc.method ?? "").toLowerCase();
+      if (method !== "cash") {
+        setScanError("This is a GCash payment — verify it in Payment Verification.");
+        setScanInput("");
+        setScanLoading(false);
+        scanInputRef.current?.focus();
+        return;
+      }
+
+      const status = String(
+        paymentDoc.verificationStatus ?? paymentDoc.status ?? ""
+      ).toLowerCase();
+
+      if (["verified", "succeeded", "approved"].includes(status)) {
+        const verifiedAt = paymentDoc.verifiedAt?.toDate?.();
+        const verifiedBy = paymentDoc.verifiedBy ?? "unknown";
+        setScanError(
+          `Already verified${verifiedAt ? ` on ${verifiedAt.toLocaleString()}` : ""} by ${verifiedBy}.`
+        );
+        setScanInput("");
+        setScanLoading(false);
+        scanInputRef.current?.focus();
+        return;
+      }
+
+      if (["rejected", "failed", "declined"].includes(status)) {
+        const rejectedAt = paymentDoc.verifiedAt?.toDate?.();
+        const rejectedBy = paymentDoc.verifiedBy ?? "unknown";
+        setScanError(
+          `Already rejected${rejectedAt ? ` on ${rejectedAt.toLocaleString()}` : ""} by ${rejectedBy}.`
+        );
+        setScanInput("");
+        setScanLoading(false);
+        scanInputRef.current?.focus();
+        return;
+      }
+
+      const paidAt =
+        (paymentDoc.paidAt as Timestamp) ??
+        (paymentDoc.createdAt as Timestamp) ??
+        null;
+
+      const row: PaymentRow = {
+        id: paymentDoc.id,
+        reference: paymentDoc.referenceNumber ?? paymentDoc.paymentReference ?? paymentDoc.id,
+        orNumber: paymentDoc.orNumber ?? null,
+        cin: paymentDoc.cin ?? null,
+        plateNo: paymentDoc.plateNo ?? null,
+        amount: Number(paymentDoc.totalAmount ?? paymentDoc.amount ?? 0),
+        method: "Cash",
+        paymentLocation: deriveLocation(paymentDoc),
+        waiting: computeWaitingBand(paidAt),
+        status: "Pending Verification",
+        verifiedAt: null,
+        paidAt,
+        violationId: paymentDoc.violationId ?? null,
+        clampId: paymentDoc.clampId ?? null,
+        recordedBy: paymentDoc.recordedBy ?? null,
+        orphaned: false,
+        amountInWords: paymentDoc.amountInWords ?? null,
+        cashReceived: paymentDoc.cashReceived ?? null,
+        createdAt: (paymentDoc.createdAt as Timestamp) ?? null,
+      };
+
+      setScannedPayment(row);
+      setScanInput("");
+      setScanLoading(false);
+    } catch (err: any) {
+      console.error("Scan lookup failed:", err);
+      setScanError(err.message || "Failed to look up payment.");
+      setScanInput("");
+      setScanLoading(false);
+      scanInputRef.current?.focus();
+    }
+  };
+
+  const clearScan = () => {
+    setScanInput("");
+    setScanError("");
+    setScannedPayment(null);
+    scanInputRef.current?.focus();
+  };
+
+  /* PAYMENT ACTION HANDLER */
   const findClampRef = async (clampId: string | null) => {
     if (!clampId) return null;
     try {
@@ -499,19 +649,22 @@ export default function PaymentVerification() {
       return;
     }
 
-    // ─── SEGREGATION OF DUTIES CHECK ───
-    // Hindi pwedeng i-verify ng parehong tao na nag-record ng payment.
-    if (action === "Verified" && row.recordedBy === currentUser.name) {
+    /* SEGREGATION OF DUTIES CHECK
+       City Hall payments — OIC allowed to self-verify (kasi wala siya doon).
+       Central payments — still two-person control. */
+    const isSelfVerification = row.recordedBy === currentUser.name;
+    const isCityHallPayment = row.paymentLocation === "City Hall";
+
+    if (action === "Verified" && isSelfVerification && !isCityHallPayment) {
       alert(
         "SEGREGATION OF DUTIES VIOLATION\n\n" +
-          "Hindi mo pwedeng i-verify ang sarili mong cash entry.\n\n" +
-          `Nag-record ka ng payment na ito (${row.reference}). ` +
-          "Kailangan ng IBANG authorized personnel (Finance Supervisor o OIC) " +
-          "ang mag-verify ng payment na ito.\n\n" +
-          "Ito ay requirement ng COA Circular 2022-004 (Government Cash Handling — Two-Person Control)."
+          "You cannot verify your own cash entry.\n\n" +
+          `You recorded this payment (${row.reference}). ` +
+          "A DIFFERENT authorized personnel (Finance Supervisor or OIC) " +
+          "must verify this payment.\n\n" +
+          "This is required by COA Circular 2022-004 (Government Cash Handling — Two-Person Control)."
       );
 
-      // Log the attempt para may evidence kung may investigation
       try {
         await addDoc(collection(db, "auditLogs"), {
           userName: currentUser.name,
@@ -523,6 +676,7 @@ export default function PaymentVerification() {
             cin: row.cin,
             recordedBy: row.recordedBy,
             attemptedBy: currentUser.name,
+            paymentLocation: row.paymentLocation,
           },
           timestamp: serverTimestamp(),
         });
@@ -531,6 +685,19 @@ export default function PaymentVerification() {
       }
 
       return;
+    }
+
+    /* City Hall self-verification — confirmation dialog */
+    if (action === "Verified" && isSelfVerification && isCityHallPayment) {
+      const proceed = window.confirm(
+        "⚠️ CITY HALL SELF-VERIFICATION\n\n" +
+          `You recorded this City Hall payment (${row.reference}) yourself.\n\n` +
+          "Self-verification is allowed for City Hall transactions.\n" +
+          "This action will be logged in the audit trail for accountability.\n\n" +
+          "Confirm to proceed?"
+      );
+
+      if (!proceed) return;
     }
 
     let rejectionReason = "";
@@ -544,16 +711,18 @@ export default function PaymentVerification() {
         return;
       }
       rejectionReason = input.trim();
-    } else if (
-      !window.confirm(
-        `Approve payment for ${row.reference}?\n\nCIN: ${
-          row.cin ?? "—"
-        }\nOR Number: ${row.orNumber ?? "—"}\nAmount: ${formatCurrency(
-          row.amount
-        )}\nMethod: ${row.method}`
-      )
-    ) {
-      return;
+    } else if (!isSelfVerification || !isCityHallPayment) {
+      if (
+        !window.confirm(
+          `Approve payment for ${row.reference}?\n\nCIN: ${
+            row.cin ?? "—"
+          }\nOR Number: ${row.orNumber ?? "—"}\nAmount: ${formatCurrency(
+            row.amount
+          )}\nMethod: ${row.method}\nLocation: ${LOCATION_LABELS[row.paymentLocation]}`
+        )
+      ) {
+        return;
+      }
     }
 
     setActioning(row.id);
@@ -593,6 +762,9 @@ export default function PaymentVerification() {
         verificationStatus: action,
         verifiedBy: currentUser.name,
         verifiedAt: serverTimestamp(),
+        ...(isSelfVerification && isCityHallPayment
+          ? { selfVerified: true }
+          : {}),
         ...(action === "Rejected" ? { rejectionReason } : {}),
       });
 
@@ -609,6 +781,7 @@ export default function PaymentVerification() {
               orNumber: row.orNumber,
               totalPaid: row.amount,
               paidAt: row.paidAt ?? serverTimestamp(),
+              paymentLocation: row.paymentLocation,
               releaseStatus: "Awaiting OIC Approval",
             }
           : {}),
@@ -625,7 +798,7 @@ export default function PaymentVerification() {
           : {}),
       });
 
-      // 3. Clamp — verified lang
+      // 3. Clamp
       if (clampRef) {
         batch.update(clampRef, {
           status: "verified",
@@ -636,28 +809,37 @@ export default function PaymentVerification() {
       // 4. Audit log
       batch.set(doc(collection(db, "auditLogs")), {
         userName: currentUser.name,
-        action: `${
-          action === "Verified" ? "approved" : "rejected"
-        } payment for ${row.cin ?? "(no CIN)"} (${row.reference}${
-          row.orNumber ? ` — OR #${row.orNumber}` : ""
-        })`,
+        action: `${action === "Verified" ? "approved" : "rejected"} payment for ${
+          row.cin ?? "(no CIN)"
+        } (${row.reference}${row.orNumber ? ` — OR #${row.orNumber}` : ""})${
+          isSelfVerification && isCityHallPayment ? " [CITY HALL SELF-VERIFIED]" : ""
+        }`,
         record: row.cin ?? row.reference,
-        type: "payment-verification",
+        type:
+          isSelfVerification && isCityHallPayment
+            ? "payment-verification-self-city-hall"
+            : "payment-verification",
         metadata: {
           reference: row.reference,
           orNumber: row.orNumber,
           cin: row.cin,
           amount: row.amount,
           method: row.method,
+          paymentLocation: row.paymentLocation,
           newStatus: action,
           recordedBy: row.recordedBy,
           verifiedBy: currentUser.name,
+          selfVerified: isSelfVerification && isCityHallPayment,
           ...(rejectionReason ? { rejectionReason } : {}),
         },
         timestamp: serverTimestamp(),
       });
 
       await batch.commit();
+
+      if (scannedPayment?.id === row.id) {
+        clearScan();
+      }
     } catch (err: any) {
       console.error("Error updating payment:", err);
       alert(err.message || "Failed to update payment.");
@@ -666,20 +848,39 @@ export default function PaymentVerification() {
     }
   };
 
+  /* Filtered rows by location */
+  const filteredRows = useMemo(() => {
+    if (locationFilter === "All Locations") return rows;
+    return rows.filter((r) => r.paymentLocation === locationFilter);
+  }, [rows, locationFilter]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [locationFilter]);
+
   const metricCards = [
     { title: "Pending Review", value: String(metrics.pendingReview) },
     { title: "Approved Today", value: String(metrics.approvedToday) },
     { title: "Rejected Today", value: String(metrics.rejectedToday) },
+    { title: "City Hall", value: String(metrics.cityHallCount) },
+    { title: "Central (MTPB)", value: String(metrics.centralCount) },
   ];
 
   /* Pagination */
   const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE)),
-    [rows.length]
+    () => Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE)),
+    [filteredRows.length]
   );
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
-  const paginatedRows = rows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const paginatedRows = filteredRows.slice(
+    startIndex,
+    startIndex + ITEMS_PER_PAGE
+  );
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   return (
     <div className="oic-page payment-verification-page">
@@ -690,9 +891,7 @@ export default function PaymentVerification() {
             <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
             <div>
               <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">
-                {ROLE_LABELS[currentUser.role]}
-              </p>
+              <p className="sidebar-brand-role">{ROLE_LABELS[currentUser.role]}</p>
             </div>
           </div>
 
@@ -705,9 +904,7 @@ export default function PaymentVerification() {
                     <li key={item.label}>
                       <button
                         type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
+                        className={`nav-item ${item.active ? "nav-item-active" : ""}`}
                         onClick={() => navigate(item.path)}
                       >
                         <img src={item.icon} alt="" className="nav-icon" />
@@ -747,18 +944,13 @@ export default function PaymentVerification() {
                 <div className="profile-dropdown">
                   <div className="dropdown-header">
                     <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
+                    <p className="dropdown-role">{ROLE_LABELS[currentUser.role]}</p>
                   </div>
                   <button className="dropdown-item">
                     <KeyRound size={18} />
                     <span>Change Password</span>
                   </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
+                  <button className="dropdown-item logout" onClick={handleLogout}>
                     <img src={logoutIcon} alt="" className="dropdown-icon" />
                     <span>Log Out</span>
                   </button>
@@ -768,6 +960,147 @@ export default function PaymentVerification() {
           </header>
 
           <main className="main-content">
+            {/* SCAN BOX */}
+            <div className="scan-box-card">
+              <h2 className="scan-box-title">Scan payment slip</h2>
+              <p className="scan-box-hint">
+                Scan the QR on the slip, or type the REF number. The USB
+                scanner types the code and presses Enter automatically.
+              </p>
+              <form onSubmit={handleScanSubmit}>
+                <input
+                  ref={scanInputRef}
+                  type="text"
+                  className="scan-box-input"
+                  placeholder="Scan or type payment code"
+                  value={scanInput}
+                  onChange={(e) => {
+                    setScanInput(e.target.value);
+                    setScanError("");
+                  }}
+                  autoFocus
+                  disabled={scanLoading}
+                />
+              </form>
+              {scanError && <p className="scan-box-error">{scanError}</p>}
+
+              {/* SCANNED PAYMENT DETAILS */}
+              {scannedPayment && (
+                <div className="scanned-payment-details">
+                  <div className="scan-details-header">
+                    <h3 className="scan-details-title">Payment found</h3>
+                    <button
+                      type="button"
+                      className="scan-details-close"
+                      onClick={clearScan}
+                      title="Clear"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  <div className="scan-details-grid">
+                    <div className="scan-row">
+                      <span>Reference</span>
+                      <strong>{scannedPayment.reference}</strong>
+                    </div>
+                    <div className="scan-row">
+                      <span>OR Number</span>
+                      <strong>{scannedPayment.orNumber ?? "—"}</strong>
+                    </div>
+                    <div className="scan-row">
+                      <span>CIN</span>
+                      <strong>{scannedPayment.cin ?? "—"}</strong>
+                    </div>
+                    <div className="scan-row">
+                      <span>Plate No.</span>
+                      <strong>{scannedPayment.plateNo ?? "—"}</strong>
+                    </div>
+                    <div className="scan-row">
+                      <span>Amount</span>
+                      <strong>{formatCurrency(scannedPayment.amount)}</strong>
+                    </div>
+                    {scannedPayment.amountInWords && (
+                      <div className="scan-row">
+                        <span>Amount in Words</span>
+                        <strong className="scan-row-words">
+                          {scannedPayment.amountInWords}
+                        </strong>
+                      </div>
+                    )}
+                    {scannedPayment.cashReceived !== null && (
+                      <div className="scan-row">
+                        <span>Cash Received</span>
+                        <strong>
+                          {formatCurrency(scannedPayment.cashReceived)}
+                        </strong>
+                      </div>
+                    )}
+                    <div className="scan-row">
+                      <span>Method</span>
+                      <strong>{scannedPayment.method}</strong>
+                    </div>
+                    <div className="scan-row">
+                      <span>Location</span>
+                      <strong>
+                        <span
+                          className={`location-pill ${getLocationClass(
+                            scannedPayment.paymentLocation
+                          )}`}
+                        >
+                          {LOCATION_LABELS[scannedPayment.paymentLocation]}
+                        </span>
+                      </strong>
+                    </div>
+                    <div className="scan-row">
+                      <span>Recorded by</span>
+                      <strong>{scannedPayment.recordedBy ?? "—"}</strong>
+                    </div>
+                    <div className="scan-row">
+                      <span>Time</span>
+                      <strong>
+                        {scannedPayment.paidAt
+                          ? scannedPayment.paidAt.toDate().toLocaleString()
+                          : "—"}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Self-verification notice (City Hall only) */}
+                  {scannedPayment.recordedBy === currentUser.name &&
+                    scannedPayment.paymentLocation === "City Hall" && (
+                      <div className="self-verify-notice">
+                        ⚠️ You recorded this City Hall payment. Self-verification
+                        is allowed but will be logged for accountability.
+                      </div>
+                    )}
+
+                  <div className="scan-actions">
+                    <button
+                      type="button"
+                      className="btn-approve"
+                      onClick={() =>
+                        handlePaymentAction(scannedPayment, "Verified")
+                      }
+                      disabled={actioning === scannedPayment.id}
+                    >
+                      {actioning === scannedPayment.id ? "..." : "✅ Verify"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-reject"
+                      onClick={() =>
+                        handlePaymentAction(scannedPayment, "Rejected")
+                      }
+                      disabled={actioning === scannedPayment.id}
+                    >
+                      {actioning === scannedPayment.id ? "..." : "❌ Reject"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* METRIC CARDS */}
             <div className="metric-grid-three">
               {metricCards.map((card) => (
@@ -780,16 +1113,42 @@ export default function PaymentVerification() {
 
             {/* VERIFICATION QUEUE */}
             <div className="card">
-              <p className="card-eyebrow">Sector 3 · Oldest first</p>
-              <h2 className="card-title">Verification Queue</h2>
+              <div className="card-header-row">
+                <div>
+                  <p className="card-eyebrow">Sector 3 · Oldest first</p>
+                  <h2 className="card-title">Verification Queue</h2>
+                </div>
+
+                <select
+                  value={locationFilter}
+                  onChange={(e) =>
+                    setLocationFilter(
+                      e.target.value as PaymentLocation | "All Locations"
+                    )
+                  }
+                  className="location-filter-select"
+                >
+                  {LOCATION_OPTIONS.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {loc === "All Locations"
+                        ? "All Locations"
+                        : LOCATION_LABELS[loc as PaymentLocation]}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               {loading ? (
                 <div className="table-loading">
                   <p>Loading verification queue...</p>
                 </div>
-              ) : rows.length === 0 ? (
+              ) : filteredRows.length === 0 ? (
                 <div className="table-empty">
-                  <p>No payments pending review.</p>
+                  <p>
+                    {rows.length === 0
+                      ? "No payments pending review."
+                      : "No payments match the selected location."}
+                  </p>
                 </div>
               ) : (
                 <>
@@ -803,6 +1162,7 @@ export default function PaymentVerification() {
                           <th>Plate No.</th>
                           <th>Amount</th>
                           <th>Method</th>
+                          <th>Location</th>
                           <th>Recorded By</th>
                           <th>Waiting</th>
                           <th>Action</th>
@@ -844,6 +1204,22 @@ export default function PaymentVerification() {
                               {formatCurrency(row.amount)}
                             </td>
                             <td className="cell-method">{row.method}</td>
+                            <td>
+                              <span
+                                className={`location-pill ${getLocationClass(
+                                  row.paymentLocation
+                                )}`}
+                                title={LOCATION_LABELS[row.paymentLocation]}
+                              >
+                                {row.paymentLocation === "City Hall" && (
+                                  <Landmark size={12} />
+                                )}
+                                {row.paymentLocation === "Central" && (
+                                  <Building2 size={12} />
+                                )}
+                                {LOCATION_LABELS[row.paymentLocation]}
+                              </span>
+                            </td>
                             <td className="cell-recorded-by">
                               {row.recordedBy ?? "—"}
                             </td>
@@ -869,8 +1245,12 @@ export default function PaymentVerification() {
                                 title={
                                   row.orphaned
                                     ? "Not linked to a violation"
-                                    : row.recordedBy === currentUser.name
+                                    : row.recordedBy === currentUser.name &&
+                                      row.paymentLocation !== "City Hall"
                                     ? "Cannot verify your own entry"
+                                    : row.recordedBy === currentUser.name &&
+                                      row.paymentLocation === "City Hall"
+                                    ? "Self-verify City Hall payment"
                                     : "Approve payment"
                                 }
                               >
@@ -895,7 +1275,6 @@ export default function PaymentVerification() {
                     </table>
                   </div>
 
-                  {/* PAGINATION */}
                   <div className="pagination">
                     <button
                       type="button"

@@ -357,10 +357,12 @@
 /* ==================================================================
    TABLE
 ================================================================== */
-.release-log-pae .table-wrapper {
+/* ⚠️ FIXED: typo `.release-log-pae` → `.release-log-page` */
+.release-log-page .table-wrapper {
   overflow-x: auto;
   width: 100%;
 }
+
 .release-log-page .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -424,6 +426,55 @@
   font-weight: 600;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+/* ==================================================================
+   VIOLATOR CELL (⚠️ ADDED)
+================================================================== */
+.release-log-page .cell-violator {
+  min-width: 140px;
+  white-space: normal;
+}
+
+.release-log-page .violator-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.release-log-page .violator-name {
+  font-weight: 500;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.release-log-page .violator-tag {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.release-log-page .violator-tag.uid {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.release-log-page .violator-tag.guest {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.release-log-page .cell-empty {
+  color: #9CA3AF;
+  font-style: italic;
 }
 
 /* ---- Empty state (as supplied) ---- */
@@ -527,5 +578,19 @@
   .release-log-page .pagination {
     flex-wrap: wrap;
     justify-content: center;
+  }
+
+  /* ⚠️ ADDED: violator cell on mobile */
+  .release-log-page .cell-violator {
+    min-width: 120px;
+  }
+
+  .release-log-page .violator-name {
+    font-size: 13px;
+  }
+
+  .release-log-page .violator-tag {
+    font-size: 11px;
+    padding: 3px 10px;
   }
 }

@@ -456,6 +456,50 @@
 }
 
 /* ==================================================================
+   VIOLATOR CELL (⚠️ ADDED — fixed size)
+================================================================== */
+.oic-page .cell-violator {
+  min-width: 140px;
+  white-space: normal;
+}
+
+.oic-page .violator-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.oic-page .violator-name {
+  font-weight: 500;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.oic-page .violator-tag {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.oic-page .violator-tag.uid {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.oic-page .violator-tag.guest {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+/* ==================================================================
    ACTION BUTTONS
 ================================================================== */
 .oic-page .btn-approve {
@@ -609,5 +653,14 @@
   .oic-page .btn-reject {
     padding: 5px 10px;
     font-size: 12px;
+  }
+
+
+  .oic-page .cell-violator {
+    min-width: 120px;
+  }
+
+  .oic-page .violator-name {
+    font-size: 13px;
   }
 }

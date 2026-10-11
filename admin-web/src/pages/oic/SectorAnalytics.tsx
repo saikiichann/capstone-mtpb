@@ -14,6 +14,8 @@ import {
   doc,
   getDoc,
   onSnapshot,
+  query,
+  where,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
@@ -91,6 +93,11 @@ type NavGroup = {
 };
 
 /* ------------------------------------------------------------------
+   CONSTANTS
+------------------------------------------------------------------ */
+const SECTOR_ID = "sector-3";
+
+/* ------------------------------------------------------------------
    ROLE LABELS
 ------------------------------------------------------------------ */
 const ROLE_LABELS: Record<RoleSlug, string> = {
@@ -119,17 +126,13 @@ const SECTOR_COLORS = [
 ];
 
 /* ------------------------------------------------------------------
-   NAV — matches target design (screenshot)
+   NAV
 ------------------------------------------------------------------ */
 const navGroups: NavGroup[] = [
   {
     label: "Dashboard",
     items: [
-      {
-        label: "Overview",
-        icon: overviewIcon,
-        path: "/dashboard",
-      },
+      { label: "Overview", icon: overviewIcon, path: "/dashboard" },
       {
         label: "Sector Analytics",
         icon: sectorAnalyticsIcon,
@@ -146,11 +149,7 @@ const navGroups: NavGroup[] = [
   {
     label: "Enforcement",
     items: [
-      {
-        label: "Clamping Log",
-        icon: clampingIcon,
-        path: "/dashboard/clamping",
-      },
+      { label: "Clamping Log", icon: clampingIcon, path: "/dashboard/clamping" },
       {
         label: "Impounding Log",
         icon: impoundingIcon,
@@ -243,6 +242,39 @@ const formatCurrency = (amount: number): string => {
   return `₱${amount.toFixed(0)}`;
 };
 
+/**
+ * ⚠️ ADDED: Canonicalize barangay names para consistent ang grouping.
+ * Handles: "santa cruz" = "Sta. Cruz" = "Sta Cruz" → "Sta. Cruz"
+ * Also extracts from location string (hal. "Sampaloc - España Blvd" → "Sampaloc")
+ */
+const canonicalBarangay = (raw: string | null | undefined): string | null => {
+  if (!raw) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return null;
+
+  const key = trimmed.toLowerCase().replace(/\./g, "").replace(/\s+/g, " ");
+
+  const map: Record<string, string> = {
+    "san nicolas": "San Nicolas",
+    "sta cruz": "Sta. Cruz",
+    "santa cruz": "Sta. Cruz",
+    binondo: "Binondo",
+    quiapo: "Quiapo",
+    sampaloc: "Sampaloc",
+    "san miguel": "San Miguel",
+  };
+
+  // Exact match
+  if (map[key]) return map[key];
+
+  // Partial match (handles "Sampaloc - España Boulevard" → "Sampaloc")
+  for (const [pattern, canonical] of Object.entries(map)) {
+    if (key.includes(pattern)) return canonical;
+  }
+
+  return trimmed; // Fallback — keep original
+};
+
 /* ------------------------------------------------------------------
    COMPONENT
 ------------------------------------------------------------------ */
@@ -284,12 +316,15 @@ export default function SectorAnalytics() {
     return () => unsubscribe();
   }, []);
 
-  /* Fetch violations */
+  /* ⚠️ CHANGED: Fetch violations — FILTERED by sectorId === "sector-3" */
   useEffect(() => {
-    const ref = collection(db, "violations");
+    const q = query(
+      collection(db, "violations"),
+      where("sectorId", "==", SECTOR_ID)
+    );
 
     const unsubscribe = onSnapshot(
-      ref,
+      q,
       (snap) => {
         const allViolations = snap.docs.map((d) => d.data());
 
@@ -310,12 +345,16 @@ export default function SectorAnalytics() {
 
         setViolationData(typeArr);
 
-        // 2. Barangay coverage
+        // 2. Barangay coverage — ⚠️ CHANGED with canonicalization
         const barangayMap: Record<string, { count: number; totalFine: number }> =
           {};
         allViolations.forEach((v) => {
-          const barangay =
-            v.barangay ?? v.sector ?? v.location ?? "Unknown";
+          // ⚠️ CHANGED: Canonicalize + tanggalin ang `sector`/`location` fallback
+          const raw = (v.barangay as string | null | undefined) ?? null;
+          const barangay = canonicalBarangay(raw);
+
+          if (!barangay) return; // Skip kung walang valid barangay
+
           if (!barangayMap[barangay]) {
             barangayMap[barangay] = { count: 0, totalFine: 0 };
           }
@@ -357,9 +396,7 @@ export default function SectorAnalytics() {
             impounds,
             avgResolution: "16 min",
           }))
-          .sort(
-            (a, b) => b.clamps + b.impounds - (a.clamps + a.impounds)
-          )
+          .sort((a, b) => b.clamps + b.impounds - (a.clamps + a.impounds))
           .slice(0, 5);
 
         setOfficerPerformance(officerArr);
@@ -403,10 +440,7 @@ export default function SectorAnalytics() {
     }
   };
 
-  const totalViolations = violationData.reduce(
-    (sum, v) => sum + v.value,
-    0
-  );
+  const totalViolations = violationData.reduce((sum, v) => sum + v.value, 0);
 
   /* Pie tooltip */
   const PieTooltip = ({ active, payload }: any) => {

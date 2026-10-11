@@ -69,6 +69,10 @@ type ReleaseRequestRow = {
   waitingMinutes: number;
   verifiedBy: string;
   verifiedAt: Timestamp | null;
+  // ⚠️ ADDED: violator identity fields
+  violatorUid: string | null;
+  guestId: string | null;
+  violatorName: string | null;
 };
 
 type NavItem = {
@@ -297,6 +301,10 @@ export default function ReleaseRequests() {
               waitingMinutes: computeWaitingMinutes(sortKey),
               verifiedBy: data.verifiedBy ?? "—",
               verifiedAt: (data.verifiedAt as Timestamp) ?? null,
+              // ⚠️ ADDED: violator identity (null-safe fallbacks)
+              violatorUid: (data.violatorUid as string) ?? null,
+              guestId: (data.guestId as string) ?? null,
+              violatorName: (data.violatorName as string) ?? null,
             };
           });
 
@@ -350,11 +358,23 @@ export default function ReleaseRequests() {
       if (!proceed) return;
     }
 
+    // ⚠️ CHANGED: include violator info in confirmation dialog
+    const violatorDisplay = row.violatorName
+      ? row.violatorName
+      : row.violatorUid
+      ? "Registered User"
+      : row.guestId
+      ? "Guest"
+      : "—";
+
     if (
       !window.confirm(
-        `Approve release for ${row.cin}?\n\nPlate: ${row.plateNo}\nVehicle: ${row.vehicleType}\nAmount paid: ${formatCurrency(
-          row.amountPaid
-        )}\n\nThis sends the vehicle to the Release Officer's queue.`
+        `Approve release for ${row.cin}?\n\n` +
+          `Violator: ${violatorDisplay}\n` +
+          `Plate: ${row.plateNo}\n` +
+          `Vehicle: ${row.vehicleType}\n` +
+          `Amount paid: ${formatCurrency(row.amountPaid)}\n\n` +
+          `This sends the vehicle to the Release Officer's queue.`
       )
     ) {
       return;
@@ -379,8 +399,20 @@ export default function ReleaseRequests() {
   };
 
   const handleReject = async (row: ReleaseRequestRow) => {
+    // ⚠️ CHANGED: include violator info in rejection prompt
+    const violatorDisplay = row.violatorName
+      ? row.violatorName
+      : row.violatorUid
+      ? "Registered User"
+      : row.guestId
+      ? "Guest"
+      : "—";
+
     const reason = window.prompt(
-      `Reject release for ${row.cin}?\n\nEnter the reason — this is recorded against the case and the violator has already paid, so the ground for refusal needs to be on file:`
+      `Reject release for ${row.cin}?\n\n` +
+        `Violator: ${violatorDisplay}\n` +
+        `Plate: ${row.plateNo}\n\n` +
+        `Enter the reason — this is recorded against the case and the violator has already paid, so the ground for refusal needs to be on file:`
     );
     if (reason === null) return;
     if (!reason.trim()) {
@@ -415,7 +447,9 @@ export default function ReleaseRequests() {
         r.cin.toLowerCase().includes(q) ||
         r.plateNo.toLowerCase().includes(q) ||
         r.location.toLowerCase().includes(q) ||
-        r.queue.toLowerCase().includes(q)
+        r.queue.toLowerCase().includes(q) ||
+        // ⚠️ ADDED: search by violator name
+        (r.violatorName?.toLowerCase().includes(q) ?? false)
     );
   }, [rows, searchQuery]);
 
@@ -522,7 +556,7 @@ export default function ReleaseRequests() {
               <input
                 type="text"
                 className="search-bar-input"
-                placeholder="Search CIN, plate, or location..."
+                placeholder="Search CIN, plate, violator, or location..."
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -566,6 +600,7 @@ export default function ReleaseRequests() {
                           <th>Queue No.</th>
                           <th>CIN</th>
                           <th>Plate No.</th>
+                          <th>Violator</th>{/* ⚠️ ADDED */}
                           <th>Vehicle Type</th>
                           <th>Location</th>
                           <th>Amount Paid</th>
@@ -581,6 +616,39 @@ export default function ReleaseRequests() {
                               <span className="cin-pill">{row.cin}</span>
                             </td>
                             <td className="cell-plate">{row.plateNo}</td>
+
+                            {/* ⚠️ ADDED: Violator cell */}
+                            <td className="cell-violator">
+                              {row.violatorName ? (
+                                <div className="violator-cell">
+                                  <span className="violator-name">
+                                    {row.violatorName}
+                                  </span>
+                                  {row.violatorUid && (
+                                    <span className="violator-tag uid">
+                                      Registered
+                                    </span>
+                                  )}
+                                  {row.guestId && (
+                                    <span className="violator-tag guest">
+                                      Guest
+                                    </span>
+                                  )}
+                                </div>
+                              ) : row.violatorUid ? (
+                                <span className="violator-tag uid">
+                                  Registered User
+                                </span>
+                              ) : row.guestId ? (
+                                <span className="violator-tag guest">
+                                  Guest
+                                </span>
+                              ) : (
+                                <span className="cell-empty">—</span>
+                              )}
+                            </td>
+                            {/* End */}
+
                             <td className="cell-vehicle">{row.vehicleType}</td>
                             <td className="cell-location">{row.location}</td>
                             <td className="cell-amount">

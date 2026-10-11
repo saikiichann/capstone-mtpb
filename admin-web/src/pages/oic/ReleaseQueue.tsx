@@ -63,6 +63,10 @@ type QueueRow = {
   vehicleType: string;
   location: string;
   readyAt: Timestamp | null;
+  // ⚠️ ADDED: violator identity fields
+  violatorUid: string | null;
+  guestId: string | null;
+  violatorName: string | null;
 };
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
@@ -269,6 +273,10 @@ export default function ReleaseQueue() {
               vehicleType: data.vehicleType ?? "—",
               location: data.location ?? "—",
               readyAt: (data.readyAt as Timestamp) ?? null,
+              // ⚠️ ADDED: violator identity (null-safe fallbacks)
+              violatorUid: (data.violatorUid as string) ?? null,
+              guestId: (data.guestId as string) ?? null,
+              violatorName: (data.violatorName as string) ?? null,
             };
           })
           .sort((a, b) => millis(a.readyAt) - millis(b.readyAt));
@@ -340,7 +348,9 @@ export default function ReleaseQueue() {
         row.cin.toLowerCase().includes(q) ||
         row.plateNo.toLowerCase().includes(q) ||
         row.vehicleType.toLowerCase().includes(q) ||
-        row.location.toLowerCase().includes(q)
+        row.location.toLowerCase().includes(q) ||
+        // ⚠️ ADDED: search by violator name
+        (row.violatorName?.toLowerCase().includes(q) ?? false)
     );
   }, [labeledRows, searchQuery]);
 
@@ -446,7 +456,7 @@ export default function ReleaseQueue() {
               <input
                 type="text"
                 className="search-bar-input"
-                placeholder="Search Queue No., CIN, Plate No..."
+                placeholder="Search Queue No., CIN, Plate No., Violator..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -477,6 +487,7 @@ export default function ReleaseQueue() {
                         <th>Queue</th>
                         <th>CIN</th>
                         <th>Plate No.</th>
+                        <th>Violator</th>{/* ⚠️ ADDED */}
                         <th>Vehicle Type</th>
                         <th>Location</th>
                         <th>Status</th>
@@ -490,6 +501,39 @@ export default function ReleaseQueue() {
                             <span className="cin-pill">{row.cin}</span>
                           </td>
                           <td className="cell-plate">{row.plateNo}</td>
+
+                          {/* ⚠️ ADDED: Violator cell */}
+                          <td className="cell-violator">
+                            {row.violatorName ? (
+                              <div className="violator-cell">
+                                <span className="violator-name">
+                                  {row.violatorName}
+                                </span>
+                                {row.violatorUid && (
+                                  <span className="violator-tag uid">
+                                    Registered
+                                  </span>
+                                )}
+                                {row.guestId && (
+                                  <span className="violator-tag guest">
+                                    Guest
+                                  </span>
+                                )}
+                              </div>
+                            ) : row.violatorUid ? (
+                              <span className="violator-tag uid">
+                                Registered User
+                              </span>
+                            ) : row.guestId ? (
+                              <span className="violator-tag guest">
+                                Guest
+                              </span>
+                            ) : (
+                              <span className="cell-empty">—</span>
+                            )}
+                          </td>
+                          {/* End */}
+
                           <td className="cell-type">{row.vehicleType}</td>
                           <td className="cell-location">{row.location}</td>
                           <td>

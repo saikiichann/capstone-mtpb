@@ -103,6 +103,12 @@ type NavGroup = {
 };
 
 /* ------------------------------------------------------------------
+   CONSTANTS
+------------------------------------------------------------------ */
+// ⚠️ ADDED: Sector 3 ID filter
+const SECTOR_ID = "sector-3";
+
+/* ------------------------------------------------------------------
    ROLE LABELS
 ------------------------------------------------------------------ */
 const ROLE_LABELS: Record<RoleSlug, string> = {
@@ -138,7 +144,7 @@ const EMPTY_TOP_VIOLATIONS: ViolationType[] = [
 ];
 
 /* ------------------------------------------------------------------
-   NAV — matches target design (screenshot)
+   NAV
 ------------------------------------------------------------------ */
 const navGroups: NavGroup[] = [
   {
@@ -372,16 +378,22 @@ function Homepage() {
   }, []);
 
   /* ================================================================
-     3. Violations
+     3. Violations — ⚠️ CHANGED: Sector 3 filter + `recordedAt` fix
   ================================================================ */
   useEffect(() => {
-    const ref = collection(db, "violations");
+    // ⚠️ CHANGED: Filter Sector 3 lang
+    const q = query(
+      collection(db, "violations"),
+      where("sectorId", "==", SECTOR_ID)
+    );
+
     const unsubscribe = onSnapshot(
-      ref,
+      q,
       (snap) => {
+        // ⚠️ CHANGED: `recordedAt` ang timestamp field ng violations
         const todayViolations = snap.docs.filter((d) => {
           const data = d.data();
-          return isToday(data.timestamp);
+          return isToday(data.recordedAt as Timestamp | null);
         });
         setViolationsToday(String(todayViolations.length));
 
@@ -395,9 +407,11 @@ function Homepage() {
 
         snap.docs.forEach((doc) => {
           const data = doc.data();
-          if (data.timestamp) {
+          // ⚠️ CHANGED: Gamitin ang `recordedAt` (hindi `timestamp`)
+          const recordedAt = data.recordedAt as Timestamp | null | undefined;
+          if (recordedAt) {
             try {
-              const date = data.timestamp.toDate();
+              const date = recordedAt.toDate();
               const diffDays = Math.floor(
                 (today.getTime() - date.getTime()) / 86400000
               );

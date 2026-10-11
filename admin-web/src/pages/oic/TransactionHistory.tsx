@@ -58,6 +58,9 @@ type TransactionRow = {
   verifiedAt: Timestamp | null;
   status: TransactionStatus;
   rejectionReason: string | null;
+  violatorUid: string | null;
+  guestId: string | null;
+  violatorName: string | null;
 };
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
@@ -311,6 +314,9 @@ export default function TransactionHistory() {
               status,
               rejectionReason: (data.rejectionReason as string) ?? null,
               violationId: (data.violationId as string) ?? null,
+              violatorUid: (data.violatorUid as string) ?? null,
+              guestId: (data.guestId as string) ?? null,
+              violatorName: (data.violatorName as string) ?? null,
             };
           })
           .filter((r): r is NonNullable<typeof r> => r !== null);
@@ -318,14 +324,26 @@ export default function TransactionHistory() {
         const uniqueIds = Array.from(
           new Set(
             base
-              .filter((r) => r.violationId && (!r.cin || !r.plateNo))
+              .filter(
+                (r) =>
+                  r.violationId &&
+                  (!r.cin ||
+                    !r.plateNo ||
+                    (!r.violatorUid && !r.guestId && !r.violatorName))
+              )
               .map((r) => r.violationId as string)
           )
         );
 
         const cache = new Map<
           string,
-          { cin: string | null; plateNo: string | null }
+          {
+            cin: string | null;
+            plateNo: string | null;
+            violatorUid: string | null;
+            guestId: string | null;
+            violatorName: string | null;
+          }
         >();
 
         await Promise.all(
@@ -337,6 +355,9 @@ export default function TransactionHistory() {
                 cache.set(vId, {
                   cin: v.cin ?? null,
                   plateNo: v.plateNo ?? null,
+                  violatorUid: (v.violatorUid as string) ?? null,
+                  guestId: (v.guestId as string) ?? null,
+                  violatorName: (v.violatorName as string) ?? null,
                 });
               }
             } catch (err) {
@@ -352,6 +373,9 @@ export default function TransactionHistory() {
               ...r,
               cin: r.cin ?? linked?.cin ?? null,
               plateNo: r.plateNo ?? linked?.plateNo ?? null,
+              violatorUid: r.violatorUid ?? linked?.violatorUid ?? null,
+              guestId: r.guestId ?? linked?.guestId ?? null,
+              violatorName: r.violatorName ?? linked?.violatorName ?? null,
             };
           })
           .sort((a, b) => millis(b.verifiedAt) - millis(a.verifiedAt));
@@ -405,7 +429,7 @@ export default function TransactionHistory() {
     [currentUser.role]
   );
 
-  /* Search — kasama na ang OR Number */
+  /* Search — OR Number, CIN, plate, reference, at pangalan ng violator */
   const filteredRows = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return rows;
@@ -414,15 +438,13 @@ export default function TransactionHistory() {
         (row.cin ?? "").toLowerCase().includes(q) ||
         (row.plateNo ?? "").toLowerCase().includes(q) ||
         row.reference.toLowerCase().includes(q) ||
-        (row.orNumber ?? "").toLowerCase().includes(q)
+        (row.orNumber ?? "").toLowerCase().includes(q) ||
+        (row.violatorName ?? "").toLowerCase().includes(q)
     );
   }, [rows, searchQuery]);
 
   /* Pagination */
-  const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE)),
-    [filteredRows.length]
-  );
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
   const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -522,7 +544,7 @@ export default function TransactionHistory() {
               <input
                 type="text"
                 className="search-bar-input"
-                placeholder="Search OR, CIN, plate, or reference..."
+                placeholder="Search OR, CIN, plate, reference, or violator..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -554,6 +576,7 @@ export default function TransactionHistory() {
                           <th>OR Number</th>
                           <th>CIN</th>
                           <th>Plate No.</th>
+                          <th>Violator</th>
                           <th>Amount</th>
                           <th>Method</th>
                           <th>Status</th>
@@ -579,6 +602,29 @@ export default function TransactionHistory() {
                             </td>
                             <td className="cell-plate">
                               {row.plateNo ?? (
+                                <span className="cell-empty">—</span>
+                              )}
+                            </td>
+                            {/* Violator — pangalan + Registered/Guest tag (walang ID) */}
+                            <td className="cell-violator">
+                              {row.violatorName || row.violatorUid || row.guestId ? (
+                                <div className="violator-cell">
+                                  {row.violatorName && (
+                                    <span className="violator-name">
+                                      {row.violatorName}
+                                    </span>
+                                  )}
+                                  {(row.violatorUid || row.guestId) && (
+                                    <span
+                                      className={`violator-tag ${
+                                        row.violatorUid ? "uid" : "guest"
+                                      }`}
+                                    >
+                                      {row.violatorUid ? "Registered" : "Guest"}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
                                 <span className="cell-empty">—</span>
                               )}
                             </td>
@@ -617,7 +663,7 @@ export default function TransactionHistory() {
                     <button
                       type="button"
                       className="pagination-btn"
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      onClick={() => setCurrentPage(Math.max(1, safePage - 1))}
                       disabled={safePage === 1}
                     >
                       <ChevronLeft size={16} />
@@ -635,7 +681,7 @@ export default function TransactionHistory() {
                       type="button"
                       className="pagination-btn"
                       onClick={() =>
-                        setCurrentPage((p) => Math.min(totalPages, p + 1))
+                        setCurrentPage(Math.min(totalPages, safePage + 1))
                       }
                       disabled={safePage === totalPages}
                     >
