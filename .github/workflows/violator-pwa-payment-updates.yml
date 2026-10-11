@@ -1,6 +1,8 @@
-# Every ~15 minutes, asks the violator PWA's server to email people whose
-# GCash payment MTPB staff just verified or rejected (checklist P2, see
-# violator-pwa/server/status-notifier.js).
+# Backup timer: asks the violator PWA's server to email people whose GCash
+# payment MTPB staff just verified or rejected (checklist P2, see
+# violator-pwa/server/status-notifier.js). The main timer is a cron-job.org job
+# calling the same endpoint every 5 minutes, because GitHub only runs this
+# schedule every few hours. Running both is harmless.
 #
 # Setup (once):
 # - Repository secret VIOLATOR_PWA_CRON_SECRET (Settings → Secrets and

@@ -46,9 +46,13 @@ Server (from `.env.server.example`), Production only:
   Verification on → App passwords), marked Sensitive. Without these two, payments still work and no email is
   sent.
 - [ ] `CRON_SECRET`: a long random value, marked Sensitive. The **same value** goes in GitHub → repository
-  Settings → Secrets and variables → Actions → `VIOLATOR_PWA_CRON_SECRET` (needs repo admin: Mira). Every
-  ~15 minutes `.github/workflows/violator-pwa-payment-updates.yml` then emails people whose payment MTPB
-  staff verified or rejected. Test it with **Actions → violator-pwa payment updates → Run workflow**.
+  Settings → Secrets and variables → Actions → `VIOLATOR_PWA_CRON_SECRET` (needs repo admin: Mira), and in the
+  cron-job.org job's `Authorization: Bearer …` header. cron-job.org calls
+  `POST https://mtpb-violators-pwa.vercel.app/api/notify-payment-updates` every 5 minutes; the GitHub workflow
+  `.github/workflows/violator-pwa-payment-updates.yml` is a backup (GitHub's schedule only runs every few hours).
+  Together they email people whose payment MTPB staff verified or rejected. Test with **Actions → violator-pwa
+  payment updates → Run workflow** or cron-job.org's **Test run**. Changing the secret means updating all three
+  places and redeploying.
 
 **Check the values, not just the names.** Once, `AUTH_DOMAIN` and `PROJECT_ID` were saved with their own names
 as values and logins hung on "Logging in…". `VITE_…` values are built into the app, so **redeploy after changing
