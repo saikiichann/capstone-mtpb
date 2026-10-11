@@ -156,6 +156,19 @@ export function createFirestoreStore() {
       return snap.docs.map((doc) => ({ ...doc.data(), id: doc.id })).filter((p) => p.checkoutAttemptId)
     },
 
+    // Violations the release officer marked released since `since` (Mira's
+    // markViolationAsReleased). Read only; one range on one field.
+    async listReleasedViolations(since) {
+      const snap = await db.collection(COLLECTIONS.violations).where('releasedAt', '>=', since).get()
+      return snap.docs.map((doc) => ({ ...doc.data(), id: doc.id })).filter((v) => v.releaseStatus === 'Released')
+    },
+
+    // The app payments (paid checkout attempts) made for this violation.
+    async listPaidAttemptsFor(violationId) {
+      const snap = await attempts.where('violationId', '==', violationId).get()
+      return snap.docs.map((doc) => ({ ...doc.data(), id: doc.id })).filter((a) => a.status === 'paid')
+    },
+
     async updateAttempt(attemptId, patch, { onlyIfStatus } = {}) {
       const ref = attempts.doc(attemptId)
       if (!onlyIfStatus) {
