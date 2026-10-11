@@ -1,0 +1,570 @@
+/* ==================================================================
+   ActiveImpounding.css (OIC)
+   Standalone stylesheet — redefines the shared sidebar/header/card
+   chrome so this page works regardless of which other OIC CSS files
+   have loaded.
+================================================================== */
+
+/* ==================================================================
+   LAYOUT
+================================================================== */
+.oic-page.active-impound-page {
+  display: flex;
+  min-height: 100vh;
+  background: #F8F9FA;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #111827;
+}
+
+.active-impound-page .dashboard {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ==================================================================
+   SIDEBAR
+================================================================== */
+.active-impound-page .sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: #010A16;
+  color: #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 24px;
+}
+
+.active-impound-page .sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.active-impound-page .sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #FFFFFF;
+}
+
+.active-impound-page .sidebar-brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.active-impound-page .sidebar-brand-role {
+  font-size: 11px;
+  color: #FFFFFF;
+  margin: 2px 0 0;
+  line-height: 1.2;
+}
+
+.active-impound-page .sidebar-nav {
+  padding-top: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.active-impound-page .nav-group {
+  padding: 0 16px;
+  margin-bottom: 18px;
+}
+
+.active-impound-page .nav-group-label {
+  margin: 0 0 8px;
+  padding: 0 18px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+}
+
+.active-impound-page .nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.active-impound-page .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 18px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.active-impound-page .nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.active-impound-page .nav-item-active {
+  background: rgba(59, 130, 246, 0.12);
+  border-left-color: #3B82F6;
+  font-weight: 600;
+}
+
+.active-impound-page .nav-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* ==================================================================
+   MAIN + HEADER
+================================================================== */
+.active-impound-page .main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.active-impound-page .main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  background: #F8F9FA;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.active-impound-page .main-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+.active-impound-page .main-header p {
+  font-size: 14px;
+  color: #6B7280;
+  font-weight: 500;
+  margin: 4px 0 0;
+}
+
+/* ==================================================================
+   AVATAR + DROPDOWN
+================================================================== */
+.active-impound-page .avatar-container {
+  position: relative;
+}
+
+.active-impound-page .avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  cursor: pointer;
+  border: 2px solid #E5E7EB;
+  background-color: #D1D5DB;
+  transition: opacity 0.2s ease;
+}
+
+.active-impound-page .avatar-img:hover {
+  opacity: 0.8;
+}
+
+.active-impound-page .profile-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 240px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.active-impound-page .dropdown-header {
+  background: #010A16;
+  padding: 16px;
+}
+
+.active-impound-page .dropdown-name {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: #FFFFFF;
+}
+
+.active-impound-page .dropdown-role {
+  font-size: 13px;
+  font-weight: 500;
+  color: #FFFFFF;
+  margin: 4px 0 0;
+}
+
+.active-impound-page .dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #FFFFFF;
+  border: none;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.active-impound-page .dropdown-item:hover {
+  background: #F3F4F6;
+}
+
+.active-impound-page .dropdown-item + .dropdown-item {
+  border-top: 1px solid #F3F4F6;
+}
+
+.active-impound-page .dropdown-item.logout {
+  color: #DC2626;
+}
+
+.active-impound-page .dropdown-item.logout:hover {
+  background: #FEF2F2;
+}
+
+.active-impound-page .dropdown-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.active-impound-page .dropdown-item.logout img {
+  filter: invert(24%) sepia(94%) saturate(1800%) hue-rotate(343deg)
+    brightness(90%) contrast(90%);
+}
+
+/* ==================================================================
+   MAIN CONTENT
+================================================================== */
+.active-impound-page .main-content {
+  flex: 1;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.active-impound-page .card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #F3F4F6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  width: 100%;
+}
+
+/* ==================================================================
+   METRIC CARDS (3 columns)
+================================================================== */
+.active-impound-page .metric-grid-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.active-impound-page .metric-card {
+  padding: 20px 24px;
+}
+
+.active-impound-page .metric-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.active-impound-page .metric-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #000;
+  margin: 8px 0 4px;
+  line-height: 1;
+}
+
+.active-impound-page .metric-subtitle {
+  font-size: 12px;
+  margin: 4px 0 0;
+  color: #6B7280;
+}
+
+/* ==================================================================
+   QUEUE CARD
+================================================================== */
+.active-impound-page .active-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 480px;
+}
+
+.active-impound-page .active-header {
+  margin-bottom: 20px;
+}
+
+.active-impound-page .card-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.active-impound-page .card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+/* ==================================================================
+   TABLE
+================================================================== */
+.active-impound-page .impound-table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.active-impound-page .impound-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.active-impound-page .impound-table thead {
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.active-impound-page .impound-table th {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  padding: 12px;
+  white-space: nowrap;
+}
+
+.active-impound-page .impound-table td {
+  padding: 14px 12px;
+  color: #374151;
+  vertical-align: middle;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.active-impound-page .impound-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.active-impound-page .impound-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+.active-impound-page .cin-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.active-impound-page .cell-plate {
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.active-impound-page .cell-location {
+  color: #374151;
+}
+
+.active-impound-page .cell-clamped-by {
+  color: #374151;
+  white-space: nowrap;
+}
+
+.active-impound-page .cell-time {
+  color: #374151;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.active-impound-page .cell-overdue {
+  color: #111827;
+  font-weight: 500;
+}
+
+/* ==================================================================
+   STATUS PILLS
+================================================================== */
+.active-impound-page .status-pill {
+  display: inline-block;
+  padding: 5px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.active-impound-page .status-scheduled {
+  background: #FEF9C3;
+  border-color: #EAB308;
+  color: #854D0E;
+}
+
+.active-impound-page .status-subject {
+  background: #FCA5A5;
+  border-color: #DC2626;
+  color: #7F1D1D;
+}
+
+.active-impound-page .status-impounded {
+  background: #F87171;
+  border-color: #B91C1C;
+  color: #7F1D1D;
+}
+
+.active-impound-page .status-released {
+  background: #DCFCE7;
+  border-color: #22C55E;
+  color: #166534;
+}
+
+.active-impound-page .status-patrol {
+  background: #DBEAFE;
+  border-color: #3B82F6;
+  color: #1E40AF;
+}
+
+/* ==================================================================
+   LOADING / EMPTY
+================================================================== */
+.active-impound-page .table-loading,
+.active-impound-page .table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #6B7280;
+  font-size: 14px;
+}
+
+.active-impound-page .table-loading p,
+.active-impound-page .table-empty p {
+  margin: 0;
+}
+
+/* ==================================================================
+   PAGINATION
+================================================================== */
+.active-impound-page .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 24px;
+}
+
+.active-impound-page .pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: #FFFFFF;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.active-impound-page .pagination-btn:hover:not(:disabled) {
+  background: #F3F4F6;
+}
+
+.active-impound-page .pagination-btn:disabled {
+  color: #9CA3AF;
+  cursor: not-allowed;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.active-impound-page .pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.active-impound-page .pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  background: #FFFFFF;
+  border: 1px solid #D1D5DB;
+  border-radius: 4px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.active-impound-page .pagination-sep {
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .active-impound-page .metric-grid-three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .active-impound-page .metric-grid-three {
+    grid-template-columns: 1fr;
+  }
+
+  .active-impound-page .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
