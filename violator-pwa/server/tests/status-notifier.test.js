@@ -13,8 +13,8 @@ const NOW = new Date('2026-10-11T08:00:00Z')
 // Payments as Mira's Payment Verification leaves them, attempts as ours.
 function memoryStore() {
   const attempts = new Map([
-    ['att_guest', { uid: 'guest-1', email: 'guest@example.com', cin: 'CLMP-2026-0009', plateNo: 'ABC 1234', totalAmount: 923.06, referenceNumber: 'REF-2026-00015' }],
-    ['att_owner', { uid: 'owner-1', email: '', cin: 'CLMP-2026-0010', plateNo: 'XYZ 9999', totalAmount: 923.06, referenceNumber: 'REF-2026-00016' }],
+    ['att_guest', { uid: 'guest-1', violationId: 'v-guest', status: 'paid', email: 'guest@example.com', cin: 'CLMP-2026-0009', plateNo: 'ABC 1234', totalAmount: 923.06, referenceNumber: 'REF-2026-00015' }],
+    ['att_owner', { uid: 'owner-1', violationId: 'v-owner', status: 'paid', email: '', cin: 'CLMP-2026-0010', plateNo: 'XYZ 9999', totalAmount: 923.06, referenceNumber: 'REF-2026-00016' }],
     ['att_noone', { uid: 'guest-2', email: '', cin: 'CLMP-2026-0011', plateNo: 'DEF 5678', totalAmount: 923.06, referenceNumber: 'REF-2026-00017' }],
   ])
   const payments = [
@@ -31,6 +31,13 @@ function memoryStore() {
     payments,
     async listDecidedAppPayments(since) {
       return payments.filter((p) => p.verifiedAt >= since && p.checkoutAttemptId)
+    },
+    releasedViolations: [],
+    async listReleasedViolations(since) {
+      return this.releasedViolations.filter((v) => v.releasedAt >= since && v.releaseStatus === 'Released')
+    },
+    async listPaidAttemptsFor(violationId) {
+      return [...attempts.entries()].filter(([, a]) => a.violationId === violationId && a.status === 'paid').map(([id, a]) => ({ ...a, id }))
     },
     async getAttempt(id) {
       const a = attempts.get(id)
@@ -54,6 +61,7 @@ function fakeMailer({ fail = false } = {}) {
 }
 
 const lookupEmail = async (uid) => (uid === 'owner-1' ? 'owner@example.com' : null)
+const NONE = { checked: 0, sent: 0, skipped: 0, failed: 0 }
 
 describe('payment status emails', () => {
   let store
@@ -65,7 +73,7 @@ describe('payment status emails', () => {
     const mailer = fakeMailer()
     const notifier = createStatusNotifier({ store, mailer, lookupEmail, now: () => NOW })
     const summary = await notifier.run()
-    assert.deepEqual(summary, { checked: 3, sent: 2, skipped: 1, failed: 0 })
+    assert.deepEqual(summary, { checked: 3, sent: 2, skipped: 1, failed: 0, released: NONE })
 
     const verified = mailer.sent.find((m) => m.to === 'guest@example.com')
     assert.equal(verified.subject, 'MTPB payment verified – REF-2026-00015')
@@ -84,7 +92,7 @@ describe('payment status emails', () => {
     assert.equal(store.attempts.get('att_noone').statusEmailSkipped, 'no email')
 
     // The next run sends nothing new.
-    assert.deepEqual(await notifier.run(), { checked: 3, sent: 0, skipped: 0, failed: 0 })
+    assert.deepEqual(await notifier.run(), { checked: 3, sent: 0, skipped: 0, failed: 0, released: NONE })
     assert.equal(mailer.sent.length, 2)
   })
 
@@ -113,6 +121,35 @@ describe('payment status emails', () => {
     const html = mailer.sent.find((m) => m.to === 'owner@example.com').html
     assert.ok(html.includes('&lt;script&gt;x&lt;/script&gt; &amp; more'))
     assert.ok(!html.includes('<script>'))
+  })
+
+  it('emails "vehicle released" once to whoever paid in the app', async () => {
+    store.releasedViolations = [
+      // As Mira's markViolationAsReleased leaves it.
+      { id: 'v-guest', cin: 'CLMP-2026-0009', plateNo: 'ABC 1234', releaseStatus: 'Released', releaseOrderId: 'ORD-2026-00016', releasedAt: new Date('2026-10-11T07:59:00Z') },
+      // Released long ago: outside the lookback.
+      { id: 'v-owner', cin: 'CLMP-2026-0010', plateNo: 'XYZ 9999', releaseStatus: 'Released', releasedAt: new Date(NOW.getTime() - LOOKBACK_MS - 1) },
+      // Paid in cash: no app payment, nobody to email from here.
+      { id: 'v-cash', cin: 'CLMP-2026-0012', plateNo: 'JKL 3456', releaseStatus: 'Released', releasedAt: new Date('2026-10-11T07:58:00Z') },
+    ]
+    const mailer = fakeMailer()
+    const notifier = createStatusNotifier({ store, mailer, lookupEmail, now: () => NOW })
+    const first = await notifier.run()
+    assert.deepEqual(first.released, { checked: 1, sent: 1, skipped: 0, failed: 0 })
+
+    const mail = mailer.sent.find((m) => m.subject.includes('released'))
+    assert.equal(mail.to, 'guest@example.com')
+    assert.equal(mail.subject, 'MTPB vehicle released – CLMP-2026-0009')
+    for (const part of ['VEHICLE RELEASED', 'ORD-2026-00016', 'ABC 1234', 'REF-2026-00015']) {
+      assert.ok(mail.text.includes(part), `has ${part}`)
+    }
+    // Its own mark, separate from the payment-verified email.
+    assert.equal(store.attempts.get('att_guest').releaseEmailFor, 'Released')
+    assert.equal(store.attempts.get('att_guest').statusEmailFor, 'Verified')
+
+    const second = await notifier.run()
+    assert.deepEqual(second.released, { checked: 1, sent: 0, skipped: 0, failed: 0 })
+    assert.equal(mailer.sent.filter((m) => m.subject.includes('released')).length, 1)
   })
 })
 

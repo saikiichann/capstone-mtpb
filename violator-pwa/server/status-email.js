@@ -39,3 +39,24 @@ export function buildStatusEmail({ decision, attempt, payment }) {
   const subject = verified ? `MTPB payment verified – ${reference}` : `MTPB payment not accepted – ${reference}`
   return { subject, ...email }
 }
+
+// Sent once the release officer marks the vehicle released (Mira's
+// markViolationAsReleased: releaseStatus "Released", releaseOrderId,
+// releasedAt). `violation` is that violation document with its id.
+export function buildReleaseEmail({ attempt, violation }) {
+  const reference = attempt.referenceNumber
+  const email = renderEmail({
+    heading: 'VEHICLE RELEASED',
+    message:
+      'MTPB has released your vehicle. Thank you for settling your violation. Keep this email with your receipt in case you are asked for proof of release.',
+    rows: [
+      ['Release Order No.', violation.releaseOrderId],
+      ['Violation Number', violation.cin || attempt.cin],
+      ['Plate Number', violation.plateNo || attempt.plateNo],
+      ['Payment Reference', reference],
+      ['Released On', formatDateTime(violation.releasedAt)],
+    ],
+    closing: [CONTACT_LINE],
+  })
+  return { subject: `MTPB vehicle released – ${violation.cin || attempt.cin}`, ...email }
+}
