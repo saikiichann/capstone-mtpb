@@ -1,0 +1,744 @@
+/* ==================================================================
+   OperationScheduler.css (OIC)
+   Standalone stylesheet — top-level wrapper is `.scheduler-page`.
+================================================================== */
+
+/* ==================================================================
+   LAYOUT
+================================================================== */
+.oic-page.scheduler-page {
+  display: flex;
+  min-height: 100vh;
+  background: #F8F9FA;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #111827;
+}
+
+.scheduler-page .dashboard {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ==================================================================
+   SIDEBAR
+================================================================== */
+.scheduler-page .sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: #010A16;
+  color: #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 24px;
+}
+
+.scheduler-page .sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.scheduler-page .sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #FFFFFF;
+}
+
+.scheduler-page .sidebar-brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.scheduler-page .sidebar-brand-role {
+  font-size: 11px;
+  color: #FFFFFF;
+  margin: 2px 0 0;
+  line-height: 1.2;
+}
+
+.scheduler-page .sidebar-nav {
+  padding-top: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.scheduler-page .nav-group {
+  padding: 0 16px;
+  margin-bottom: 18px;
+}
+
+.scheduler-page .nav-group-label {
+  margin: 0 0 8px;
+  padding: 0 18px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+}
+
+.scheduler-page .nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.scheduler-page .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 18px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.scheduler-page .nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.scheduler-page .nav-item-active {
+  background: rgba(59, 130, 246, 0.12);
+  border-left-color: #3B82F6;
+  font-weight: 600;
+}
+
+.scheduler-page .nav-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* ==================================================================
+   MAIN + HEADER
+================================================================== */
+.scheduler-page .main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.scheduler-page .main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  background: #F8F9FA;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.scheduler-page .main-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+.scheduler-page .main-header p {
+  font-size: 14px;
+  color: #6B7280;
+  font-weight: 500;
+  margin: 4px 0 0;
+}
+
+/* ==================================================================
+   AVATAR + DROPDOWN
+================================================================== */
+.scheduler-page .avatar-container {
+  position: relative;
+}
+
+.scheduler-page .avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  cursor: pointer;
+  border: 2px solid #E5E7EB;
+  background-color: #D1D5DB;
+  transition: opacity 0.2s ease;
+}
+
+.scheduler-page .avatar-img:hover {
+  opacity: 0.8;
+}
+
+.scheduler-page .profile-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 240px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.scheduler-page .dropdown-header {
+  background: #010A16;
+  padding: 16px;
+}
+
+.scheduler-page .dropdown-name {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: #FFFFFF;
+}
+
+.scheduler-page .dropdown-role {
+  font-size: 13px;
+  font-weight: 500;
+  color: #FFFFFF;
+  margin: 4px 0 0;
+}
+
+.scheduler-page .dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #FFFFFF;
+  border: none;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.scheduler-page .dropdown-item:hover {
+  background: #F3F4F6;
+}
+
+.scheduler-page .dropdown-item + .dropdown-item {
+  border-top: 1px solid #F3F4F6;
+}
+
+.scheduler-page .dropdown-item.logout {
+  color: #DC2626;
+}
+
+.scheduler-page .dropdown-item.logout:hover {
+  background: #FEF2F2;
+}
+
+.scheduler-page .dropdown-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.scheduler-page .dropdown-item.logout img {
+  filter: invert(24%) sepia(94%) saturate(1800%) hue-rotate(343deg)
+    brightness(90%) contrast(90%);
+}
+
+/* ==================================================================
+   MAIN CONTENT + CARD
+================================================================== */
+.scheduler-page .main-content {
+  flex: 1;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.scheduler-page .card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #F3F4F6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  width: 100%;
+}
+
+.scheduler-page .card-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  font-weight: 600;
+  margin: 0;
+}
+
+.scheduler-page .card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+/* ---- Header row (as supplied) ---- */
+.scheduler-page .log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.scheduler-page .btn-add-schedule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  background: #0035A9;
+  border: none;
+  border-radius: 8px;
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.scheduler-page .btn-add-schedule:hover {
+  background: #002A86;
+}
+
+/* ==================================================================
+   SCHEDULE LIST (as supplied)
+================================================================== */
+.scheduler-page .scheduler-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.scheduler-page .scheduler-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.scheduler-page .scheduler-item:last-child {
+  border-bottom: none;
+}
+
+.scheduler-page .scheduler-date {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #F0F9FF;
+  color: #0369A1;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.scheduler-page .scheduler-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.scheduler-page .scheduler-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #0F172A;
+}
+
+.scheduler-page .scheduler-detail {
+  font-size: 12px;
+  color: #64748B;
+}
+
+.scheduler-page .scheduler-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.scheduler-page .btn-mini-outline {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.scheduler-page .btn-mini-outline:hover {
+  background: #F8FAFC;
+}
+
+/* var(--btn-red) in the supplied CSS isn't defined anywhere in this
+   codebase — substituted with the same red used for reject/danger
+   actions elsewhere (e.g. ReleaseRequests.css, PaymentVerification). */
+.scheduler-page .btn-mini-danger {
+  border-color: #FECACA;
+  color: #DC2626;
+}
+
+.scheduler-page .btn-mini-danger:hover {
+  background: #FEF2F2;
+}
+
+/* ---- Empty state (as supplied) ---- */
+.scheduler-page .scheduler-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+  text-align: center;
+}
+
+.scheduler-page .scheduler-empty-text {
+  font-size: 13px;
+  color: #64748B;
+  margin: 0;
+}
+
+.scheduler-page .table-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #6B7280;
+  font-size: 14px;
+}
+
+.scheduler-page .table-loading p {
+  margin: 0;
+}
+
+/* ==================================================================
+   MODAL
+================================================================== */
+.scheduler-page .modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.scheduler-page .modal {
+  background: #FFFFFF;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 540px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
+.scheduler-page .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #F3F4F6;
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.scheduler-page .modal-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.scheduler-page .modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: #6B7280;
+  cursor: pointer;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+}
+
+.scheduler-page .modal-close:hover:not(:disabled) {
+  background: #F3F4F6;
+  color: #111827;
+}
+
+.scheduler-page .modal-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scheduler-page .modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.scheduler-page .modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid #F3F4F6;
+  background: #FAFAFA;
+  flex-shrink: 0;
+  border-radius: 0 0 10px 10px;
+}
+
+/* ---- Form stack (as supplied) ---- */
+.scheduler-page .form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scheduler-page .form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.scheduler-page .form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+/* ---- Form input (as supplied) ---- */
+.scheduler-page .form-input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  color: #334155;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.scheduler-page .form-input:focus {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.scheduler-page .form-input:disabled {
+  background: #F3F4F6;
+  cursor: not-allowed;
+}
+
+.scheduler-page .form-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  color: #334155;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.scheduler-page .form-textarea:focus {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.scheduler-page .form-textarea:disabled {
+  background: #F3F4F6;
+  cursor: not-allowed;
+}
+
+/* ---- Team dropdown ---- */
+.scheduler-page .form-dropdown {
+  position: relative;
+}
+
+.scheduler-page .form-dropdown-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #334155;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.scheduler-page .form-dropdown-trigger:hover:not(:disabled) {
+  border-color: #94A3B8;
+}
+
+.scheduler-page .form-dropdown-trigger:disabled {
+  background: #F3F4F6;
+  cursor: not-allowed;
+}
+
+.scheduler-page .form-dropdown-placeholder {
+  color: #94A3B8;
+}
+
+.scheduler-page .form-dropdown-chevron {
+  color: #6B7280;
+  flex-shrink: 0;
+}
+
+.scheduler-page .form-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  z-index: 10;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.scheduler-page .form-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  background: #FFFFFF;
+  border: none;
+  text-align: left;
+  font-size: 13px;
+  color: #111827;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.scheduler-page .form-dropdown-item:hover {
+  background: #F3F4F6;
+}
+
+.scheduler-page .form-dropdown-item.is-selected {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  font-weight: 600;
+}
+
+.scheduler-page .form-error {
+  margin: 0;
+  padding: 10px 12px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 6px;
+  color: #991B1B;
+  font-size: 12px;
+}
+
+.scheduler-page .btn-cancel {
+  padding: 10px 20px;
+  background: #FFFFFF;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.15s ease;
+}
+
+.scheduler-page .btn-cancel:hover:not(:disabled) {
+  background: #F3F4F6;
+}
+
+.scheduler-page .btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scheduler-page .btn-confirm {
+  padding: 10px 20px;
+  background: #0035A9;
+  border: 1px solid #0035A9;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.15s ease;
+}
+
+.scheduler-page .btn-confirm:hover:not(:disabled) {
+  background: #002A86;
+  border-color: #002A86;
+}
+
+.scheduler-page .btn-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==================================================================
+   RESPONSIVE (as supplied, extended)
+================================================================== */
+@media (max-width: 640px) {
+  .scheduler-page .main-content {
+    padding: 16px;
+  }
+
+  .scheduler-page .scheduler-item {
+    flex-wrap: wrap;
+  }
+
+  .scheduler-page .scheduler-actions {
+    margin-left: auto;
+  }
+
+  .scheduler-page .form-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

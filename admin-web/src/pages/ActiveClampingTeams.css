@@ -1,0 +1,669 @@
+/* ==================================================================
+   ActiveClampingTeams.css (OIC)
+   Standalone stylesheet — top-level wrapper is `.clamping-teams-page`.
+================================================================== */
+
+/* ==================================================================
+   LAYOUT
+================================================================== */
+.oic-page.clamping-teams-page {
+  display: flex;
+  min-height: 100vh;
+  background: #F8F9FA;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #111827;
+}
+
+.clamping-teams-page .dashboard {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ==================================================================
+   SIDEBAR
+================================================================== */
+.clamping-teams-page .sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: #010A16;
+  color: #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 24px;
+}
+
+.clamping-teams-page .sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.clamping-teams-page .sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #FFFFFF;
+}
+
+.clamping-teams-page .sidebar-brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.clamping-teams-page .sidebar-brand-role {
+  font-size: 11px;
+  color: #FFFFFF;
+  margin: 2px 0 0;
+  line-height: 1.2;
+}
+
+.clamping-teams-page .sidebar-nav {
+  padding-top: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.clamping-teams-page .nav-group {
+  padding: 0 16px;
+  margin-bottom: 18px;
+}
+
+.clamping-teams-page .nav-group-label {
+  margin: 0 0 8px;
+  padding: 0 18px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+}
+
+.clamping-teams-page .nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.clamping-teams-page .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 18px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.clamping-teams-page .nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.clamping-teams-page .nav-item-active {
+  background: rgba(59, 130, 246, 0.12);
+  border-left-color: #3B82F6;
+  font-weight: 600;
+}
+
+.clamping-teams-page .nav-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* ==================================================================
+   MAIN + HEADER
+================================================================== */
+.clamping-teams-page .main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.clamping-teams-page .main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  background: #F8F9FA;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.clamping-teams-page .main-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+.clamping-teams-page .main-header p {
+  font-size: 14px;
+  color: #6B7280;
+  font-weight: 500;
+  margin: 4px 0 0;
+}
+
+/* ==================================================================
+   AVATAR + DROPDOWN
+================================================================== */
+.clamping-teams-page .avatar-container {
+  position: relative;
+}
+
+.clamping-teams-page .avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  cursor: pointer;
+  border: 2px solid #E5E7EB;
+  background-color: #D1D5DB;
+  transition: opacity 0.2s ease;
+}
+
+.clamping-teams-page .avatar-img:hover {
+  opacity: 0.8;
+}
+
+.clamping-teams-page .profile-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 240px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.clamping-teams-page .dropdown-header {
+  background: #010A16;
+  padding: 16px;
+}
+
+.clamping-teams-page .dropdown-name {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: #FFFFFF;
+}
+
+.clamping-teams-page .dropdown-role {
+  font-size: 13px;
+  font-weight: 500;
+  color: #FFFFFF;
+  margin: 4px 0 0;
+}
+
+.clamping-teams-page .dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #FFFFFF;
+  border: none;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.clamping-teams-page .dropdown-item:hover {
+  background: #F3F4F6;
+}
+
+.clamping-teams-page .dropdown-item + .dropdown-item {
+  border-top: 1px solid #F3F4F6;
+}
+
+.clamping-teams-page .dropdown-item.logout {
+  color: #DC2626;
+}
+
+.clamping-teams-page .dropdown-item.logout:hover {
+  background: #FEF2F2;
+}
+
+.clamping-teams-page .dropdown-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.clamping-teams-page .dropdown-item.logout img {
+  filter: invert(24%) sepia(94%) saturate(1800%) hue-rotate(343deg)
+    brightness(90%) contrast(90%);
+}
+
+/* ==================================================================
+   MAIN CONTENT + CARD
+================================================================== */
+.clamping-teams-page .main-content {
+  flex: 1;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.clamping-teams-page .card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #F3F4F6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  width: 100%;
+}
+
+.clamping-teams-page .card-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  font-weight: 600;
+  margin: 0;
+}
+
+.clamping-teams-page .card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+/* ==================================================================
+   TEAM CARDS GRID (as supplied)
+================================================================== */
+.clamping-teams-page .team-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.clamping-teams-page .team-card {
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.clamping-teams-page .team-card:hover {
+  border-color: #94A3B8;
+}
+
+.clamping-teams-page .team-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+
+.clamping-teams-page .team-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0;
+}
+
+.clamping-teams-page .team-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #334155;
+  margin-bottom: 12px;
+}
+
+.clamping-teams-page .team-card-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.clamping-teams-page .team-card-icon {
+  color: #94A3B8;
+  flex-shrink: 0;
+}
+
+/* ---- Member pills (as supplied) ---- */
+.clamping-teams-page .team-card-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.clamping-teams-page .team-member-pill {
+  display: inline-block;
+  background: #F0F9FF;
+  color: #0369A1;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ==================================================================
+   STATUS PILLS (team-card-header badge)
+================================================================== */
+.clamping-teams-page .status-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.clamping-teams-page .status-on-patrol {
+  background: #DCFCE7;
+  border-color: #22C55E;
+  color: #166534;
+}
+
+.clamping-teams-page .status-standby {
+  background: #FEF9C3;
+  border-color: #EAB308;
+  color: #854D0E;
+}
+
+.clamping-teams-page .status-off-duty {
+  background: #F1F5F9;
+  border-color: #94A3B8;
+  color: #475569;
+}
+
+/* ==================================================================
+   LOADING / EMPTY
+================================================================== */
+.clamping-teams-page .table-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #6B7280;
+  font-size: 14px;
+}
+
+.clamping-teams-page .table-loading p {
+  margin: 0;
+}
+
+.clamping-teams-page .teams-empty {
+  padding: 32px 0;
+  text-align: center;
+  color: #94A3B8;
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* ==================================================================
+   STATUS MODAL
+================================================================== */
+.clamping-teams-page .modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.clamping-teams-page .modal {
+  background: #FFFFFF;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
+.clamping-teams-page .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #F3F4F6;
+  flex-shrink: 0;
+}
+
+.clamping-teams-page .modal-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.clamping-teams-page .modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: #6B7280;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+
+.clamping-teams-page .modal-close:hover:not(:disabled) {
+  background: #F3F4F6;
+  color: #111827;
+}
+
+.clamping-teams-page .modal-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clamping-teams-page .modal-body {
+  padding: 20px 24px;
+  overflow-y: visible;
+  flex: 1;
+}
+
+.clamping-teams-page .modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid #F3F4F6;
+  background: #FAFAFA;
+  flex-shrink: 0;
+  border-radius: 0 0 10px 10px;
+}
+
+/* ---- Info box inside modal (as supplied) ---- */
+.clamping-teams-page .team-info-box {
+  background: #F8FAFC;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #334155;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.clamping-teams-page .team-info-label {
+  font-weight: 600;
+}
+
+/* ---- Form section (as supplied) ---- */
+.clamping-teams-page .form-section {
+  margin-bottom: 16px;
+}
+
+.clamping-teams-page .form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.clamping-teams-page .form-dropdown {
+  position: relative;
+}
+
+.clamping-teams-page .form-dropdown-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #FFFFFF;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #111827;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.clamping-teams-page .form-dropdown-trigger:hover:not(:disabled) {
+  border-color: #9CA3AF;
+}
+
+.clamping-teams-page .form-dropdown-trigger:disabled {
+  background: #F3F4F6;
+  cursor: not-allowed;
+}
+
+.clamping-teams-page .form-dropdown-chevron {
+  color: #6B7280;
+  flex-shrink: 0;
+}
+
+.clamping-teams-page .form-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  z-index: 10;
+}
+
+.clamping-teams-page .form-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  background: #FFFFFF;
+  border: none;
+  text-align: left;
+  font-size: 14px;
+  color: #111827;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.clamping-teams-page .form-dropdown-item:hover {
+  background: #F3F4F6;
+}
+
+.clamping-teams-page .form-dropdown-item.is-selected {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  font-weight: 600;
+}
+
+.clamping-teams-page .btn-cancel {
+  padding: 10px 20px;
+  background: #FFFFFF;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.15s ease;
+}
+
+.clamping-teams-page .btn-cancel:hover:not(:disabled) {
+  background: #F3F4F6;
+}
+
+.clamping-teams-page .btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clamping-teams-page .btn-confirm {
+  padding: 10px 20px;
+  background: #0035A9;
+  border: 1px solid #0035A9;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.15s ease;
+}
+
+.clamping-teams-page .btn-confirm:hover:not(:disabled) {
+  background: #002A86;
+  border-color: #002A86;
+}
+
+.clamping-teams-page .btn-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==================================================================
+   RESPONSIVE (as supplied, extended)
+================================================================== */
+@media (max-width: 900px) {
+  .clamping-teams-page .team-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .clamping-teams-page .main-content {
+    padding: 16px;
+  }
+}
