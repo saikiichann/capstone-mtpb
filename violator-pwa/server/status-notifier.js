@@ -27,7 +27,10 @@ const DECISIONS = ['Verified', 'Rejected']
 // (admin-web/src/lib/Release.ts) sets releaseStatus "Released",
 // releaseOrderId, releasedAt and releasedBy on the violation; whoever paid
 // for it in the app is emailed once (`releaseEmailFor` on their attempt).
-// Cash payers have no attempt and are skipped, as above.
+// Cash payers have no attempt; but when one added the payment to their
+// account from the slip's QR (server/account-links.js, `cashClaims`), the
+// release email goes to that account's registered email, once
+// (`releaseEmailFor` on the claim). Cash never gets the other emails.
 //
 // `lookupEmail(uid)` gives an account's verified email, for people who
 // didn't type one when paying (guests have none).
@@ -35,28 +38,30 @@ export function createStatusNotifier({ store, mailer, lookupEmail = async () => 
   // Sends one email for one attempt and remembers it under `prefix`
   // ("statusEmail" or "releaseEmail"): <prefix>For, <prefix>SentAt,
   // <prefix>Skipped, <prefix>Error.
-  async function deliver(attempt, { prefix, value, build }, counts, total) {
+  // `update` saves the marks on the record (an attempt, or a cash claim).
+  async function deliver(attempt, { prefix, value, build, update = store.updateAttempt }, counts, total) {
     if (attempt[`${prefix}For`] === value) return
     counts.checked += 1
     if (total.sent + total.failed >= MAX_EMAILS_PER_RUN) return
 
+    // Only the email typed when paying, or the account's registered one.
     const to = attempt.email || (await lookupEmail(attempt.uid))
     if (!to) {
       // Nobody to tell; remember it so later runs don't look again.
-      await store.updateAttempt(attempt.id, { [`${prefix}For`]: value, [`${prefix}Skipped`]: 'no email' })
+      await update(attempt.id, { [`${prefix}For`]: value, [`${prefix}Skipped`]: 'no email' })
       counts.skipped += 1
       return
     }
     try {
       await mailer.send({ to, ...build() })
-      await store.updateAttempt(attempt.id, { [`${prefix}For`]: value, [`${prefix}SentAt`]: now() })
+      await update(attempt.id, { [`${prefix}For`]: value, [`${prefix}SentAt`]: now() })
       counts.sent += 1
       total.sent += 1
     } catch (err) {
       // Not marked as sent, so the next run tries again.
       console.error(`${prefix} failed`, err?.message ?? err)
-      await store
-        .updateAttempt(attempt.id, { [`${prefix}Error`]: String(err?.message ?? err).slice(0, 300) })
+      await Promise.resolve()
+        .then(() => update(attempt.id, { [`${prefix}Error`]: String(err?.message ?? err).slice(0, 300) }))
         .catch(() => {})
       counts.failed += 1
       total.failed += 1
@@ -91,6 +96,24 @@ export function createStatusNotifier({ store, mailer, lookupEmail = async () => 
           continue
         }
         await deliver(attempt, { prefix: 'releaseEmail', value: 'Released', build: () => buildReleaseEmail({ attempt, violation }) }, released, total)
+      }
+      // Cash payments added to an account: the account's registered email.
+      for (const claim of (await store.listCashClaimsFor?.(violation.id)) ?? []) {
+        if (claim.releaseEmailFor === 'Released') {
+          released.checked += 1
+          continue
+        }
+        await deliver(
+          { ...claim, email: '' },
+          {
+            prefix: 'releaseEmail',
+            value: 'Released',
+            build: () => buildReleaseEmail({ attempt: claim, violation }),
+            update: (id, patch) => store.updateCashClaim(id, patch),
+          },
+          released,
+          total,
+        )
       }
     }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/auth-context'
 import PageHeader from '../components/PageHeader'
 import { SkeletonList } from '../components/Skeleton'
@@ -7,12 +7,14 @@ import StatusBadge from '../components/StatusBadge'
 import useMyViolations from '../hooks/useMyViolations'
 import usePayments from '../hooks/usePayments'
 import { formatDateTime, formatPeso, toMillis } from '../utils/format'
+import { samePlate } from '../utils/plates'
 
 // Figma "PAYMENT HISTORY". Only payments that went through are listed: an
 // attempt that failed or was abandoned took no money, so it isn't history.
 // - All: both lists below together, newest first
 // - Paid: the ones that went through (each opens its receipt)
 // - Unpaid: violations with no payment yet, so they can be paid from here
+// `?plate=ABC 1234` narrows it to one vehicle (Vehicle Details' View Payments).
 const TABS = [
   { id: 'all', label: 'All' },
   { id: 'paid', label: 'Paid' },
@@ -22,13 +24,18 @@ const TABS = [
 export default function PaymentHistory() {
   const { user } = useAuth()
   // The History tab's "Pay Now" button opens this page on Unpaid.
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
+  // Back goes to History, or to the vehicle that opened this page.
+  const backTo = location.state?.from ?? '/history'
+  const plate = searchParams.get('plate')
+  const onPlate = (value) => !plate || samePlate(value, plate)
   const [tab, setTab] = useState(() => (TABS.some((t) => t.id === searchParams.get('tab')) ? searchParams.get('tab') : 'all'))
   const { payments: allPayments, status: paymentsStatus } = usePayments(user?.uid)
-  const payments = allPayments.filter((p) => p.isPaid)
+  const payments = allPayments.filter((p) => p.isPaid && onPlate(p.plateNumber))
   const { violations, status: violationsStatus } = useMyViolations(user?.uid)
 
-  const unpaid = violations.filter((v) => v.paymentStatus !== 'paid')
+  const unpaid = violations.filter((v) => v.paymentStatus !== 'paid' && onPlate(v.plateNumber))
   const rows = [
     ...(tab !== 'unpaid'
       ? payments.map((p) => ({ key: `pay-${p.referenceNumber}`, time: toMillis(p.paidAt ?? p.createdAt), payment: p }))
@@ -44,7 +51,7 @@ export default function PaymentHistory() {
 
   return (
     <div className="page">
-      <PageHeader title="Payment History" back="/history" />
+      <PageHeader title="Payment History" back={backTo} />
 
       <main className="page__body history-body">
         <div className="segmented" role="group" aria-label="Filter payments">
@@ -60,6 +67,25 @@ export default function PaymentHistory() {
             </button>
           ))}
         </div>
+
+        {plate && (
+          <p className="history-body__plate-filter">
+            <span>
+              Showing <strong>{plate}</strong> only
+            </span>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => {
+                const next = new URLSearchParams(searchParams)
+                next.delete('plate')
+                setSearchParams(next, { replace: true, state: location.state })
+              }}
+            >
+              Show all vehicles
+            </button>
+          </p>
+        )}
 
         {status === 'loading' && <SkeletonList rows={3} label="Loading payments" />}
         {status === 'error' && (
@@ -78,7 +104,11 @@ export default function PaymentHistory() {
           <ul className="history-list">
             {rows.map((row) =>
               row.payment ? (
-                <PaymentRow key={row.key} payment={row.payment} from={`/payments?tab=${tab}`} />
+                <PaymentRow
+                  key={row.key}
+                  payment={row.payment}
+                  from={`/payments?tab=${tab}${plate ? `&plate=${encodeURIComponent(plate)}` : ''}`}
+                />
               ) : (
                 <UnpaidRow key={row.key} violation={row.violation} />
               ),

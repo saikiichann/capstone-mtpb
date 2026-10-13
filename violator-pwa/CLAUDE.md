@@ -90,17 +90,24 @@ edit by exact unique strings. Never cut between comment markers.** Check the lin
 **Vehicles**
 - Owners **cannot add or edit vehicles.** Vehicles are attached automatically by the MTPB side.
 - **Payments follow the person into their account** (checklist P1, `server/account-links.js`, `api/account-links.js`):
-  - GCash **guests must give an email**. When a verified account with that email signs in, its guest payments
-    move to it. No time limit.
+  - **The email typed on Pay Details decides whose account gets the payment** (Marco, 2026-10-14). Guests must
+    type one; a signed-in payer who types someone else's email is paying for them (`forOther`): it goes only to
+    that email's account, never the payer's. Accounts that don't exist yet get it when they sign in. No time limit.
   - **Cash:** scan the slip QR (`/r/<paymentId>`) → **Add to My Account**, only once MTPB has **verified** the
     payment, within **7 days of `verifiedAt`** (`CASH_CLAIM_DAYS`). Damaged/lost QR or later → MTPB office. Nothing
     can be added from inside Payment History.
-  - Signed-in GCash payers are linked straight away.
+  - Signed-in GCash payers (own email) are linked straight away.
+  - **Emails** (receipt, verified/rejected, vehicle released) go **only** to the typed email, or the payer's
+    registered email if a signed-in payer left it blank. Never to anyone else.
+  - **Cash** gets no emails (the printed slip is the receipt), except "vehicle released" to the registered email of
+    the account that added it from the slip QR (`cashClaims`, backend only).
   - Linking fills the team's `violatorUid` / `violatorName` on the payment and violation (Mira's Release pages then
     show "Registered"), plus our `uid` on the payment. Never overwrites another account.
-  - The plate goes on the account as `pending`, `source: 'payment'` ("Added from your payment"): only that account's
-    own violations show on it (Marco's option 2). No approve button on Mira's side (not needed).
-- Home's vehicle card is **display only** (a "wallet pass" design, `.vehicle-hero`).
+  - The plate goes on the account as `pending`, `source: 'payment'`, shown as a blue **FROM PAYMENT** badge. It works
+    as a **filter**: View Violations / View Payments show only that account's own records on that plate. Nobody
+    sees another person's violations. No approve button on Mira's side (not needed).
+- Home shows a **decorative car** for everyone (`HomeCar.jsx`, `.home-car`): no box, no vehicle details, slides in
+  from the right with skid marks. Not tied to any vehicle and not tappable. (The old `.vehicle-hero` card CSS is unused.)
 - **Open question:** Vehicle Details still has a red **Remove Vehicle** button. Marco hasn't decided yet.
 
 **Payments**

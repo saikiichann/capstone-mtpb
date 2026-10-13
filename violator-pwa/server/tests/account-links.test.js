@@ -32,11 +32,16 @@ function memoryStore() {
     ['att-unpaid', { uid: 'anon-3', isGuest: true, email: 'juan@gmail.com', emailLower: 'juan@gmail.com', status: 'expired' }],
   ])
   const vehicles = []
+  const cashClaims = new Map()
   return {
     violations,
     payments,
     attempts,
     vehicles,
+    cashClaims,
+    async recordCashClaim(id, data) {
+      cashClaims.set(id, { ...cashClaims.get(id), ...data })
+    },
     async getViolationById(id) {
       return violations.has(id) ? normalizeViolation(id, violations.get(id)) : null
     },
@@ -86,6 +91,11 @@ const auth = {
     if (uid === 'real-2') return { uid, email: 'juan@gmail.com', providerData: [{ providerId: 'password' }] }
     return { uid, email: undefined, providerData: [] }
   },
+  async getUserByEmail(email) {
+    if (email === 'juan@gmail.com') return { uid: 'juan', email, emailVerified: true }
+    if (email === 'unverified@gmail.com') return { uid: 'unv', email, emailVerified: false }
+    throw Object.assign(new Error('not found'), { code: 'auth/user-not-found' })
+  },
 }
 
 const juan = { uid: 'juan', isGuest: false, email: 'juan@gmail.com', email_verified: true }
@@ -134,6 +144,9 @@ describe('adding a cash payment from the slip', () => {
       store.vehicles.map((v) => [v.ownerUid, v.plateNumber, v.verificationStatus, v.source, v.make]),
       [['juan', 'GHL 9012', 'pending', 'payment', 'Toyota']],
     )
+    // Remembered for the "vehicle released" email to Juan's registered email.
+    assert.equal(store.cashClaims.get('cashVerified00000001').uid, 'juan')
+    assert.equal(store.cashClaims.get('cashVerified00000001').violationId, 'v-cash')
   })
 
   it('adding it twice changes nothing and adds no second vehicle', async () => {
@@ -222,5 +235,42 @@ describe('GCash paid while signed in', () => {
     assert.equal(store.violations.get('v-other').violatorUid, 'juan')
     assert.equal(store.violations.get('v-other').violatorName, 'Juan Dela Cruz')
     assert.equal(await links.linkPaidAttempt('att-guest'), 'skipped')
+  })
+})
+
+describe("paying for someone else's vehicle (signed in, typed the owner's email)", () => {
+  function storeWithPaymentFor(email) {
+    const store = memoryStore()
+    store.attempts.set('att-for-juan', {
+      uid: 'pedro', isGuest: false, forOther: true, email, emailLower: email, status: 'paid', paymentId: 'gcashForJuan0000001',
+    })
+    store.payments.set('gcashForJuan0000001', { violationId: 'v-other', method: 'GCash', status: 'pending', uid: null })
+    return store
+  }
+
+  it("goes straight to the owner's account when it exists, never the payer's", async () => {
+    const store = storeWithPaymentFor('juan@gmail.com')
+    const links = createAccountLinks({ store, auth, now: () => NOW })
+    assert.equal(await links.linkPaidAttempt('att-for-juan'), 'linked')
+    assert.equal(store.payments.get('gcashForJuan0000001').uid, 'juan')
+    assert.equal(store.violations.get('v-other').violatorUid, 'juan')
+    assert.equal(store.attempts.get('att-for-juan').uid, 'juan', 'the payer no longer holds it')
+    assert.deepEqual(store.vehicles.map((v) => v.ownerUid), ['juan'])
+  })
+
+  it('waits for that email to sign in when there is no verified account yet', async () => {
+    for (const email of ['nobody@gmail.com', 'unverified@gmail.com']) {
+      const store = storeWithPaymentFor(email)
+      const links = createAccountLinks({ store, auth, now: () => NOW })
+      assert.equal(await links.linkPaidAttempt('att-for-juan'), 'waiting')
+      assert.equal(store.payments.get('gcashForJuan0000001').uid, null)
+    }
+  })
+
+  it('is picked up when the owner signs in later', async () => {
+    const store = storeWithPaymentFor('juan@gmail.com')
+    const links = createAccountLinks({ store, auth, now: () => NOW })
+    await links.linkGuestPayments({ user: juan })
+    assert.equal(store.payments.get('gcashForJuan0000001').uid, 'juan')
   })
 })

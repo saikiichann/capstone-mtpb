@@ -14,6 +14,7 @@ const TONES = {
   active: 'success',
   pending: 'warning',
   rejected: 'danger',
+  'from payment': 'info',
   // Payment states (Payment History)
   failed: 'danger',
   expired: 'danger',

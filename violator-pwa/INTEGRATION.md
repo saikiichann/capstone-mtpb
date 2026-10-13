@@ -102,6 +102,12 @@ amounts, the contact number and email (also `emailLower`), `isGuest`, and,
 once paid, the REF number. The browser can't read it; the success page asks
 `/api/confirm-payment`.
 
+`cashClaims` (also backend only): one document per cash payment added to an
+account from its slip QR (document id = the payment's id): `uid`,
+`violationId`, `cin`, `plateNo`, `referenceNumber`, `claimedAt`, and
+`releaseEmailFor` / `releaseEmailSentAt` once the "vehicle released" email
+went to that account's registered email.
+
 ## 5. Violator accounts
 
 - Profiles live in `violators` (document id = Auth uid), beside the admin

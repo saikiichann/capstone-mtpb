@@ -196,6 +196,21 @@ export function createFirestoreStore() {
       })
     },
 
+    // ---- Cash payments added to an account (cashClaims, backend only)
+
+    async recordCashClaim(paymentId, data) {
+      await db.collection(COLLECTIONS.cashClaims).doc(paymentId).set(data, { merge: true })
+    },
+
+    async listCashClaimsFor(violationId) {
+      const snap = await db.collection(COLLECTIONS.cashClaims).where('violationId', '==', violationId).get()
+      return snap.docs.map((doc) => ({ ...doc.data(), id: doc.id }))
+    },
+
+    async updateCashClaim(id, patch) {
+      await db.collection(COLLECTIONS.cashClaims).doc(id).update({ ...patch, updatedAt: FieldValue.serverTimestamp() })
+    },
+
     // Whether this person started a payment for this violation (so they can
     // still open it, and its receipt details, after paying).
     async hasAttemptFor(uid, violationId) {
@@ -321,7 +336,9 @@ export function createFirestoreStore() {
           // own payments; the PayMongo ids let finance staff match this
           // record against the PayMongo dashboard; `livemode: false` puts
           // "not valid as an official receipt" on test-mode receipts.
-          uid: attempt.uid,
+          // Paid for someone else: no owner until that email's account
+          // takes it (server/account-links.js).
+          uid: attempt.forOther ? null : attempt.uid,
           checkoutAttemptId: attemptId,
           paymongoPaymentId: patch.paymongoPaymentId,
           livemode: patch.livemode,

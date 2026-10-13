@@ -66,11 +66,14 @@ export function createPaymentService({ store, paymongo, mailer = null, onPaid = 
   // Step 3 "Confirm Payment": records the attempt and starts a PayMongo
   // checkout. The amount always comes from the violation in Firestore, never
   // from the browser.
-  async function startCheckout({ uid, isGuest = false, violationId, cin, method, mobileNumber, email, returnOrigin }) {
+  async function startCheckout({ uid, isGuest = false, payerEmail = '', violationId, cin, method, mobileNumber, email, returnOrigin }) {
     if (!METHOD_FEES[method]) throw new HttpError(400, 'Unknown payment method.')
     const mobile = String(mobileNumber ?? '').replace(/[\s-]/g, '')
     if (!PH_MOBILE.test(mobile)) throw new HttpError(400, 'Enter a valid mobile number.')
-    const cleanEmail = String(email ?? '').trim()
+    // A signed-in payer who leaves it blank gets the receipt and status emails
+    // at their registered email: only the typed or registered email is ever
+    // emailed.
+    const cleanEmail = String(email ?? '').trim() || (isGuest ? '' : String(payerEmail ?? '').trim())
     if (cleanEmail && !/^\S+@\S+\.\S+$/.test(cleanEmail)) throw new HttpError(400, 'Enter a valid email.')
     // Guests must give one: it's how the payment finds their account if they
     // make one later (checklist P1). Checked here too for old cached apps.
@@ -108,6 +111,9 @@ export function createPaymentService({ store, paymongo, mailer = null, onPaid = 
       email: cleanEmail,
       emailLower: cleanEmail.toLowerCase(),
       isGuest: Boolean(isGuest),
+      // Signed in but typed someone else's email: the payment goes to the
+      // account with that email, not the payer's (checklist P1).
+      forOther: !isGuest && Boolean(cleanEmail) && cleanEmail.toLowerCase() !== String(payerEmail).trim().toLowerCase(),
       fineAmount: charges.fine / 100,
       convenienceFee: charges.fee / 100,
       totalAmount: charges.total / 100,

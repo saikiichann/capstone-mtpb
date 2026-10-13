@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/auth-context'
 import PageHeader from '../../components/PageHeader'
 import StatusBadge from '../../components/StatusBadge'
-import { isActiveVehicle, vehiclePhoto, vehicleTypeLine, verificationOf } from '../../firebase/vehicles'
+import { isActiveVehicle, isFromPayment, vehicleBadge, vehiclePhoto, vehicleTypeLine } from '../../firebase/vehicles'
 import useVehicles from '../../hooks/useVehicles'
 
 // Figma "MY VEHICLES DASHBOARD". It's also the Vehicles tab, so it keeps the
@@ -10,7 +10,7 @@ import useVehicles from '../../hooks/useVehicles'
 export default function MyVehicles() {
   const { user } = useAuth()
   const { status, vehicles } = useVehicles(user?.uid)
-  const hasPending = vehicles.some((v) => !isActiveVehicle(v))
+  const hasPending = vehicles.some((v) => !isActiveVehicle(v) && !isFromPayment(v))
 
   return (
     <div className="page">
@@ -61,7 +61,7 @@ export default function MyVehicles() {
 
 function VehicleListCard({ vehicle }) {
   const photo = vehiclePhoto(vehicle)
-  const badge = verificationOf(vehicle)
+  const badge = vehicleBadge(vehicle)
 
   return (
     <Link

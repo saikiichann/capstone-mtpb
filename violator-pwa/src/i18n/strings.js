@@ -126,7 +126,10 @@ const en = {
   'pay.details.emailGuest': 'Email',
   'pay.details.emailRequired': 'Enter your email. We send your receipt there.',
   'pay.details.emailGuestNote':
-    'Your receipt is sent here. Make an account later with this same email, and this payment will appear in it.',
+    'The receipt is sent here, and this payment goes to the MTPB account with this email. Paying for someone else? Enter their email.',
+  'pay.details.emailAccountNote':
+    'The receipt and this payment go to the account with this email. Paying for someone else? Enter their email.',
+  'pay.details.emailOtherNote': 'This payment will go to the account with this email, not to yours.',
   'pay.details.redirect': 'You will be redirected to {method} to complete the payment.',
   'pay.details.proceed': 'Proceed to {method}',
 
@@ -378,7 +381,10 @@ const fil = {
   'pay.details.emailGuest': 'Email',
   'pay.details.emailRequired': 'Ilagay ang iyong email. Doon namin ipapadala ang resibo.',
   'pay.details.emailGuestNote':
-    'Dito ipapadala ang resibo. Kung gagawa ka ng account gamit ang parehong email, lalabas doon ang bayad na ito.',
+    'Dito ipapadala ang resibo, at mapupunta ang bayad na ito sa MTPB account na may ganitong email. Nagbabayad para sa iba? Ilagay ang kanilang email.',
+  'pay.details.emailAccountNote':
+    'Mapupunta ang resibo at ang bayad na ito sa account na may ganitong email. Nagbabayad para sa iba? Ilagay ang kanilang email.',
+  'pay.details.emailOtherNote': 'Mapupunta ang bayad na ito sa account na may ganitong email, hindi sa iyo.',
   'pay.details.redirect': 'Ililipat ka sa {method} para tapusin ang pagbabayad.',
   'pay.details.proceed': 'Magpatuloy sa {method}',
 

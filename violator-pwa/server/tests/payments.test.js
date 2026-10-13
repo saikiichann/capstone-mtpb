@@ -198,6 +198,18 @@ describe('payment service', () => {
     const saved = store.attempts.get(attemptId)
     assert.equal(saved.isGuest, true)
     assert.equal(saved.emailLower, 'juan@gmail.com')
+    assert.equal(saved.forOther, false)
+  })
+
+  it('a signed-in payer who types someone else’s email is paying for them', async () => {
+    const own = await service.startCheckout({ ...baseInput, payerEmail: 'Pedro@Gmail.com', email: 'pedro@gmail.com' })
+    assert.equal(store.attempts.get(own.attemptId).forOther, false)
+    const other = await service.startCheckout({ ...baseInput, payerEmail: 'pedro@gmail.com', email: 'juan@gmail.com' })
+    assert.equal(store.attempts.get(other.attemptId).forOther, true)
+    // Left blank: the receipt goes to the registered email, and it's theirs.
+    const blank = await service.startCheckout({ ...baseInput, payerEmail: 'pedro@gmail.com', email: '' })
+    assert.equal(store.attempts.get(blank.attemptId).email, 'pedro@gmail.com')
+    assert.equal(store.attempts.get(blank.attemptId).forOther, false)
   })
 
   it('accepts GCash only', async () => {

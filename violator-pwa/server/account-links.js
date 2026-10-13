@@ -10,7 +10,9 @@ import { HttpError } from './payments-service.js'
 // - Cash paid at the MTPB office: the slip's QR opens /r/<payment id>. Once
 //   MTPB has verified the payment, a signed-in account may add it, within
 //   CASH_CLAIM_DAYS of the verification (claimCash).
-// - GCash paid while signed in: linked straight away (linkPaidAttempt).
+// - GCash paid while signed in: linked straight away (linkPaidAttempt). If
+//   the payer typed someone else's email (paying for the owner), it goes to
+//   that email's account instead, never the payer's.
 //
 // "Linked" means the team's own fields on the payment and the violation are
 // filled in: `violatorUid` and `violatorName` (Ian's app writes them as null;
@@ -136,6 +138,17 @@ export function createAccountLinks({ store, auth, now = () => new Date() }) {
 
     const status = await link({ paymentId: id, uid: user.uid })
     if (status === 'taken') throw new HttpError(409, CLAIM_ERRORS.taken[1], { state: 'taken' })
+    // Cash gets no receipt email (the slip is the receipt), but the
+    // "vehicle released" email goes to this account's registered email
+    // (server/status-notifier.js).
+    await store.recordCashClaim(id, {
+      uid: user.uid,
+      violationId: payment.violationId ?? null,
+      cin: payment.cin ?? null,
+      plateNo: payment.plateNo ?? null,
+      referenceNumber: payment.referenceNumber ?? null,
+      claimedAt: now(),
+    })
     return { status: 'yours' }
   }
 
@@ -149,8 +162,11 @@ export function createAccountLinks({ store, auth, now = () => new Date() }) {
     for (const attempt of attempts) {
       if (!attempt.paymentId) continue
       if (attempt.uid !== user.uid) {
-        // Only payments made as a guest move; never another account's.
-        if (attempt.isGuest === false || !(await isGuestUid(auth, attempt.uid))) continue
+        // Only payments made as a guest, or by someone who typed this
+        // account's email (paying for its owner), move here; never a
+        // payment someone made for their own account.
+        const sentHere = attempt.forOther === true
+        if (!sentHere && (attempt.isGuest === false || !(await isGuestUid(auth, attempt.uid)))) continue
       }
       const status = await link({
         paymentId: attempt.paymentId,
@@ -163,12 +179,31 @@ export function createAccountLinks({ store, auth, now = () => new Date() }) {
     return { linked }
   }
 
-  // Right after a GCash payment is recorded: someone signed in (not a
-  // guest) gets it linked at once. Guests are linked later by email.
+  // Right after a GCash payment is recorded. Paid while signed in for their
+  // own account: linked at once. Paid for someone else's email: linked to
+  // that account if it exists and is verified, otherwise when it signs in.
+  // Guests are linked later by email.
   async function linkPaidAttempt(attemptId) {
     const attempt = await store.getAttempt(attemptId)
     if (!attempt?.paymentId || attempt.isGuest !== false) return 'skipped'
+    if (attempt.forOther) {
+      const owner = await accountByEmail(attempt.emailLower || attempt.email)
+      if (!owner) return 'waiting'
+      return link({ paymentId: attempt.paymentId, attemptId: attempt.id, uid: owner.uid, fromUid: attempt.uid })
+    }
     return link({ paymentId: attempt.paymentId, attemptId: attempt.id, uid: attempt.uid, fromUid: attempt.uid })
+  }
+
+  // A real, verified account with this email, or null.
+  async function accountByEmail(email) {
+    if (!email) return null
+    try {
+      const found = await auth.getUserByEmail(String(email).trim().toLowerCase())
+      return found.emailVerified && found.email ? found : null
+    } catch (err) {
+      if (err?.code === 'auth/user-not-found') return null
+      throw err
+    }
   }
 
   return { claimCash, linkGuestPayments, linkPaidAttempt }

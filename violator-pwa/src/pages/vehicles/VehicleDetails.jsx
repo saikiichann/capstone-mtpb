@@ -7,6 +7,8 @@ import {
   vehicleDescription,
   vehiclePhoto,
   vehicleTypeLine,
+  isFromPayment,
+  vehicleBadge,
   verificationOf,
 } from '../../firebase/vehicles'
 import useVehicle from '../../hooks/useVehicle'
@@ -25,7 +27,7 @@ const STATUS_NOTES = {
     'MTPB couldn’t verify this vehicle. Visit the MTPB office to have its records corrected.',
 }
 const FROM_PAYMENT_NOTE =
-  'Added from your payment. Only the violations you paid show here. To see every violation on this plate, visit the MTPB office with a valid ID.'
+  'Added from a payment to your account. It groups the violations and payments on this plate in your account.'
 
 export default function VehicleDetails() {
   const { vehicleId } = useParams()
@@ -44,7 +46,8 @@ export default function VehicleDetails() {
   }
 
   const verification = verificationOf(vehicle)
-  const fromPayment = verification === VERIFICATION.pending && vehicle.source === 'payment'
+  const fromPayment = isFromPayment(vehicle)
+  const backHere = { from: `/vehicles/${encodeURIComponent(vehicleId)}` }
   const photo = vehiclePhoto(vehicle)
   const info = [
     ['Vehicle Type', vehicle.vehicleType],
@@ -71,10 +74,10 @@ export default function VehicleDetails() {
           </span>
           <h2 className="vehicle-details__plate">{vehicle.plateNumber}</h2>
           <p className="vehicle-details__model">{vehicleDescription(vehicle) || vehicleTypeLine(vehicle)}</p>
-          <StatusBadge status={verification} className="vehicle-details__badge" />
+          <StatusBadge status={vehicleBadge(vehicle)} className="vehicle-details__badge" />
         </section>
 
-        <div className={`info-note vehicle-details__status vehicle-details__status--${verification}`}>
+        <div className={`info-note vehicle-details__status vehicle-details__status--${fromPayment ? 'from-payment' : verification}`}>
           <p>{fromPayment ? FROM_PAYMENT_NOTE : STATUS_NOTES[verification]}</p>
           {verification === VERIFICATION.rejected && vehicle.rejectionReason && (
             <p>
@@ -90,9 +93,17 @@ export default function VehicleDetails() {
             <Link
               className="btn btn--pay btn--primary"
               to={`/violations?plate=${encodeURIComponent(vehicle.plateNumber)}`}
-              state={{ from: `/vehicles/${encodeURIComponent(vehicleId)}` }}
+              state={backHere}
             >
               View Violations
+            </Link>
+            {/* The plate works as a filter: only this vehicle's payments. */}
+            <Link
+              className="btn btn--pay btn--outline"
+              to={`/payments?plate=${encodeURIComponent(vehicle.plateNumber)}`}
+              state={backHere}
+            >
+              View Payments
             </Link>
           </div>
         )}

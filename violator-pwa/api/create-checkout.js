@@ -50,6 +50,7 @@ export async function POST(request) {
     const result = await service.startCheckout({
       uid: user.uid,
       isGuest: user.isGuest,
+      payerEmail: user.email ?? '',
       violationId: violation.id,
       cin: violation.cin,
       method: body.method,

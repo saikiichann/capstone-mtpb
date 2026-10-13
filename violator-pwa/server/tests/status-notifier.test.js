@@ -46,6 +46,16 @@ function memoryStore() {
     async updateAttempt(id, patch) {
       attempts.set(id, { ...attempts.get(id), ...patch })
     },
+    // Cash payments added to an account from the slip QR (account-links.js).
+    cashClaims: new Map([
+      ['cashPay0000000000001', { uid: 'owner-1', violationId: 'v-cash-claimed', cin: 'CLMP-2026-0013', plateNo: 'GHL 9012', referenceNumber: 'REF-2026-00026' }],
+    ]),
+    async listCashClaimsFor(violationId) {
+      return [...this.cashClaims.entries()].filter(([, c]) => c.violationId === violationId).map(([id, c]) => ({ ...c, id }))
+    },
+    async updateCashClaim(id, patch) {
+      this.cashClaims.set(id, { ...this.cashClaims.get(id), ...patch })
+    },
   }
 }
 
@@ -150,6 +160,23 @@ describe('payment status emails', () => {
     const second = await notifier.run()
     assert.deepEqual(second.released, { checked: 1, sent: 0, skipped: 0, failed: 0 })
     assert.equal(mailer.sent.filter((m) => m.subject.includes('released')).length, 1)
+  })
+
+  it('emails a cash payment added to an account at its registered email, once', async () => {
+    store.releasedViolations = [
+      { id: 'v-cash-claimed', cin: 'CLMP-2026-0013', plateNo: 'GHL 9012', releaseStatus: 'Released', releaseOrderId: 'ORD-2026-00020', releasedAt: new Date('2026-10-11T07:59:00Z') },
+    ]
+    const mailer = fakeMailer()
+    const notifier = createStatusNotifier({ store, mailer, lookupEmail, now: () => NOW })
+    const first = await notifier.run()
+    assert.deepEqual(first.released, { checked: 1, sent: 1, skipped: 0, failed: 0 })
+    const mail = mailer.sent.find((m) => m.subject.includes('released'))
+    assert.equal(mail.to, 'owner@example.com', 'the registered email, nobody else')
+    assert.ok(mail.text.includes('REF-2026-00026'))
+    assert.equal(store.cashClaims.get('cashPay0000000000001').releaseEmailFor, 'Released')
+
+    const second = await notifier.run()
+    assert.equal(second.released.sent, 0)
   })
 })
 

@@ -109,6 +109,17 @@ export function isActiveVehicle(vehicle) {
   return verificationOf(vehicle) === VERIFICATION.active
 }
 
+// Added to the account by a payment it made (checklist P1). Not waiting on
+// anything: it groups that account's own violations and payments by plate.
+export function isFromPayment(vehicle) {
+  return verificationOf(vehicle) === VERIFICATION.pending && vehicle?.source === 'payment'
+}
+
+// The word on the vehicle's badge.
+export function vehicleBadge(vehicle) {
+  return isFromPayment(vehicle) ? 'from payment' : verificationOf(vehicle)
+}
+
 // ---- Display helpers ----
 
 // Uses the owner's uploaded photo when there is one; otherwise the stock
