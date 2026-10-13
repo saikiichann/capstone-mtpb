@@ -115,9 +115,10 @@ export function isFromPayment(vehicle) {
   return verificationOf(vehicle) === VERIFICATION.pending && vehicle?.source === 'payment'
 }
 
-// The word on the vehicle's badge.
+// The word on the vehicle's badge, or null for none: vehicles from a
+// payment get no badge (they all come from payments, Marco 2026-10-14).
 export function vehicleBadge(vehicle) {
-  return isFromPayment(vehicle) ? 'from payment' : verificationOf(vehicle)
+  return isFromPayment(vehicle) ? null : verificationOf(vehicle)
 }
 
 // ---- Display helpers ----

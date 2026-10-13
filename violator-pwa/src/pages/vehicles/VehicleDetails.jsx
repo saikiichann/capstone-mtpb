@@ -27,7 +27,7 @@ const STATUS_NOTES = {
     'MTPB couldn’t verify this vehicle. Visit the MTPB office to have its records corrected.',
 }
 const FROM_PAYMENT_NOTE =
-  'Added from a payment to your account. It groups the violations and payments on this plate in your account. New violations on this plate show here too, so you can pay them in the app.'
+  'Your violations and payments on this plate. New violations on this plate show here too, so you can pay them in the app.'
 
 export default function VehicleDetails() {
   const { vehicleId } = useParams()

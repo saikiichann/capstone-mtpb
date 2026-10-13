@@ -67,7 +67,7 @@ function VehicleListCard({ vehicle }) {
     <Link
       to={`/vehicles/${encodeURIComponent(vehicle.id)}`}
       className="card vehicle-row"
-      aria-label={`${vehicle.plateNumber}, ${vehicleTypeLine(vehicle)}, ${badge}. View details`}
+      aria-label={`${[vehicle.plateNumber, vehicleTypeLine(vehicle), badge].filter(Boolean).join(', ')}. View details`}
     >
       <span
         className={`vehicle-row__photo${photo.isStock ? ' vehicle-row__photo--stock' : ''}${photo.isTypePhoto ? ' vehicle-row__photo--type' : ''}`}

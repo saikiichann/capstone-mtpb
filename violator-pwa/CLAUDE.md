@@ -103,7 +103,7 @@ edit by exact unique strings. Never cut between comment markers.** Check the lin
     the account that added it from the slip QR (`cashClaims`, backend only).
   - Linking fills the team's `violatorUid` / `violatorName` on the payment and violation (Mira's Release pages then
     show "Registered"), plus our `uid` on the payment. Never overwrites another account.
-  - The plate goes on the account as `pending`, `source: 'payment'`, shown as a blue **FROM PAYMENT** badge. It works
+  - The plate goes on the account as `pending`, `source: 'payment'`, shown with **no badge** (they all come from payments). It works
     as a **filter**: View Violations / View Payments show only that account's own records on that plate. Nobody
     sees another person's paid violations. **New** unpaid violations recorded on that plate after it joined the
     account show there too (every account with the plate, no time limit), so they can be paid in the app; once

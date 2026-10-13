@@ -4801,14 +4801,8 @@ div.settings-row {
   }
 }
 
-/* "from payment" vehicle badge and note (checklist P1): informational, not
+/* Note on a vehicle added from a payment (checklist P1): informational, not
    waiting on anything. */
-.status-badge--info {
-  background: #e7eefc;
-  border-color: #9db8ef;
-  color: #1f4fb0;
-}
-
 .vehicle-details__status--from-payment {
   background: var(--color-info-bg);
 }
