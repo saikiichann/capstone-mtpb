@@ -170,8 +170,25 @@ export function vehicleDescription(vehicle) {
   return [vehicle?.make, vehicle?.model, vehicle?.year].filter(Boolean).join(' ')
 }
 
+// The saved wheel category, or one worked out from the vehicle type when
+// none was saved (vehicles added from a payment only get the violation's
+// type). Trucks and buses vary, so they stay blank.
+const WHEELS_BY_TYPE = [
+  // Tricycle first: a "motor tricycle" has three wheels.
+  [/tricycle|trike/, '3 Wheels'],
+  [/motor|scooter|bike/, '2 Wheels'],
+  [/car|sedan|suv|van|mpv|auv|hatch|pick-?up|coupe|crossover|jeep|taxi/, '4 Wheels'],
+]
+
+export function wheelCategoryOf(vehicle) {
+  if (vehicle?.wheelCategory) return vehicle.wheelCategory
+  const type = String(vehicle?.vehicleType ?? '').toLowerCase()
+  if (!type) return ''
+  return WHEELS_BY_TYPE.find(([pattern]) => pattern.test(type))?.[1] ?? ''
+}
+
 // "Sedan - 4 Wheels" on the My Vehicles cards.
 export function vehicleTypeLine(vehicle) {
-  const parts = [vehicle?.vehicleType, vehicle?.wheelCategory].filter(Boolean)
+  const parts = [vehicle?.vehicleType, wheelCategoryOf(vehicle)].filter(Boolean)
   return parts.length ? parts.join(' - ') : vehicleDescription(vehicle)
 }

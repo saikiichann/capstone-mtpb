@@ -10,6 +10,7 @@ import {
   isFromPayment,
   vehicleBadge,
   verificationOf,
+  wheelCategoryOf,
 } from '../../firebase/vehicles'
 import useVehicle from '../../hooks/useVehicle'
 import { formatDateTime } from '../../utils/format'
@@ -51,7 +52,8 @@ export default function VehicleDetails() {
   const photo = vehiclePhoto(vehicle)
   const info = [
     ['Vehicle Type', vehicle.vehicleType],
-    ['Wheel Category', vehicle.wheelCategory],
+    // Always shown, even when empty (Marco).
+    ['Wheel Category', wheelCategoryOf(vehicle), { always: true }],
     ['Color', vehicle.color],
     ['Make', vehicle.make],
     ['Model', vehicle.model],
@@ -117,9 +119,11 @@ export default function VehicleDetails() {
   )
 }
 
-// Rows with nothing in them are left out, so the card stays short.
+// Rows with nothing in them are left out, so the card stays short, except
+// the ones marked `always` (shown with a dash).
 function DetailSection({ title, rows }) {
-  const filled = rows.filter(([, value]) => value || value === 0)
+  const hasValue = (value) => Boolean(value) || value === 0
+  const filled = rows.filter(([, value, options]) => hasValue(value) || options?.always)
   return (
     <section className="card vehicle-details__section">
       <h3 className="vehicle-details__section-title">{title}</h3>
@@ -127,7 +131,7 @@ function DetailSection({ title, rows }) {
         {filled.map(([label, value]) => (
           <div className="vehicle-details__row" key={label}>
             <dt>{label}</dt>
-            <dd>{value}</dd>
+            <dd>{hasValue(value) ? value : <span className="vehicle-details__muted">—</span>}</dd>
           </div>
         ))}
       </dl>
