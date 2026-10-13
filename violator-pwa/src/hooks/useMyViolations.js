@@ -5,7 +5,8 @@ import { withLocalPaymentStatus } from '../payments'
 import { toMillis } from '../utils/format'
 
 // Loads every violation on the signed-in owner's verified (active)
-// vehicles, newest first (with demo payments applied in demo mode).
+// vehicles, plus the ones they paid themselves, newest first (with demo
+// payments applied in demo mode).
 // Returns { status: 'loading' | 'ready' | 'error', violations, unverifiedPlates }
 // where unverifiedPlates lists vehicles MTPB hasn't approved yet, whose
 // violations are left out on purpose.
@@ -22,7 +23,11 @@ export default function useMyViolations(uid) {
       try {
         const vehicles = await listVehicles(uid)
         const active = vehicles.filter(isActiveVehicle)
-        const unverifiedPlates = vehicles.filter((v) => !isActiveVehicle(v)).map((v) => v.plateNumber)
+        // Vehicles added from a payment are left out: their paid violations
+        // do show (Vehicle Details explains the rest).
+        const unverifiedPlates = vehicles
+          .filter((v) => !isActiveVehicle(v) && v.source !== 'payment')
+          .map((v) => v.plateNumber)
         const plates = [...new Set(active.map((v) => v.plateNumber).filter(Boolean))]
         const violations = (await listMyViolations(plates))
           .map((v) => withLocalPaymentStatus(uid, v))

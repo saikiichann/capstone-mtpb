@@ -49,6 +49,7 @@ export async function POST(request) {
     const service = createPaymentService({ store, paymongo })
     const result = await service.startCheckout({
       uid: user.uid,
+      isGuest: user.isGuest,
       violationId: violation.id,
       cin: violation.cin,
       method: body.method,

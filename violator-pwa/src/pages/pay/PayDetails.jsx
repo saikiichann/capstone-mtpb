@@ -31,6 +31,9 @@ export default function PayDetails() {
   )
   const [email, setEmail] = useState(saved.email ?? user?.email ?? '')
   const [errors, setErrors] = useState({})
+  // Guests must give an email: it's how this payment finds their account if
+  // they make one later (checklist P1). Accounts have theirs filled in.
+  const emailRequired = Boolean(user?.isGuest)
 
   if (!method) return <Navigate to={base} replace />
 
@@ -39,7 +42,8 @@ export default function PayDetails() {
     const found = {}
     const mobile = mobileNumber.replace(/[\s-]/g, '')
     if (!PH_MOBILE.test(mobile)) found.mobileNumber = t('pay.details.mobileError')
-    if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) found.email = t('pay.details.emailError')
+    if (emailRequired && !email.trim()) found.email = t('pay.details.emailRequired')
+    else if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) found.email = t('pay.details.emailError')
     setErrors(found)
     if (Object.keys(found).length) return
 
@@ -89,10 +93,11 @@ export default function PayDetails() {
           </div>
 
           <div className="pay-field">
-            <label htmlFor="pay-email">{t('pay.details.email')}</label>
+            <label htmlFor="pay-email">{t(emailRequired ? 'pay.details.emailGuest' : 'pay.details.email')}</label>
             <input
               id="pay-email"
               type="email"
+              required={emailRequired}
               inputMode="email"
               autoComplete="email"
               placeholder="juan.delacruz@gmail.com"
@@ -106,7 +111,7 @@ export default function PayDetails() {
             />
             {errors.email && <p className="field__error">{errors.email}</p>}
             <p id="pay-email-note" className="pay-field__note">
-              {t('pay.details.emailNote')}
+              {t(emailRequired ? 'pay.details.emailGuestNote' : 'pay.details.emailNote')}
             </p>
           </div>
 

@@ -1,3 +1,4 @@
+import { createAccountLinks } from '../server/account-links.js'
 import { adminAuth, createFirestoreStore } from '../server/firestore-store.js'
 import { corsHeaders, enforceRateLimit, errorResponse, json, preflight, readJson, requireUser } from '../server/http.js'
 import { createMailer } from '../server/mailer.js'
@@ -28,7 +29,9 @@ export async function POST(request) {
     enforceRateLimit(limiter, request)
     const user = await requireUser(request, adminAuth())
     const body = await readJson(request)
-    const service = createPaymentService({ store: createFirestoreStore(), paymongo, mailer: createMailer() })
+    const store = createFirestoreStore()
+    const accountLinks = createAccountLinks({ store, auth: adminAuth() })
+    const service = createPaymentService({ store, paymongo, mailer: createMailer(), onPaid: accountLinks.linkPaidAttempt })
     const result = await service.confirm({ uid: user.uid, attemptId: body.attemptId })
     return json(200, result, headers)
   } catch (err) {

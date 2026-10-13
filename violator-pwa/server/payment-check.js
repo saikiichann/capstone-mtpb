@@ -1,4 +1,5 @@
 import { normalizePayment } from '../src/firebase/mapping.js'
+import { cashClaimState } from './account-links.js'
 import { HttpError } from './payments-service.js'
 import { iso } from './violation-access.js'
 
@@ -13,8 +14,9 @@ import { iso } from './violation-access.js'
 const PAYMENT_ID = /^[A-Za-z0-9]{20}$/
 const NOT_FOUND = () => new HttpError(404, 'No payment found for this code.')
 
-export function createPaymentCheck({ store }) {
-  async function check(paymentId) {
+export function createPaymentCheck({ store, now = () => new Date() }) {
+  // `user` (optional) is who is looking, for the "Add to My Account" card.
+  async function check(paymentId, { user = null } = {}) {
     const id = String(paymentId ?? '').trim()
     if (!PAYMENT_ID.test(id)) throw NOT_FOUND()
     const data = await store.getPaymentById(id)
@@ -32,6 +34,8 @@ export function createPaymentCheck({ store }) {
       status: payment.status,
       violationCin: payment.violationCin || violation?.cin || '',
       plateNumber: payment.plateNumber || violation?.plateNumber || '',
+      // Whether a cash payment can be added to an account (checklist P1).
+      claim: cashClaimState(data, { uid: user?.uid ?? null, now: now() }),
     }
   }
 

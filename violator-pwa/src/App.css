@@ -4618,3 +4618,53 @@ div.settings-row {
   font-size: clamp(18px, 5.4vw, 23px);
   text-wrap: balance;
 }
+
+/* ---------- Payment Check: "Add to My Account" (checklist P1) ---------- */
+
+/* Long badges ("NOT ACCEPTED") were squeezed by the title and cut off. */
+.violation-card__title-row .status-badge {
+  flex: none;
+}
+
+.claim-card {
+  margin-top: 14px;
+  padding: 16px 18px;
+}
+
+.claim-card__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.claim-card p {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.claim-card .btn-stack {
+  margin-top: 4px;
+}
+
+.claim-card .claim-card__small {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--color-placeholder);
+}
+
+.claim-card--done {
+  border: 1.5px solid #17a05a;
+}
+
+.claim-card--done .claim-card__title {
+  color: #0f7a43;
+}
+
+.claim-card--stop {
+  border: 1.5px solid var(--color-danger);
+}
+
+.claim-card--stop .claim-card__title {
+  color: #c4121d;
+}

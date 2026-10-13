@@ -15,13 +15,17 @@ import VehicleStates from './VehicleStates'
 
 // Not in the Figma file yet: opened by tapping a vehicle in My Vehicles.
 // Read-only: vehicles come from the enforcement side, so there is nothing
-// here for the owner to change or remove.
+// here for the owner to change or remove. A vehicle can also arrive from a
+// payment the owner made (checklist P1, server/account-links.js): it stays
+// pending and shows only the violations they paid.
 const STATUS_NOTES = {
   [VERIFICATION.pending]: 'MTPB is still checking this vehicle. Its violations will show once it’s approved.',
   [VERIFICATION.active]: 'Verified by MTPB. Violations on this plate show in your Violation History.',
   [VERIFICATION.rejected]:
     'MTPB couldn’t verify this vehicle. Visit the MTPB office to have its records corrected.',
 }
+const FROM_PAYMENT_NOTE =
+  'Added from your payment. Only the violations you paid show here. To see every violation on this plate, visit the MTPB office with a valid ID.'
 
 export default function VehicleDetails() {
   const { vehicleId } = useParams()
@@ -40,6 +44,7 @@ export default function VehicleDetails() {
   }
 
   const verification = verificationOf(vehicle)
+  const fromPayment = verification === VERIFICATION.pending && vehicle.source === 'payment'
   const photo = vehiclePhoto(vehicle)
   const info = [
     ['Vehicle Type', vehicle.vehicleType],
@@ -70,7 +75,7 @@ export default function VehicleDetails() {
         </section>
 
         <div className={`info-note vehicle-details__status vehicle-details__status--${verification}`}>
-          <p>{STATUS_NOTES[verification]}</p>
+          <p>{fromPayment ? FROM_PAYMENT_NOTE : STATUS_NOTES[verification]}</p>
           {verification === VERIFICATION.rejected && vehicle.rejectionReason && (
             <p>
               <strong>Reason:</strong> {vehicle.rejectionReason}
@@ -80,7 +85,7 @@ export default function VehicleDetails() {
 
         <DetailSection title="Vehicle Information" rows={info} />
 
-        {verification === VERIFICATION.active && (
+        {(verification === VERIFICATION.active || fromPayment) && (
           <div className="vehicle-details__actions">
             <Link
               className="btn btn--pay btn--primary"

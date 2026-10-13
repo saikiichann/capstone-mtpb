@@ -60,16 +60,21 @@ function publicView(attempt) {
 }
 
 // `mailer` (server/mailer.js) is optional: without it no receipt is emailed.
-export function createPaymentService({ store, paymongo, mailer = null, now = () => new Date() }) {
+// `onPaid(attemptId)` runs once a payment is recorded (server/account-links.js
+// links it to the payer's account); its errors never fail the payment.
+export function createPaymentService({ store, paymongo, mailer = null, onPaid = null, now = () => new Date() }) {
   // Step 3 "Confirm Payment": records the attempt and starts a PayMongo
   // checkout. The amount always comes from the violation in Firestore, never
   // from the browser.
-  async function startCheckout({ uid, violationId, cin, method, mobileNumber, email, returnOrigin }) {
+  async function startCheckout({ uid, isGuest = false, violationId, cin, method, mobileNumber, email, returnOrigin }) {
     if (!METHOD_FEES[method]) throw new HttpError(400, 'Unknown payment method.')
     const mobile = String(mobileNumber ?? '').replace(/[\s-]/g, '')
     if (!PH_MOBILE.test(mobile)) throw new HttpError(400, 'Enter a valid mobile number.')
     const cleanEmail = String(email ?? '').trim()
     if (cleanEmail && !/^\S+@\S+\.\S+$/.test(cleanEmail)) throw new HttpError(400, 'Enter a valid email.')
+    // Guests must give one: it's how the payment finds their account if they
+    // make one later (checklist P1). Checked here too for old cached apps.
+    if (isGuest && !cleanEmail) throw new HttpError(400, 'Enter your email.')
 
     const since = new Date(now().getTime() - ATTEMPT_WINDOW_MS)
     if ((await store.countRecentAttempts(uid, since)) >= MAX_RECENT_ATTEMPTS) {
@@ -101,6 +106,8 @@ export function createPaymentService({ store, paymongo, mailer = null, now = () 
       method,
       mobileNumber: mobile,
       email: cleanEmail,
+      emailLower: cleanEmail.toLowerCase(),
+      isGuest: Boolean(isGuest),
       fineAmount: charges.fine / 100,
       convenienceFee: charges.fee / 100,
       totalAmount: charges.total / 100,
@@ -183,7 +190,14 @@ export function createPaymentService({ store, paymongo, mailer = null, now = () 
     })
     // Only the call that recorded the payment sends the receipt, so webhook
     // retries and the success page asking again don't send it twice.
-    if (result === 'paid') await emailReceipt(attemptId)
+    if (result === 'paid') {
+      await emailReceipt(attemptId)
+      if (onPaid) {
+        await Promise.resolve()
+          .then(() => onPaid(attemptId))
+          .catch((err) => console.error('Linking the payment to the account failed', err?.message ?? err))
+      }
+    }
     return result
   }
 

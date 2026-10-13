@@ -44,6 +44,8 @@ describe('payment check (cash slip QR)', () => {
       status: 'verifying',
       violationCin: 'CLMP-2026-0009',
       plateNumber: 'ABC 1234',
+      // Not verified yet, so it can't be added to an account (checklist P1).
+      claim: { state: 'verify-first', deadline: null },
     })
   })
 

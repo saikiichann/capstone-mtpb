@@ -89,6 +89,17 @@ edit by exact unique strings. Never cut between comment markers.** Check the lin
 
 **Vehicles**
 - Owners **cannot add or edit vehicles.** Vehicles are attached automatically by the MTPB side.
+- **Payments follow the person into their account** (checklist P1, `server/account-links.js`, `api/account-links.js`):
+  - GCash **guests must give an email**. When a verified account with that email signs in, its guest payments
+    move to it. No time limit.
+  - **Cash:** scan the slip QR (`/r/<paymentId>`) → **Add to My Account**, only once MTPB has **verified** the
+    payment, within **7 days of `verifiedAt`** (`CASH_CLAIM_DAYS`). Damaged/lost QR or later → MTPB office. Nothing
+    can be added from inside Payment History.
+  - Signed-in GCash payers are linked straight away.
+  - Linking fills the team's `violatorUid` / `violatorName` on the payment and violation (Mira's Release pages then
+    show "Registered"), plus our `uid` on the payment. Never overwrites another account.
+  - The plate goes on the account as `pending`, `source: 'payment'` ("Added from your payment"): only that account's
+    own violations show on it (Marco's option 2). No approve button on Mira's side (not needed).
 - Home's vehicle card is **display only** (a "wallet pass" design, `.vehicle-hero`).
 - **Open question:** Vehicle Details still has a red **Remove Vehicle** button. Marco hasn't decided yet.
 

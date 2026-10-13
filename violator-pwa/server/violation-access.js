@@ -74,6 +74,8 @@ export function createViolationAccess({ store }) {
 
   async function canView({ user, violation, token }) {
     if (token && clampCarries(await store.getClampByToken(token), violation)) return true
+    // Linked to this account by its payment (server/account-links.js).
+    if (user && violation.raw?.violatorUid && violation.raw.violatorUid === user.uid) return true
     if (isOwnerAccount(user)) {
       const plates = await store.listActivePlates(user.uid)
       if (plates.some((p) => samePlate(p, violation.plateNumber))) return true
@@ -110,12 +112,18 @@ export function createViolationAccess({ store }) {
     return violation
   }
 
-  // Every violation on the signed-in owner's verified vehicles.
+  // Every violation on the signed-in owner's verified vehicles, plus the ones
+  // linked to the account by a payment it made (checklist P1).
   async function listMine({ user }) {
     if (!isOwnerAccount(user)) throw new HttpError(403, 'Log in with a verified account to see your violations.')
     const plates = await store.listActivePlates(user.uid)
-    if (plates.length === 0) return []
-    return store.listViolationsForPlates(plates)
+    const [onPlates, paid] = await Promise.all([
+      plates.length ? store.listViolationsForPlates(plates) : [],
+      store.listViolationsByViolator(user.uid),
+    ])
+    const byId = new Map()
+    for (const v of [...onPlates, ...paid]) byId.set(v.id, v)
+    return [...byId.values()]
   }
 
   return {
