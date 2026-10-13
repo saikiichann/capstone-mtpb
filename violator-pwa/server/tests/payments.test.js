@@ -191,9 +191,9 @@ describe('payment service', () => {
     assert.equal(store.counter.lastValue, 7)
   })
 
-  it('a guest must give an email, kept in lower case for finding their account later', async () => {
-    await assert.rejects(service.startCheckout({ ...baseInput, isGuest: true, email: '' }), (e) => e.status === 400)
-    assert.equal(calls.length, 0)
+  it('a guest may skip the email; one given is kept in lower case for finding their account later', async () => {
+    const skipped = await service.startCheckout({ ...baseInput, isGuest: true, email: '' })
+    assert.equal(store.attempts.get(skipped.attemptId).email, '')
     const { attemptId } = await service.startCheckout({ ...baseInput, isGuest: true, email: 'Juan@Gmail.com' })
     const saved = store.attempts.get(attemptId)
     assert.equal(saved.isGuest, true)

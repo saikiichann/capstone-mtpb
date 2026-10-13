@@ -122,11 +122,9 @@ const en = {
   'pay.details.email': 'Email (Optional)',
   'pay.details.emailError': 'Enter a valid email or leave it blank.',
   'pay.details.emailNote': 'You will receive the payment receipt in this email.',
-  // Guests must give an email (checklist P1).
-  'pay.details.emailGuest': 'Email',
-  'pay.details.emailRequired': 'Enter your email. We send your receipt there.',
+  // Optional for guests (checklist P1).
   'pay.details.emailGuestNote':
-    'The receipt is sent here, and this payment goes to the MTPB account with this email. Paying for someone else? Enter their email.',
+    'Want to keep this in your violation and payment history? Enter your email: the receipt is sent there, and the payment shows in the MTPB account with that email. Without it, download the receipt after paying.',
   'pay.details.emailAccountNote':
     'The receipt and this payment go to the account with this email. Paying for someone else? Enter their email.',
   'pay.details.emailOtherNote': 'This payment will go to the account with this email, not to yours.',
@@ -169,7 +167,7 @@ const en = {
   'success.summary': 'Payment summary',
   'success.total': 'Total Amount',
   'success.guest':
-    'You paid as a guest. The receipt was sent to your email too. Make an account later with that same email, and this payment will appear in it. Open the receipt and download a copy before you leave.',
+    'You paid as a guest. If you entered your email, the receipt was sent there too, and this payment will appear in the MTPB account with that email. Open the receipt and download a copy before you leave.',
   'success.seeReceipt': 'See Receipt',
 
   // Payment rows (success screen)
@@ -378,10 +376,8 @@ const fil = {
   'pay.details.email': 'Email (Opsyonal)',
   'pay.details.emailError': 'Maglagay ng tamang email o iwanang blangko.',
   'pay.details.emailNote': 'Dito mo matatanggap ang resibo ng iyong bayad.',
-  'pay.details.emailGuest': 'Email',
-  'pay.details.emailRequired': 'Ilagay ang iyong email. Doon namin ipapadala ang resibo.',
   'pay.details.emailGuestNote':
-    'Dito ipapadala ang resibo, at mapupunta ang bayad na ito sa MTPB account na may ganitong email. Nagbabayad para sa iba? Ilagay ang kanilang email.',
+    'Gusto mo bang itago ito sa iyong violation at payment history? Ilagay ang iyong email: doon ipapadala ang resibo, at lalabas ang bayad sa MTPB account na may ganitong email. Kung wala, i-download ang resibo pagkatapos magbayad.',
   'pay.details.emailAccountNote':
     'Mapupunta ang resibo at ang bayad na ito sa account na may ganitong email. Nagbabayad para sa iba? Ilagay ang kanilang email.',
   'pay.details.emailOtherNote': 'Mapupunta ang bayad na ito sa account na may ganitong email, hindi sa iyo.',
@@ -424,7 +420,7 @@ const fil = {
   'success.summary': 'Buod ng bayad',
   'success.total': 'Kabuuang Halaga',
   'success.guest':
-    'Nagbayad ka bilang guest. Ipinadala rin sa iyong email ang resibo. Kung gagawa ka ng account gamit ang parehong email, lalabas doon ang bayad na ito. Buksan ang resibo at mag-download ng kopya bago umalis.',
+    'Nagbayad ka bilang guest. Kung naglagay ka ng email, ipinadala rin doon ang resibo, at lalabas ang bayad na ito sa MTPB account na may ganitong email. Buksan ang resibo at mag-download ng kopya bago umalis.',
   'success.seeReceipt': 'Tingnan ang Resibo',
 
   // Payment rows (success screen)

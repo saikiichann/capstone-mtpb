@@ -99,6 +99,16 @@ export function createFirestoreStore() {
         .map((v) => v.plateNumber)
     },
 
+    // Plates added to this account by a payment (checklist P1), with when.
+    // New unpaid violations on them show in the account (violation-access.js).
+    async listPaymentPlates(ownerUid) {
+      const snap = await db.collection(COLLECTIONS.vehicles).where('ownerUid', '==', ownerUid).get()
+      return snap.docs
+        .map((doc) => doc.data())
+        .filter((v) => v.source === 'payment' && (v.verificationStatus ?? 'pending') === 'pending' && v.plateNumber)
+        .map((v) => ({ plate: v.plateNumber, since: v.createdAt ?? null }))
+    },
+
     // Violations on any of these plates, however the enforcer app spelled
     // them. One "in" query (max 30 values) per plate field name, merged.
     async listViolationsForPlates(plates) {

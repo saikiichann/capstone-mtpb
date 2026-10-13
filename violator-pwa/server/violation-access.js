@@ -11,7 +11,11 @@ import { HttpError } from './payments-service.js'
 // - its owner: a signed-in, verified account with a verified ("active")
 //   vehicle of that plate,
 // - whoever started a payment for it (so receipts and the paid violation
-//   stay visible after the clamp is released).
+//   stay visible after the clamp is released),
+// - the account it was paid to (violatorUid, server/account-links.js),
+// - while unpaid, an account that has its plate from an earlier payment, if
+//   it was recorded after that plate joined the account (checklist P1:
+//   they can pay the new one in the app). Once paid, only the payer's.
 // Anyone else gets "not found", whether or not it exists, so violation
 // numbers can't be guessed.
 //
@@ -66,6 +70,21 @@ function clampCarries(clamp, violation) {
   return Boolean(clamp.violationCin) && clamp.violationCin === violation.cin
 }
 
+const millis = (value) => {
+  if (!value) return 0
+  const date = typeof value?.toDate === 'function' ? value.toDate() : new Date(value)
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime()
+}
+
+// Unpaid, and recorded after the plate joined the account.
+function isNewUnpaidOn(violation, { plate, since }) {
+  return (
+    !isPaymentSettled(violation.raw?.paymentStatus ?? violation.paymentStatus) &&
+    samePlate(plate, violation.plateNumber) &&
+    millis(violation.clampedAt) >= millis(since)
+  )
+}
+
 export function createViolationAccess({ store }) {
   async function findViolation(ref) {
     if (!ref) return null
@@ -79,6 +98,8 @@ export function createViolationAccess({ store }) {
     if (isOwnerAccount(user)) {
       const plates = await store.listActivePlates(user.uid)
       if (plates.some((p) => samePlate(p, violation.plateNumber))) return true
+      const paidPlates = await store.listPaymentPlates(user.uid)
+      if (paidPlates.some((p) => isNewUnpaidOn(violation, p))) return true
     }
     return Boolean(user) && (await store.hasAttemptFor(user.uid, violation.id))
   }
@@ -112,17 +133,20 @@ export function createViolationAccess({ store }) {
     return violation
   }
 
-  // Every violation on the signed-in owner's verified vehicles, plus the ones
-  // linked to the account by a payment it made (checklist P1).
+  // Every violation on the signed-in owner's verified vehicles, the ones
+  // linked to the account by a payment it made, and new unpaid ones on
+  // plates it has from a payment (checklist P1).
   async function listMine({ user }) {
     if (!isOwnerAccount(user)) throw new HttpError(403, 'Log in with a verified account to see your violations.')
-    const plates = await store.listActivePlates(user.uid)
-    const [onPlates, paid] = await Promise.all([
+    const [plates, paidPlates] = await Promise.all([store.listActivePlates(user.uid), store.listPaymentPlates(user.uid)])
+    const [onPlates, paid, onPaidPlates] = await Promise.all([
       plates.length ? store.listViolationsForPlates(plates) : [],
       store.listViolationsByViolator(user.uid),
+      paidPlates.length ? store.listViolationsForPlates(paidPlates.map((p) => p.plate)) : [],
     ])
+    const fresh = onPaidPlates.filter((v) => paidPlates.some((p) => isNewUnpaidOn(v, p)))
     const byId = new Map()
-    for (const v of [...onPlates, ...paid]) byId.set(v.id, v)
+    for (const v of [...onPlates, ...paid, ...fresh]) byId.set(v.id, v)
     return [...byId.values()]
   }
 

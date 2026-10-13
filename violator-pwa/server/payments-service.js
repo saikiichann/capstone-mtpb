@@ -75,9 +75,6 @@ export function createPaymentService({ store, paymongo, mailer = null, onPaid = 
     // emailed.
     const cleanEmail = String(email ?? '').trim() || (isGuest ? '' : String(payerEmail ?? '').trim())
     if (cleanEmail && !/^\S+@\S+\.\S+$/.test(cleanEmail)) throw new HttpError(400, 'Enter a valid email.')
-    // Guests must give one: it's how the payment finds their account if they
-    // make one later (checklist P1). Checked here too for old cached apps.
-    if (isGuest && !cleanEmail) throw new HttpError(400, 'Enter your email.')
 
     const since = new Date(now().getTime() - ATTEMPT_WINDOW_MS)
     if ((await store.countRecentAttempts(uid, since)) >= MAX_RECENT_ATTEMPTS) {
