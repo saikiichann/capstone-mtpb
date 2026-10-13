@@ -4801,11 +4801,6 @@ div.settings-row {
   }
 }
 
-/* Note on a vehicle added from a payment (checklist P1): informational, not
-   waiting on anything. */
-.vehicle-details__status--from-payment {
-  background: var(--color-info-bg);
-}
 
 /* ---------- History: "You're all clear" (no card) ----------
    A message, not a button: no border or background, so it doesn't look
@@ -4841,4 +4836,93 @@ div.settings-row {
   margin: 2px 0 0;
   color: var(--color-placeholder);
   font-size: 12px;
+}
+
+/* ---------- My Vehicles: latest activity under each vehicle ----------
+   Marco's option F (vehicle-card-options.html). The card holds two links:
+   the vehicle row (Vehicle Details) and the latest-activity panel (the
+   violation, or the payment's receipt). */
+
+.vehicle-entry {
+  padding: 0 0 12px;
+  box-shadow: var(--shadow-card);
+  border-color: #d6d6dc;
+  overflow: hidden;
+}
+
+.vehicle-entry .vehicle-row {
+  min-height: 96px;
+  border: 0;
+  box-shadow: none;
+  background: none;
+}
+
+.vehicle-latest {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f4f5f9;
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.vehicle-latest:active {
+  transform: translateY(1px);
+}
+
+.vehicle-latest__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vehicle-latest__title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.vehicle-latest__line {
+  overflow: hidden;
+  color: var(--color-placeholder);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vehicle-latest__chip {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.vehicle-latest__chip--due {
+  background: #fde8e9;
+  color: #c4121d;
+}
+
+.vehicle-latest__chip--ok {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.vehicle-latest__chip--wait {
+  background: #fdf0d8;
+  color: #94600c;
+}
+
+/* Vehicle Details, minimal: the note for a vehicle from a payment is a
+   plain line, not a box. */
+.vehicle-details__caption {
+  margin: 2px 4px 0;
+  color: var(--color-placeholder);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
 }

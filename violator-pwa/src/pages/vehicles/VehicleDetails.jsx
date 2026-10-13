@@ -77,14 +77,19 @@ export default function VehicleDetails() {
           <StatusBadge status={vehicleBadge(vehicle)} className="vehicle-details__badge" />
         </section>
 
-        <div className={`info-note vehicle-details__status vehicle-details__status--${fromPayment ? 'from-payment' : verification}`}>
-          <p>{fromPayment ? FROM_PAYMENT_NOTE : STATUS_NOTES[verification]}</p>
-          {verification === VERIFICATION.rejected && vehicle.rejectionReason && (
-            <p>
-              <strong>Reason:</strong> {vehicle.rejectionReason}
-            </p>
-          )}
-        </div>
+        {/* Minimal for vehicles from a payment: a plain line, not a box. */}
+        {fromPayment ? (
+          <p className="vehicle-details__caption">{FROM_PAYMENT_NOTE}</p>
+        ) : (
+          <div className={`info-note vehicle-details__status vehicle-details__status--${verification}`}>
+            <p>{STATUS_NOTES[verification]}</p>
+            {verification === VERIFICATION.rejected && vehicle.rejectionReason && (
+              <p>
+                <strong>Reason:</strong> {vehicle.rejectionReason}
+              </p>
+            )}
+          </div>
+        )}
 
         <DetailSection title="Vehicle Information" rows={info} />
 
@@ -112,15 +117,17 @@ export default function VehicleDetails() {
   )
 }
 
+// Rows with nothing in them are left out, so the card stays short.
 function DetailSection({ title, rows }) {
+  const filled = rows.filter(([, value]) => value || value === 0)
   return (
     <section className="card vehicle-details__section">
       <h3 className="vehicle-details__section-title">{title}</h3>
       <dl className="vehicle-details__list">
-        {rows.map(([label, value]) => (
+        {filled.map(([label, value]) => (
           <div className="vehicle-details__row" key={label}>
             <dt>{label}</dt>
-            <dd>{value || value === 0 ? value : <span className="vehicle-details__muted">—</span>}</dd>
+            <dd>{value}</dd>
           </div>
         ))}
       </dl>
