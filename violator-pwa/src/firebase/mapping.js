@@ -134,10 +134,6 @@ export function normalizeViolation(id, data) {
   }
 }
 
-export function normalizeViolationDoc(snapshot) {
-  return snapshot.exists?.() === false ? null : normalizeViolation(snapshot.id, snapshot.data())
-}
-
 // Sample data is already in the app's own shape, but running it through the
 // same function keeps one code path and catches mistakes in the samples.
 export function normalizeSampleViolation(violation) {

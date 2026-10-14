@@ -34,7 +34,7 @@ const QUICK_ACCESS = [
     description: 'View your violations',
     tone: 'amber',
     icon: <NotebookIcon width={32} height={32} />,
-    key: 'violations',
+    showsUnpaid: true,
   },
   {
     to: '/payments',
@@ -74,7 +74,7 @@ export default function Home() {
                 {...item}
                 // The only badge on this screen, so it goes where action is
                 // needed rather than on every row.
-                badge={item.key === 'violations' && unpaid.length > 0 ? unpaid.length : null}
+                badge={item.showsUnpaid && unpaid.length > 0 ? unpaid.length : null}
               />
             </li>
           ))}

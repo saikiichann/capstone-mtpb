@@ -29,17 +29,3 @@ export function SkeletonList({ rows = 3, label = 'Loading' }) {
   )
 }
 
-// Stand-in for a block of text, e.g. inside a card.
-export function SkeletonText({ lines = 3, lastWidth = '60%' }) {
-  return (
-    <span aria-hidden="true">
-      {Array.from({ length: lines }, (_, i) => (
-        <Skeleton
-          key={i}
-          className="skeleton-line"
-          width={i === lines - 1 ? lastWidth : '100%'}
-        />
-      ))}
-    </span>
-  )
-}

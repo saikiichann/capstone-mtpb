@@ -109,7 +109,7 @@ edit by exact unique strings. Never cut between comment markers.** Check the lin
     account show there too (every account with the plate, no time limit), so they can be paid in the app; once
     paid, only the payer keeps it. No approve button on Mira's side (not needed).
 - Home shows a **decorative car** for everyone (`HomeCar.jsx`, `.home-car`): no box, no vehicle details, slides in
-  from the right with skid marks. Not tied to any vehicle and not tappable. (The old `.vehicle-hero` card CSS is unused.)
+  from the right with skid marks. Not tied to any vehicle and not tappable.
 - **Open question:** Vehicle Details still has a red **Remove Vehicle** button. Marco hasn't decided yet.
 
 **Payments**

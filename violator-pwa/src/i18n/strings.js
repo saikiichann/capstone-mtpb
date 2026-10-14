@@ -121,7 +121,6 @@ const en = {
   'pay.details.mobileError': 'Use an 11-digit number like 09171234567.',
   'pay.details.email': 'Email (Optional)',
   'pay.details.emailError': 'Enter a valid email or leave it blank.',
-  'pay.details.emailNote': 'You will receive the payment receipt in this email.',
   // Optional for guests (checklist P1).
   'pay.details.emailGuestNote':
     'Want to keep this in your violation and payment history? Enter your email: the receipt is sent there, and the payment shows in the MTPB account with that email. Without it, download the receipt after paying.',
@@ -375,7 +374,6 @@ const fil = {
   'pay.details.mobileError': 'Gumamit ng 11-digit na numero, halimbawa 09171234567.',
   'pay.details.email': 'Email (Opsyonal)',
   'pay.details.emailError': 'Maglagay ng tamang email o iwanang blangko.',
-  'pay.details.emailNote': 'Dito mo matatanggap ang resibo ng iyong bayad.',
   'pay.details.emailGuestNote':
     'Gusto mo bang itago ito sa iyong violation at payment history? Ilagay ang iyong email: doon ipapadala ang resibo, at lalabas ang bayad sa MTPB account na may ganitong email. Kung wala, i-download ang resibo pagkatapos magbayad.',
   'pay.details.emailAccountNote':
