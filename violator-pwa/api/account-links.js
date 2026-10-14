@@ -1,6 +1,7 @@
 import { createAccountLinks } from '../server/account-links.js'
 import { adminAuth, createFirestoreStore } from '../server/firestore-store.js'
 import { corsHeaders, enforceRateLimit, errorResponse, json, preflight, readJson, requireUser } from '../server/http.js'
+import { createMailer } from '../server/mailer.js'
 import { createRateLimiter } from '../server/rate-limit.js'
 
 // POST /api/account-links   (checklist P1, server/account-links.js)
@@ -8,6 +9,7 @@ import { createRateLimiter } from '../server/rate-limit.js'
 // Body, one of:
 //   { action: 'claim-cash', paymentId }   "Add to My Account" on a cash slip's
 //                                         /r/<payment id> page → { status: 'yours' }
+//                                         (and a receipt email to the account's email)
 //                                         (409/410 with { state } when it can't be added)
 //   { action: 'link-guest' }              on sign-in: GCash payments made as a guest
 //                                         with this account's email → { linked }
@@ -27,7 +29,7 @@ export async function POST(request) {
     const auth = adminAuth()
     const user = await requireUser(request, auth)
     const body = await readJson(request)
-    const links = createAccountLinks({ store: createFirestoreStore(), auth })
+    const links = createAccountLinks({ store: createFirestoreStore(), auth, mailer: createMailer() })
 
     if (body.action === 'claim-cash') {
       return json(200, await links.claimCash({ user, paymentId: body.paymentId }), headers)

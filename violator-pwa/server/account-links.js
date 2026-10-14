@@ -1,6 +1,7 @@
 import { normalizePaymentState } from '../src/firebase/mapping.js'
 import { normalizePlate, samePlate } from '../src/utils/plates.js'
 import { HttpError } from './payments-service.js'
+import { buildCashReceiptEmail } from './receipt-email.js'
 
 // Checklist P1: payments follow the person into their account.
 //
@@ -22,8 +23,9 @@ import { HttpError } from './payments-service.js'
 // account as a "pending" vehicle from the payment (Marco's option 2): the
 // app shows only that account's own violations on it until MTPB approves it.
 //
-// `store` is server/firestore-store.js, `auth` the Firebase Admin auth
-// (tests pass fakes).
+// `store` is server/firestore-store.js, `auth` the Firebase Admin auth,
+// `mailer` server/mailer.js (optional: without it no email is sent). Tests
+// pass fakes.
 
 export const CASH_CLAIM_DAYS = 7
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -77,7 +79,7 @@ async function isGuestUid(auth, uid) {
   }
 }
 
-export function createAccountLinks({ store, auth, now = () => new Date() }) {
+export function createAccountLinks({ store, auth, mailer = null, now = () => new Date() }) {
   async function nameOf(uid) {
     const profile = await store.getViolatorProfile(uid)
     return profile?.full_name || ''
@@ -149,7 +151,24 @@ export function createAccountLinks({ store, auth, now = () => new Date() }) {
       referenceNumber: payment.referenceNumber ?? null,
       claimedAt: now(),
     })
+    await emailCashReceipt(id, payment, user.email)
     return { status: 'yours' }
+  }
+
+  // The receipt for a cash payment just added, to the account's registered
+  // email, once. Never fails the claim: a problem is noted on the claim.
+  async function emailCashReceipt(paymentId, payment, to) {
+    if (!mailer || !to) return
+    try {
+      const violation = payment.violationId ? await store.getViolationById(payment.violationId) : null
+      await mailer.send({ to, ...buildCashReceiptEmail({ payment, violation }) })
+      await store.updateCashClaim(paymentId, { receiptEmailSentAt: now() })
+    } catch (err) {
+      console.error('Cash receipt email failed', err?.message ?? err)
+      await Promise.resolve()
+        .then(() => store.updateCashClaim(paymentId, { receiptEmailError: String(err?.message ?? err).slice(0, 300) }))
+        .catch(() => {})
+    }
   }
 
   // After a verified account signs in: the GCash payments made as a guest
