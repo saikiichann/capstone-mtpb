@@ -6,7 +6,6 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   onSnapshot,
   query,
   runTransaction,
@@ -88,10 +87,6 @@ const PAYMENT_LOCATIONS: { value: PaymentLocation; label: string }[] = [
   { value: "Central", label: "Central (MTPB Office)" },
   { value: "City Hall", label: "City Hall" },
 ];
-
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer in Charge",
-};
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "oldest", label: "Oldest First" },
@@ -1335,4 +1330,4 @@ export default function PendingPaymentsOIC() {
       )}
     </div>
   );
-}
+}

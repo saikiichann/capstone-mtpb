@@ -26,7 +26,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
-import "./ITAdminHomePage.css";
+import "./ITAdminHomepage.css";
 import "./SystemHealth.css";
 
 import logo from "../../assets/mtpb-logo.png";
@@ -39,7 +39,7 @@ import keyIcon from "../../assets/key.png";
 ------------------------------------------------------------------ */
 type NavItem = {
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: number | string; className?: string }>;
   path: string;
   active?: boolean;
 };

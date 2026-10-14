@@ -89,6 +89,26 @@ type NavGroup = { label: string; items: NavItem[] };
 ------------------------------------------------------------------ */
 const ITEMS_PER_PAGE = 10;
 
+/**
+ * Mga releaseStatus na ibig sabihin ay "bayad at verified na, pero wala
+ * pang desisyon ang OIC":
+ *  - AWAITING_OIC_STATUS — ang tamang value (OIC / Finance Payment Verification)
+ *  - "Ready for Release" — lumang value na sinulat ng Finance Payment Verification
+ *  - "Pending" / walang laman — na-verify gamit ang lumang Approve button sa
+ *    Finance Overview, na hindi nagsusulat ng releaseStatus
+ * Pag na-approve o na-reject ng OIC, "Approved by OIC" / "Rejected by OIC" na
+ * sila, kaya mawawala na sila dito.
+ */
+const AWAITING_DECISION_STATUSES = new Set<string>([
+  AWAITING_OIC_STATUS,
+  "Ready for Release",
+  "Pending",
+  "",
+]);
+
+const isAwaitingOicDecision = (data: { releaseStatus?: unknown }): boolean =>
+  AWAITING_DECISION_STATUSES.has(String(data.releaseStatus ?? "").trim());
+
 const ROLE_LABELS: Record<RoleSlug, string> = {
   oic: "Officer in Charge",
   "it-admin": "IT Admin",
@@ -264,9 +284,12 @@ export default function ReleaseRequests() {
   }, []);
 
   useEffect(() => {
+    // Lahat ng verified na bayad, tapos sa client sinasala kung wala pang
+    // desisyon ang OIC. Hindi kayang i-query ng Firestore ang "walang field",
+    // kaya hindi ito puwedeng where("releaseStatus", ...) lang.
     const q = query(
       collection(db, "violations"),
-      where("releaseStatus", "==", AWAITING_OIC_STATUS)
+      where("paymentStatus", "==", "Verified")
     );
 
     const unsubscribe = onSnapshot(
@@ -281,6 +304,7 @@ export default function ReleaseRequests() {
         };
 
         const fetched: ReleaseRequestRow[] = snap.docs
+          .filter((d) => isAwaitingOicDecision(d.data()))
           .sort(
             (a, b) =>
               millis(queueSortKey(a.data())) - millis(queueSortKey(b.data()))
@@ -720,4 +744,4 @@ export default function ReleaseRequests() {
       </div>
     </div>
   );
-}
+}

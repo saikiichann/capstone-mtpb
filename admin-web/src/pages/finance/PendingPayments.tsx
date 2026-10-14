@@ -1,12 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { KeyRound, ChevronLeft, ChevronRight, X, Search } from "lucide-react";
+import { signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
   doc,
-  getDoc,
-  getDocs,
   onSnapshot,
   query,
   runTransaction,
@@ -15,7 +13,9 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { useStaffProfile } from "../../lib/useStaffProfile";
 import "./PendingPayments.css";
+import CashPaymentSlip from "../../components/CashPaymentSlip";
 
 // Asset imports
 import mtpbLogo from "../../assets/mtpb-logo.png";
@@ -30,21 +30,23 @@ import exportCenterIcon from "../../assets/export.png";
 import logoutIcon from "../../assets/logout.png";
 
 /* ------------------------------------------------------------------
-   TYPES
+  TYPES
 ------------------------------------------------------------------ */
-type RoleSlug =
-  | "oic"
-  | "it-admin"
-  | "supervisor"
-  | "record-officer"
-  | "release-officer"
-  | "finance"
-  | "clamping-staff"
-  | "impounding-staff";
+type RoleSlug = "finance";
 
-type CurrentUser = { name: string; role: RoleSlug };
+// ⚠️ WALANG "Both" — dalawa lang
+type AssignedLocation = "City Hall" | "Central";
+
+type CurrentUser = {
+  name: string;
+  role: RoleSlug;
+  assignedLocation: AssignedLocation | null;   // "City Hall" | "Central" — para sa payment
+  assignedLocationName: string | null;         // buong pangalan — para sa display
+};
 
 type PendingStatus = "Unpaid" | "Overdue";
+
+type PaymentLocation = "Central" | "City Hall";
 
 type PendingRow = {
   id: string;
@@ -56,29 +58,55 @@ type PendingRow = {
   dueDate: Timestamp | null;
   daysLeft: number;
   status: PendingStatus;
+  impoundStatus: string | null;
+  impoundAutoFlagged: boolean;
+  impoundFlaggedBy: string | null;
+  violatorUid: string | null;
+  guestId: string | null;
+  violatorName: string | null;
+  paymentLocation: PaymentLocation | null;   // ⚠️ BAGO
 };
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
+type StatusFilter = "All" | "Unpaid" | "Overdue" | "Subject to Impound" | "Impounded";
+type SortOption = "oldest" | "newest" | "amount-high" | "amount-low" | "plate-asc";
+
 /* ------------------------------------------------------------------
-   CONSTANTS
+  CONSTANTS
 ------------------------------------------------------------------ */
 const ITEMS_PER_PAGE = 10;
-const PAYMENT_DUE_HOURS = 72;
+const PAYMENT_DUE_HOURS = 24;
 
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer in Charge",
-  "it-admin": "IT Admin",
-  supervisor: "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  finance: "Finance Staff",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
+const PAYMENT_LOCATION_LABELS: Record<PaymentLocation, string> = {
+  Central: "Central (MTPB Office)",
+  "City Hall": "City Hall",
 };
 
-// ✅ FINANCE-ONLY SIDEBAR
+const ROLE_LABELS: Record<RoleSlug, string> = {
+  finance: "Finance Staff",
+};
+
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "oldest", label: "Oldest First" },
+  { value: "newest", label: "Newest First" },
+  { value: "amount-high", label: "Amount (High → Low)" },
+  { value: "amount-low", label: "Amount (Low → High)" },
+  { value: "plate-asc", label: "Plate No. (A → Z)" },
+];
+
+const STATUS_FILTERS: StatusFilter[] = [
+  "All",
+  "Unpaid",
+  "Overdue",
+  "Subject to Impound",
+  "Impounded",
+];
+
+/* ------------------------------------------------------------------
+  FINANCE SIDEBAR
+------------------------------------------------------------------ */
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
@@ -110,17 +138,13 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Reports",
     items: [
       { label: "All Reports", icon: allReportsIcon, path: "/finance/reports" },
-      {
-        label: "Export Center",
-        icon: exportCenterIcon,
-        path: "/finance/export",
-      },
+      { label: "Export Center", icon: exportCenterIcon, path: "/finance/export" },
     ],
   },
 ];
 
 /* ------------------------------------------------------------------
-   HELPERS
+  HELPERS
 ------------------------------------------------------------------ */
 const formatCurrency = (amount: number): string =>
   `₱${amount.toLocaleString("en-US", {
@@ -161,141 +185,224 @@ const generateViolationNo = (cin: string): string => {
   return `${prefix}-${match[1].padStart(5, "0")}`;
 };
 
-const recordCashPayment = async (params: {
+/** ⚠️ BAGO: Derive payment location from violation data */
+const derivePaymentLocation = (data: any): PaymentLocation | null => {
+  const raw = String(data.paymentLocation ?? data.location ?? "").toLowerCase();
+  if (raw.includes("city") || raw.includes("hall")) return "City Hall";
+  if (raw.includes("central") || raw.includes("mtpb")) return "Central";
+  return null; // walang naka-set pa — violator hindi pa nagbabayad
+};
+
+const numberToWords = (num: number): string => {
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+
+  if (num === 0) return 'Zero Pesos Only';
+
+  const pesos = Math.floor(num);
+  const cents = Math.round((num - pesos) * 100);
+
+  let words = '';
+  let remaining = pesos;
+
+  if (remaining >= 1000) {
+    words += ones[Math.floor(remaining / 1000)] + ' Thousand ';
+    remaining %= 1000;
+  }
+  if (remaining >= 100) {
+    words += ones[Math.floor(remaining / 100)] + ' Hundred ';
+    remaining %= 100;
+  }
+  if (remaining >= 20) {
+    words += tens[Math.floor(remaining / 10)] + ' ';
+    remaining %= 10;
+  } else if (remaining >= 10) {
+    words += teens[remaining - 10] + ' ';
+    remaining = 0;
+  }
+  if (remaining > 0) {
+    words += ones[remaining] + ' ';
+  }
+
+  words = words.trim() + ' Pesos';
+  if (cents > 0) {
+    words += ` and ${cents}/100`;
+  }
+  return words + ' Only';
+};
+
+/* ------------------------------------------------------------------
+  RECORD CASH PAYMENT (Finance)
+------------------------------------------------------------------ */
+const recordCashPaymentFinance = async (params: {
   violationId: string;
   cin: string;
   plateNo: string;
   amountDue: number;
-  cashReceived: number;
-  orNumber: string;
+  paymentLocation: PaymentLocation;
+  violatorUid: string | null;
+  guestId: string | null;
+  violatorName: string | null;
   officerName: string;
-}): Promise<string> => {
+}): Promise<{ referenceNumber: string; orNumber: string; paymentId: string }> => {
   const year = new Date().getFullYear();
   const counterRef = doc(db, "counters", "paymentReference");
+  const orCounterRef = doc(db, "counters", "orNumber");
   const violationRef = doc(db, "violations", params.violationId);
   const paymentRef = doc(collection(db, "payments"));
   const auditRef = doc(collection(db, "auditLogs"));
 
   return runTransaction(db, async (tx) => {
+    /* Step 1: Reference Number */
     const counterSnap = await tx.get(counterRef);
-    const last = counterSnap.exists()
+    const lastRef = counterSnap.exists()
       ? Number(counterSnap.data().lastValue ?? 0)
       : 0;
-    const next = last + 1;
-    const referenceNumber = `REF-${year}-${String(next).padStart(5, "0")}`;
+    const nextRef = lastRef + 1;
+    const referenceNumber = `REF-${year}-${String(nextRef).padStart(5, "0")}`;
 
+    /* Step 2: OR Number */
+    const orCounterSnap = await tx.get(orCounterRef);
+    const lastOr = orCounterSnap.exists()
+      ? Number(orCounterSnap.data().lastValue ?? 0)
+      : 0;
+    const nextOr = lastOr + 1;
+    const orNumber = `OR-${year}-${String(nextOr).padStart(5, "0")}`;
+
+    /* Step 3: Persist both counters */
     tx.set(
       counterRef,
-      { lastValue: next, prefix: "REF", updatedAt: serverTimestamp() },
+      { lastValue: nextRef, prefix: "REF", updatedAt: serverTimestamp() },
       { merge: true }
     );
 
+    tx.set(
+      orCounterRef,
+      { lastValue: nextOr, prefix: "OR", updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+
+    /* Step 4: Update violation */
     tx.update(violationRef, {
       paymentStatus: "Pending Verification",
       paymentMethod: "Cash",
       paymentReference: referenceNumber,
       referenceNumber,
-      orNumber: params.orNumber,
+      orNumber,
       totalPaid: params.amountDue,
-      cashReceived: params.cashReceived,
-      cashChange: params.cashReceived - params.amountDue,
+      cashReceived: params.amountDue,
+      cashChange: 0,
+      amountInWords: numberToWords(params.amountDue),
+      paymentLocation: params.paymentLocation,
       paidAt: serverTimestamp(),
       cashRecordedBy: params.officerName,
+      cashRecordedByRole: "finance",
       orIssuedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       updatedBy: params.officerName,
+      violatorUid: params.violatorUid,
+      guestId: params.guestId,
+      violatorName: params.violatorName,
     });
 
+    /* Step 5: Create payment record */
     tx.set(paymentRef, {
       violationId: params.violationId,
       cin: params.cin,
+      plateNo: params.plateNo,
+      violatorUid: params.violatorUid,
+      guestId: params.guestId,
+      violatorName: params.violatorName,
       amount: params.amountDue,
       convenienceFee: 0,
       totalAmount: params.amountDue,
-      cashReceived: params.cashReceived,
+      cashReceived: params.amountDue,
+      amountInWords: numberToWords(params.amountDue),
       referenceNumber,
-      orNumber: params.orNumber,
+      orNumber,
+      paymentLocation: params.paymentLocation,
       method: "Cash",
-      status: "pending",
+      status: "Pending Verification",
+      verificationStatus: null,
       recordedBy: params.officerName,
+      recordedByRole: "finance",
       createdAt: serverTimestamp(),
       orIssuedAt: serverTimestamp(),
       orIssuedBy: params.officerName,
     });
 
+    /* Step 6: Audit log */
     tx.set(auditRef, {
       userName: params.officerName,
-      action: `recorded cash payment for ${params.cin} — OR #${params.orNumber}, Ref ${referenceNumber}`,
+      userRole: "finance",
+      action: `recorded cash payment for ${params.cin} — OR #${orNumber}, Ref ${referenceNumber}, Location: ${params.paymentLocation}`,
       record: params.cin,
       type: "cash-payment",
       metadata: {
         cin: params.cin,
         plateNo: params.plateNo,
         amountDue: params.amountDue,
-        cashReceived: params.cashReceived,
+        amountInWords: numberToWords(params.amountDue),
         referenceNumber,
-        orNumber: params.orNumber,
+        orNumber,
+        paymentLocation: params.paymentLocation,
+        paymentId: paymentRef.id,
+        violatorUid: params.violatorUid,
+        guestId: params.guestId,
+        violatorName: params.violatorName,
       },
       timestamp: serverTimestamp(),
     });
 
-    return referenceNumber;
+    return {
+      referenceNumber,
+      orNumber,
+      paymentId: paymentRef.id,
+    };
   });
 };
 
 /* ------------------------------------------------------------------
-   COMPONENT
+  COMPONENT: PendingPaymentsFinance
 ------------------------------------------------------------------ */
-export default function PendingPayments() {
+export default function PendingPaymentsFinance() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
-    name: "Loading...",
-    role: "finance",
-  });
+  /* Profile ng naka-login na staff — naka-cache sa lahat ng Finance pages,
+     kaya hindi na nagfi-flash ang data ng ibang location paglipat ng tab. */
+  const { profile, ready: userReady } = useStaffProfile();
+  const currentUser: CurrentUser = useMemo(
+    () => ({
+      name: profile?.name ?? "Loading...",
+      role: "finance",
+      assignedLocation: profile?.assignedLocation ?? null,
+      assignedLocationName: profile?.assignedLocationName ?? null,
+    }),
+    [profile]
+  );
 
   const [rows, setRows] = useState<PendingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
 
+  /* Search + Filter state */
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
+  const [sortOption, setSortOption] = useState<SortOption>("oldest");
+
+  /* Cash payment modal state */
   const [cashRow, setCashRow] = useState<PendingRow | null>(null);
-  const [cashInput, setCashInput] = useState("");
   const [cashError, setCashError] = useState("");
-  const [orNumber, setOrNumber] = useState("");
-  const [orError, setOrError] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedReference, setSavedReference] = useState<string | null>(null);
+  const [savedOrNumber, setSavedOrNumber] = useState<string | null>(null);
+  const [savedPaymentId, setSavedPaymentId] = useState<string | null>(null);
+  const [showPrintSlip, setShowPrintSlip] = useState(false);
 
-  /* Current user */
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
-      if (!loggedUser) {
-        setCurrentUser({ name: "Guest", role: "finance" });
-        return;
-      }
-      try {
-        const snap = await getDoc(doc(db, "users", loggedUser.uid));
-        if (snap.exists()) {
-          const data = snap.data();
-          setCurrentUser({
-            name: data.name ?? "Unknown",
-            role: (data.role ?? "finance") as RoleSlug,
-          });
-        } else {
-          setCurrentUser({
-            name: loggedUser.email?.split("@")[0] ?? "Unknown",
-            role: "finance",
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching current user:", err);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
+  /* Effect: Fetch pending payments (paymentStatus == "Unpaid") */
   useEffect(() => {
     const q = query(
       collection(db, "violations"),
@@ -305,7 +412,7 @@ export default function PendingPayments() {
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        const pending: PendingRow[] = snap.docs
+        let pending: PendingRow[] = snap.docs
           .map((d) => {
             const data = d.data();
             const recordedAt = (data.recordedAt as Timestamp) ?? null;
@@ -337,6 +444,13 @@ export default function PendingPayments() {
               dueDate,
               daysLeft,
               status: (daysLeft < 0 ? "Overdue" : "Unpaid") as PendingStatus,
+              impoundStatus: data.impoundStatus ?? null,
+              impoundAutoFlagged: data.impoundAutoFlagged ?? false,
+              impoundFlaggedBy: data.impoundFlaggedBy ?? null,
+              violatorUid: data.violatorUid ?? null,
+              guestId: data.guestId ?? null,
+              violatorName: data.violatorName ?? null,
+              paymentLocation: derivePaymentLocation(data),   // ⚠️ BAGO
             };
           })
           .sort((a, b) => {
@@ -344,6 +458,15 @@ export default function PendingPayments() {
             const bt = b.recordedAt?.toMillis() ?? 0;
             return at - bt;
           });
+
+        // ⚠️ BAGO: Location-based filtering para sa Finance
+        // Ang Finance (City Hall) ay makikita lang ang City Hall violations
+        // Ang Finance (Central) ay makikita lang ang Central violations
+        // Pero — dahil "Unpaid" pa lang, wala pang location. Base sa
+        // assignedLocation ng Finance, hindi pa ito applicable.
+        // Ang location-based filtering ay applicable lang sa
+        // Payment Verification page (kung saan may location na).
+        // Kaya dito, walang filter — lahat ng Unpaid ay nakikita.
 
         setRows(pending);
         setLoading(false);
@@ -359,10 +482,7 @@ export default function PendingPayments() {
   /* Click outside */
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
       }
     }
@@ -370,6 +490,7 @@ export default function PendingPayments() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  /* Handler: Sign out */
   const handleLogout = async () => {
     try {
       await firebaseSignOut(auth);
@@ -386,94 +507,60 @@ export default function PendingPayments() {
   };
 
   const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
     setIsMenuOpen(false);
   };
 
+  /* PAYMENT LOCATION — automatic, galing sa assignedLocation ng naka-login
+     na Finance staff (users/{uid}.assignedLocation). Hindi na pinipili. */
+  const paymentLocation: PaymentLocation | null = currentUser.assignedLocation;
+
+  /* CASH PAYMENT MODAL HANDLERS */
   const openCashModal = (row: PendingRow) => {
     setCashRow(row);
-    setCashInput("");
     setCashError("");
-    setOrNumber("");
-    setOrError("");
     setSavedReference(null);
+    setSavedOrNumber(null);
+    setSavedPaymentId(null);
+    setShowPrintSlip(false);
   };
 
   const closeCashModal = () => {
     setCashRow(null);
-    setCashInput("");
     setCashError("");
-    setOrNumber("");
-    setOrError("");
     setSavedReference(null);
+    setSavedOrNumber(null);
+    setSavedPaymentId(null);
+    setShowPrintSlip(false);
   };
-
-  const cashReceived = Number(cashInput);
-  const change =
-    cashRow && Number.isFinite(cashReceived) && cashReceived >= cashRow.amount
-      ? cashReceived - cashRow.amount
-      : null;
 
   const handleSaveCash = async () => {
     if (!cashRow) return;
     setCashError("");
-    setOrError("");
 
-    if (!orNumber.trim()) {
-      setOrError("OR Number is required. Get it from the physical receipt.");
-      return;
-    }
-    if (!/^\d{4,}$/.test(orNumber.trim())) {
-      setOrError("OR Number must be numeric (at least 4 digits).");
-      return;
-    }
-    if (!cashInput.trim()) {
-      setCashError("Enter the amount of cash received.");
-      return;
-    }
-    if (!Number.isFinite(cashReceived) || cashReceived <= 0) {
-      setCashError("Enter a valid amount.");
-      return;
-    }
-    if (cashReceived < cashRow.amount) {
+    if (!paymentLocation) {
       setCashError(
-        `Cash received is short by ${formatCurrency(
-          cashRow.amount - cashReceived
-        )}. Partial payments are not supported.`
+        "Your account has no assigned location (City Hall or Central). Ask the IT Admin to set it in User Management before recording cash payments."
       );
       return;
     }
 
     setSaving(true);
     try {
-      const orQuery = query(
-        collection(db, "payments"),
-        where("orNumber", "==", orNumber.trim())
-      );
-      const orSnap = await getDocs(orQuery);
-      if (!orSnap.empty) {
-        const existing = orSnap.docs[0].data();
-        setOrError(
-          `OR ${orNumber} was already recorded on ${
-            existing.createdAt?.toDate().toLocaleString() ?? "unknown date"
-          } by ${existing.recordedBy ?? "unknown"} for ${
-            existing.cin ?? "unknown"
-          }. Please verify the physical OR before proceeding.`
-        );
-        setSaving(false);
-        return;
-      }
-
-      const reference = await recordCashPayment({
+      const result = await recordCashPaymentFinance({
         violationId: cashRow.id,
         cin: cashRow.cin,
         plateNo: cashRow.plateNo,
         amountDue: cashRow.amount,
-        cashReceived,
-        orNumber: orNumber.trim(),
+        paymentLocation,
+        violatorUid: cashRow.violatorUid || null,
+        guestId: cashRow.guestId || null,
+        violatorName: cashRow.violatorName || null,
         officerName: currentUser.name,
       });
-      setSavedReference(reference);
+
+      setSavedReference(result.referenceNumber);
+      setSavedOrNumber(result.orNumber);
+      setSavedPaymentId(result.paymentId);
     } catch (err: any) {
       console.error("Cash payment failed:", err);
       setCashError(err.message || "Failed to record cash payment.");
@@ -482,6 +569,54 @@ export default function PendingPayments() {
     }
   };
 
+  /* FILTERED + SORTED ROWS */
+  const filteredRows = useMemo(() => {
+    let result = [...rows];
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (row) =>
+          row.cin.toLowerCase().includes(q) ||
+          row.plateNo.toLowerCase().includes(q) ||
+          row.violationNo.toLowerCase().includes(q)
+      );
+    }
+
+    if (statusFilter !== "All") {
+      result = result.filter((row) => {
+        if (statusFilter === "Unpaid") return row.status === "Unpaid";
+        if (statusFilter === "Overdue") return row.status === "Overdue";
+        if (statusFilter === "Subject to Impound")
+          return row.impoundStatus === "Subject to Impound";
+        if (statusFilter === "Impounded")
+          return row.impoundStatus === "Impounded";
+        return true;
+      });
+    }
+
+    switch (sortOption) {
+      case "oldest":
+        result.sort((a, b) => (a.recordedAt?.toMillis() ?? 0) - (b.recordedAt?.toMillis() ?? 0));
+        break;
+      case "newest":
+        result.sort((a, b) => (b.recordedAt?.toMillis() ?? 0) - (a.recordedAt?.toMillis() ?? 0));
+        break;
+      case "amount-high":
+        result.sort((a, b) => b.amount - a.amount);
+        break;
+      case "amount-low":
+        result.sort((a, b) => a.amount - b.amount);
+        break;
+      case "plate-asc":
+        result.sort((a, b) => a.plateNo.localeCompare(b.plateNo));
+        break;
+    }
+
+    return result;
+  }, [rows, searchQuery, statusFilter, sortOption]);
+
+  /* METRICS */
   const metrics = useMemo(() => {
     const totalPending = rows.length;
     const overdue = rows.filter((r) => r.daysLeft < 0).length;
@@ -491,32 +626,43 @@ export default function PendingPayments() {
 
   const metricCards = [
     { title: "Total Pending", value: String(metrics.totalPending) },
-    {
-      title: `Overdue (${PAYMENT_DUE_HOURS}hr+)`,
-      value: String(metrics.overdue),
-    },
+    { title: `Overdue (${PAYMENT_DUE_HOURS}hr+)`, value: String(metrics.overdue) },
     { title: "Due Today", value: String(metrics.dueToday) },
   ];
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
+  /* PAGINATION */
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
-  const paginatedRows = rows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, sortOption]);
+
   return (
-    <div className="finance-page">
+    <div className="finance-page finance-pending-page">
       <div className="dashboard">
-        {/* SIDEBAR — FINANCE ONLY */}
+        {/* SIDEBAR */}
         <aside className="sidebar">
           <div className="sidebar-brand">
             <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
             <div>
               <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Finance Staff</p>
+              <p className="sidebar-brand-role">
+                Finance Staff
+                {/* ⚠️ BAGO: Location indicator */}
+                {currentUser.assignedLocationName && (
+                  <span className="sidebar-brand-location">
+                    {" · "}
+                    {currentUser.assignedLocationName}
+                  </span>
+                )}
+              </p>
             </div>
           </div>
 
@@ -529,9 +675,7 @@ export default function PendingPayments() {
                     <li key={item.label}>
                       <button
                         type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
+                        className={`nav-item ${item.active ? "nav-item-active" : ""}`}
                         onClick={() => navigate(item.path)}
                       >
                         <img src={item.icon} alt="" className="nav-icon" />
@@ -573,19 +717,14 @@ export default function PendingPayments() {
                     <p className="dropdown-name">{currentUser.name}</p>
                     <p className="dropdown-role">
                       {ROLE_LABELS[currentUser.role]}
+                      {currentUser.assignedLocationName && ` · ${currentUser.assignedLocationName}`}
                     </p>
                   </div>
-                  <button
-                    className="dropdown-item"
-                    onClick={handleChangePassword}
-                  >
+                  <button className="dropdown-item" onClick={handleChangePassword}>
                     <KeyRound size={18} />
                     <span>Change Password</span>
                   </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
+                  <button className="dropdown-item logout" onClick={handleLogout}>
                     <img src={logoutIcon} alt="" className="dropdown-icon" />
                     <span>Log Out</span>
                   </button>
@@ -608,13 +747,74 @@ export default function PendingPayments() {
               <p className="card-eyebrow">Sector 3</p>
               <h2 className="card-title">Pending Payments</h2>
 
-              {loading ? (
+              {/* TOOLBAR */}
+              <div className="table-toolbar">
+                <div className="toolbar-search">
+                  <Search size={16} className="toolbar-search-icon" />
+                  <input
+                    type="text"
+                    className="toolbar-search-input"
+                    placeholder="Search by CIN, plate no., or violation no..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      className="toolbar-search-clear"
+                      onClick={() => setSearchQuery("")}
+                      title="Clear search"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                <select
+                  className="toolbar-select"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                >
+                  {STATUS_FILTERS.map((s) => (
+                    <option key={s} value={s}>
+                      {s === "All" ? "All Statuses" : s}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  className="toolbar-select"
+                  value={sortOption}
+                  onChange={(e) => setSortOption(e.target.value as SortOption)}
+                >
+                  {SORT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {!loading && userReady && rows.length > 0 && (
+                <p className="toolbar-result-count">
+                  Showing <strong>{filteredRows.length}</strong> of{" "}
+                  <strong>{rows.length}</strong> pending payment
+                  {rows.length === 1 ? "" : "s"}
+                  {searchQuery || statusFilter !== "All" ? " (filtered)" : ""}
+                </p>
+              )}
+
+              {loading || !userReady ? (
                 <div className="table-loading">
                   <p>Loading pending payments...</p>
                 </div>
               ) : rows.length === 0 ? (
                 <div className="table-empty">
                   <p>No pending payments.</p>
+                </div>
+              ) : filteredRows.length === 0 ? (
+                <div className="table-empty">
+                  <p>No payments match your search or filters.</p>
                 </div>
               ) : (
                 <>
@@ -635,36 +835,20 @@ export default function PendingPayments() {
                       <tbody>
                         {paginatedRows.map((row) => (
                           <tr key={row.id}>
-                            <td className="cell-violation-no">
-                              {row.violationNo}
-                            </td>
+                            <td className="cell-violation-no">{row.violationNo}</td>
                             <td>
                               <span className="cin-pill">{row.cin}</span>
                             </td>
                             <td className="cell-plate">{row.plateNo}</td>
-                            <td className="cell-amount">
-                              {formatCurrency(row.amount)}
-                            </td>
-                            <td className="cell-due-date">
-                              {formatDate(row.dueDate)}
-                            </td>
-                            <td
-                              className={`cell-days-left ${
-                                row.daysLeft < 0 ? "text-red" : ""
-                              }`}
-                            >
+                            <td className="cell-amount">{formatCurrency(row.amount)}</td>
+                            <td className="cell-due-date">{formatDate(row.dueDate)}</td>
+                            <td className={`cell-days-left ${row.daysLeft < 0 ? "text-red" : ""}`}>
                               {row.daysLeft < 0
                                 ? "Overdue"
-                                : `${row.daysLeft} day${
-                                    row.daysLeft === 1 ? "" : "s"
-                                  }`}
+                                : `${row.daysLeft} day${row.daysLeft === 1 ? "" : "s"}`}
                             </td>
                             <td>
-                              <span
-                                className={`status-pill ${getStatusClass(
-                                  row.status
-                                )}`}
-                              >
+                              <span className={`status-pill ${getStatusClass(row.status)}`}>
                                 {row.status}
                               </span>
                             </td>
@@ -676,6 +860,25 @@ export default function PendingPayments() {
                               >
                                 Cash Payment
                               </button>
+
+                              {row.impoundStatus === "Subject to Impound" && (
+                                <span
+                                  className={`badge-impound ${
+                                    row.impoundAutoFlagged ? "badge-impound-auto" : ""
+                                  }`}
+                                  title={
+                                    row.impoundAutoFlagged
+                                      ? "Automatically flagged by system (24hr grace period expired)"
+                                      : `Flagged by ${row.impoundFlaggedBy ?? "OIC"}`
+                                  }
+                                >
+                                  {row.impoundAutoFlagged ? "🤖 Auto-flagged" : "Subject to Impound"}
+                                </span>
+                              )}
+
+                              {row.impoundStatus === "Impounded" && (
+                                <span className="badge-impounded">Impounded</span>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -696,17 +899,13 @@ export default function PendingPayments() {
 
                     <div className="pagination-info">
                       <span className="pagination-page">{safePage}</span>
-                      <span className="pagination-sep">
-                        of {totalPages} pages
-                      </span>
+                      <span className="pagination-sep">of {totalPages} pages</span>
                     </div>
 
                     <button
                       type="button"
                       className="pagination-btn"
-                      onClick={() =>
-                        setCurrentPage((p) => Math.min(totalPages, p + 1))
-                      }
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                       disabled={safePage === totalPages}
                     >
                       Next
@@ -722,15 +921,10 @@ export default function PendingPayments() {
 
       {/* CASH PAYMENT MODAL */}
       {cashRow && (
-        <div
-          className="modal-overlay"
-          onClick={saving ? undefined : closeCashModal}
-        >
+        <div className="modal-overlay" onClick={saving ? undefined : closeCashModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="modal-title">
-                Cash Payment — {cashRow.violationNo}
-              </h3>
+              <h3 className="modal-title">Cash Payment — {cashRow.violationNo}</h3>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -748,17 +942,24 @@ export default function PendingPayments() {
                     <p className="cash-reference-label">REFERENCE NO.</p>
                     <p className="cash-reference-value">{savedReference}</p>
                   </div>
-                  <p className="cash-saved-note">
-                    Cash payment recorded. {cashRow.cin} now appears under
-                    Payment Verification for confirmation by a different staff
-                    member (segregation of duties).
-                  </p>
-                  {change !== null && change > 0 && (
-                    <p className="cash-change-line">
-                      Change due to violator:{" "}
-                      <strong>{formatCurrency(change)}</strong>
-                    </p>
+                  {savedOrNumber && (
+                    <div className="cash-reference-box cash-reference-saved">
+                      <p className="cash-reference-label">OR NUMBER</p>
+                      <p className="cash-reference-value">{savedOrNumber}</p>
+                    </div>
                   )}
+                  <p className="cash-saved-note">
+                    Cash payment recorded by <strong>{currentUser.name}</strong> (Finance) —{" "}
+                    <strong>
+                      {paymentLocation ? PAYMENT_LOCATION_LABELS[paymentLocation] : "—"}
+                    </strong>. {cashRow.cin} now appears under
+                    Payment Verification for confirmation by a different staff member
+                    (segregation of duties).
+                  </p>
+                  <p className="cash-saved-hint">
+                    Next step: Print the acknowledgment slip for the violator. It
+                    contains a QR code that will be scanned to verify this payment.
+                  </p>
                 </>
               ) : (
                 <>
@@ -776,72 +977,64 @@ export default function PendingPayments() {
                       <span>Plate No.</span>
                       <strong>{cashRow.plateNo}</strong>
                     </div>
+                    {cashRow.violatorName && (
+                      <div className="cash-summary-row">
+                        <span>Violator</span>
+                        <strong>{cashRow.violatorName}</strong>
+                      </div>
+                    )}
                     <div className="cash-summary-row">
                       <span>Amount Due</span>
                       <strong className="cash-summary-amount">
                         {formatCurrency(cashRow.amount)}
                       </strong>
                     </div>
+                    <div className="cash-summary-row">
+                      <span>Amount in Words</span>
+                      <strong className="cash-summary-words">
+                        {numberToWords(cashRow.amount)}
+                      </strong>
+                    </div>
+                    <div className="cash-summary-row">
+                      <span>Cash Received</span>
+                      <strong className="cash-summary-amount">
+                        {formatCurrency(cashRow.amount)}
+                      </strong>
+                    </div>
                   </div>
 
+                  {/* PAYMENT LOCATION — automatic (assignedLocation ng staff) */}
                   <div className="form-group">
-                    <label htmlFor="orNumber">
-                      OR Number <span className="required">*</span>
-                    </label>
-                    <input
-                      id="orNumber"
-                      type="text"
-                      inputMode="numeric"
-                      className="form-input"
-                      placeholder="e.g. 1234567"
-                      value={orNumber}
-                      onChange={(e) => {
-                        setOrNumber(e.target.value.replace(/\D/g, ""));
-                        setOrError("");
-                      }}
-                      disabled={saving}
-                      autoFocus
-                    />
+                    <label>Payment Location</label>
+                    <div className="read-only-field">
+                      {paymentLocation
+                        ? currentUser.assignedLocationName ??
+                          PAYMENT_LOCATION_LABELS[paymentLocation]
+                        : "No assigned location"}
+                    </div>
                     <small className="form-hint">
-                      Enter the OR number from the physical receipt issued
-                      to the violator. This is required for audit
-                      traceability and reconciliation.
+                      {paymentLocation
+                        ? "Automatically set from your assigned location."
+                        : "Your account has no assigned location. Ask the IT Admin to set it in User Management."}
                     </small>
-                    {orError && <p className="form-error">{orError}</p>}
                   </div>
 
+                  {/* OR NUMBER — Auto-generated */}
                   <div className="form-group">
-                    <label htmlFor="cashReceived">Cash Received (₱)</label>
-                    <input
-                      id="cashReceived"
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      step="0.01"
-                      className="form-input"
-                      placeholder={cashRow.amount.toString()}
-                      value={cashInput}
-                      onChange={(e) => {
-                        setCashInput(e.target.value);
-                        setCashError("");
-                      }}
-                      disabled={saving}
-                    />
+                    <label>OR Number</label>
+                    <div className="read-only-field">Auto-generated on save</div>
+                    <small className="form-hint">
+                      The OR number is auto-generated by the system. In production, this
+                      will be replaced by the BIR-issued OR.
+                    </small>
                   </div>
-
-                  {change !== null && (
-                    <p className="cash-change-line">
-                      Change: <strong>{formatCurrency(change)}</strong>
-                    </p>
-                  )}
 
                   {cashError && <p className="form-error">{cashError}</p>}
 
                   <p className="modal-note">
-                    The reference number is generated when you save. The
-                    violation moves to Payment Verification for confirmation
-                    by a different staff member — you cannot verify your own
-                    entry.
+                    Recorded by <strong>{currentUser.name}</strong> (Finance). The
+                    violation moves to Payment Verification for confirmation by a
+                    different staff member.
                   </p>
                 </>
               )}
@@ -849,9 +1042,14 @@ export default function PendingPayments() {
 
             <div className="modal-footer">
               {savedReference ? (
-                <button className="btn-primary" onClick={closeCashModal}>
-                  Done
-                </button>
+                <>
+                  <button className="btn-secondary" onClick={closeCashModal}>
+                    Skip Print
+                  </button>
+                  <button className="btn-primary" onClick={() => setShowPrintSlip(true)}>
+                    🖨️ Print Slip
+                  </button>
+                </>
               ) : (
                 <>
                   <button
@@ -864,7 +1062,7 @@ export default function PendingPayments() {
                   <button
                     className="btn-primary"
                     onClick={handleSaveCash}
-                    disabled={saving || !cashInput.trim() || !orNumber.trim()}
+                    disabled={saving || !userReady || !paymentLocation}
                   >
                     {saving ? "Saving..." : "Confirm Payment"}
                   </button>
@@ -873,6 +1071,29 @@ export default function PendingPayments() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* PRINT SLIP MODAL */}
+      {showPrintSlip && savedPaymentId && cashRow && (
+        <CashPaymentSlip
+          paymentId={savedPaymentId}
+          referenceNumber={savedReference || ""}
+          cin={cashRow.cin}
+          plateNo={cashRow.plateNo}
+          amount={cashRow.amount}
+          totalAmount={cashRow.amount}
+          orNumber={savedOrNumber || ""}
+          recordedBy={currentUser.name}
+          createdAt={new Date()}
+          onClose={() => {
+            setShowPrintSlip(false);
+            closeCashModal();
+          }}
+          onPrinted={() => {
+            setShowPrintSlip(false);
+            closeCashModal();
+          }}
+        />
       )}
     </div>
   );

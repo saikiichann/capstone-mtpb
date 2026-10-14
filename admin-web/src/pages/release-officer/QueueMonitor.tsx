@@ -470,4 +470,4 @@ export default function QueueMonitor() {
       </div>
     </div>
   );
-}
+}

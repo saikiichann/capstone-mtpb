@@ -13,16 +13,26 @@
 }
 
 /* ==================================================================
+   ⚠️ BAGO: LOCATION INDICATOR SA SIDEBAR (Finance assignment)
+================================================================== */
+.finance-page .sidebar-brand-location {
+  font-size: 11px;
+  color: #94A3B8;
+  margin-top: 2px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+/* ==================================================================
    MAIN CONTENT — bawasan ang gap at padding
-   (override default mula sa Homepage.css)
 ================================================================== */
 .finance-page .main-content {
   padding: 20px 28px;
-  gap: 16px;                /* ← dating 24px, gawing 16px */
+  gap: 16px;
 }
 
 .finance-page .card {
-  padding: 20px 24px;       /* ← dating 24px, gawing 20px */
+  padding: 20px 24px;
 }
 
 /* ==================================================================
@@ -36,7 +46,7 @@
 }
 
 .finance-page .metric-grid-three .metric-card {
-  padding: 16px 20px;       /* ← dating 20px 24px */
+  padding: 16px 20px;
 }
 
 .finance-page .metric-grid-three .metric-title {
@@ -49,7 +59,7 @@
 
 .finance-page .metric-grid-three .metric-value {
   font-family: inherit;
-  font-size: 24px;          /* ← dating 28px */
+  font-size: 24px;
   font-weight: 700;
   color: #000;
   margin: 6px 0 2px;
@@ -74,7 +84,7 @@
 }
 
 .finance-page .card-title {
-  font-size: 17px;          /* ← dating 20px */
+  font-size: 17px;
   margin: 0 0 12px;
 }
 
@@ -85,14 +95,14 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin-bottom: 12px;      /* ← dating 20px */
+  margin-bottom: 12px;
 }
 
 .finance-page .or-summary-item {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 16px 20px;       /* ← dating 22px 24px */
+  padding: 16px 20px;
   background: #F8FAFC;
   border: 1px solid #E2E8F0;
   border-radius: 10px;
@@ -110,7 +120,7 @@
 
 .finance-page .or-summary-value {
   font-family: inherit;
-  font-size: 18px;          /* ← dating 22px */
+  font-size: 18px;
   font-weight: 700;
   color: #0F172A;
   font-variant-numeric: tabular-nums;
@@ -134,7 +144,7 @@
 ================================================================== */
 .finance-page .revenue-chart-container {
   width: 100%;
-  max-height: 240px;        /* ← limitahan para hindi sobrang haba */
+  max-height: 240px;
 }
 
 /* ==================================================================
@@ -150,7 +160,7 @@
   border-collapse: collapse;
   font-family: inherit;
   font-size: 14px;
-  margin-top: 10px;         /* ← dating 16px */
+  margin-top: 10px;
 }
 
 .finance-page .data-table thead {
@@ -163,13 +173,13 @@
   font-size: 12.5px;
   font-weight: 600;
   color: #374151;
-  padding: 10px 8px;        /* ← dating 12px 8px */
+  padding: 10px 8px;
   white-space: nowrap;
 }
 
 .finance-page .data-table td {
   font-family: inherit;
-  padding: 12px 8px;        /* ← dating 14px 8px */
+  padding: 12px 8px;
   color: #374151;
   vertical-align: middle;
   border-bottom: 1px solid #F3F4F6;
@@ -265,7 +275,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 30px 20px;       /* ← dating 40px */
+  padding: 30px 20px;
   font-family: inherit;
   color: #6B7280;
   font-size: 13.5px;

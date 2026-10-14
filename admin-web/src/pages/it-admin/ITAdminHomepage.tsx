@@ -28,7 +28,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import { supabase, SUPABASE_BUCKET } from "../../supabase";
-import "./ITAdminHomePage.css";
+import "./ITAdminHomepage.css";
 
 import logo from "../../assets/mtpb-logo.png";
 import avatarImg from "../../assets/user.png";
@@ -40,7 +40,7 @@ import keyIcon from "../../assets/key.png";
 ------------------------------------------------------------------ */
 type NavItem = {
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: number | string; className?: string }>;
   path: string;
   active?: boolean;
 };

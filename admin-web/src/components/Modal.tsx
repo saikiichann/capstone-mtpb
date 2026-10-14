@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import type { JSX } from 'react';
 import { X } from 'lucide-react';
 import './Modal.css';
 

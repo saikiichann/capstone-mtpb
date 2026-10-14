@@ -1,179 +1,593 @@
 /* ==================================================================
-   PaymentVerification.css
-   Extends Homepage.css (finance) — Payment Verification styles
+   PaymentVerification.css (Finance)
+   Sidebar, header at avatar — galing pa rin sa Finance Homepage.css
+   (.finance-page). Ang CONTENT styles dito ay kopya ng OIC
+   PaymentVerification.css para pareho ang itsura ng dalawang page.
+
+   Wrapper: <div className="finance-page finance-verification-page">
+   Hindi ".payment-verification-page" — yun ang prefix ng OIC CSS, at
+   kung gagamitin din dito, tatamaan ng OIC sidebar styles ang Finance.
+
+   Kapag may binago sa OIC content CSS, gawin din dito (palitan lang
+   ang prefix ng ".finance-page.finance-verification-page").
 ================================================================== */
 
 /* ==================================================================
-   METRIC CARDS (3 columns)
+   MAIN CONTENT + CARD
 ================================================================== */
-.finance-page .metric-grid-three {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+.finance-page.finance-verification-page .main-content {
+  flex: 1;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.finance-page.finance-verification-page .card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #F3F4F6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 24px;
   width: 100%;
 }
 
-.finance-page .metric-grid-three .metric-card {
-  padding: 20px 24px;
+.finance-page.finance-verification-page .card-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  font-weight: 600;
+  margin: 0 0 4px;
 }
 
-.finance-page .metric-grid-three .metric-title {
-  font-size: 14px;
+.finance-page.finance-verification-page .card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+/* ==================================================================
+   CARD HEADER ROW (with location filter)
+================================================================== */
+.finance-page.finance-verification-page .card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.finance-page.finance-verification-page .location-filter-select {
+  height: 38px;
+  padding: 0 32px 0 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: #374151;
+  background: #ffffff;
+  outline: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  min-width: 180px;
+  flex-shrink: 0;
+}
+
+.finance-page.finance-verification-page .location-filter-select:focus {
+  border-color: #1D4ED8;
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.1);
+}
+
+/* ==================================================================
+   SCAN BOX — QR slip verification
+================================================================== */
+.finance-page.finance-verification-page .scan-box-card {
+  background: #FFFFFF;
+  border: 2px solid #2563EB;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.1);
+}
+
+.finance-page.finance-verification-page .scan-box-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 4px 0;
+}
+
+.finance-page.finance-verification-page .scan-box-hint {
+  font-size: 13px;
+  color: #6B7280;
+  margin: 0 0 12px 0;
+}
+
+.finance-page.finance-verification-page .scan-box-input {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-family: 'Courier New', monospace;
+  border: 2px solid #D1D5DB;
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+  color: #111827;
+  background: #FFFFFF;
+}
+
+.finance-page.finance-verification-page .scan-box-input:focus {
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.finance-page.finance-verification-page .scan-box-input:disabled {
+  background: #F9FAFB;
+  cursor: not-allowed;
+}
+
+.finance-page.finance-verification-page .scan-box-input::placeholder {
+  color: #9CA3AF;
+}
+
+.finance-page.finance-verification-page .scan-box-error {
+  color: #DC2626;
+  font-size: 13px;
+  margin: 8px 0 0 0;
   font-weight: 600;
+}
+
+/* ==================================================================
+   SCANNED PAYMENT DETAILS
+================================================================== */
+.finance-page.finance-verification-page .scanned-payment-details {
+  margin-top: 16px;
+  padding: 16px;
+  background: #F9FAFB;
+  border-radius: 8px;
+  border: 1px solid #E5E7EB;
+}
+
+.finance-page.finance-verification-page .scan-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.finance-page.finance-verification-page .scan-details-title {
+  font-size: 15px;
+  font-weight: 700;
   color: #111827;
   margin: 0;
 }
 
-.finance-page .metric-grid-three .metric-value {
-  font-size: 32px;
+.finance-page.finance-verification-page .scan-details-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #6B7280;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.finance-page.finance-verification-page .scan-details-close:hover {
+  background: #E5E7EB;
+  color: #111827;
+}
+
+.finance-page.finance-verification-page .scan-details-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.finance-page.finance-verification-page .scan-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #E5E7EB;
+  gap: 12px;
+}
+
+.finance-page.finance-verification-page .scan-row:last-child {
+  border-bottom: none;
+}
+
+.finance-page.finance-verification-page .scan-row span {
+  color: #6B7280;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.finance-page.finance-verification-page .scan-row strong {
+  color: #111827;
+  font-weight: 600;
+  text-align: right;
+  word-break: break-word;
+}
+
+.finance-page.finance-verification-page .scan-row-words {
+  font-style: italic;
+  color: #4B5563 !important;
+  font-size: 12px;
+  max-width: 60%;
+}
+
+.finance-page.finance-verification-page .scan-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 2px solid #E5E7EB;
+}
+
+/* ==================================================================
+   SELF-VERIFY NOTICE (City Hall)
+================================================================== */
+.finance-page.finance-verification-page .self-verify-notice {
+  background: #FEF3C7;
+  border: 1px solid #F59E0B;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #92400E;
+  line-height: 1.5;
+}
+
+/* ==================================================================
+   METRIC CARDS — 5 columns for City Hall + Central breakdown
+================================================================== */
+.finance-page.finance-verification-page .metric-grid-three {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.finance-page.finance-verification-page .metric-grid-three .metric-card {
+  padding: 16px 18px;
+}
+
+.finance-page.finance-verification-page .metric-grid-three .metric-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.finance-page.finance-verification-page .metric-grid-three .metric-value {
+  font-size: 26px;
   font-weight: 700;
   color: #000;
-  margin: 8px 0 4px;
+  margin: 8px 0 0;
   line-height: 1.1;
 }
 
 /* ==================================================================
-   TABLE CELLS
+   TABLE
 ================================================================== */
-.finance-page .cell-reference {
+.finance-page.finance-verification-page .table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.finance-page.finance-verification-page .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin-top: 16px;
+}
+
+.finance-page.finance-verification-page .data-table thead {
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.finance-page.finance-verification-page .data-table th {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  padding: 12px 8px;
+  white-space: nowrap;
+}
+
+.finance-page.finance-verification-page .data-table td {
+  padding: 14px 8px;
+  color: #374151;
+  vertical-align: middle;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.finance-page.finance-verification-page .data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.finance-page.finance-verification-page .data-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+.finance-page.finance-verification-page .row-orphaned {
+  background: #FFFBEB;
+}
+
+.finance-page.finance-verification-page .row-orphaned:hover {
+  background: #FEF3C7;
+}
+
+.finance-page.finance-verification-page .cin-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.finance-page.finance-verification-page .cell-reference {
   color: #111827;
   font-weight: 500;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.finance-page .cell-plate {
+.finance-page.finance-verification-page .orphan-icon {
+  color: #D97706;
+  flex-shrink: 0;
+}
+
+.finance-page.finance-verification-page .cell-plate {
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.finance-page.finance-verification-page .cell-amount {
   color: #111827;
   font-weight: 600;
   white-space: nowrap;
 }
 
-.finance-page .cell-amount {
-  color: #111827;
-  font-weight: 600;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.finance-page .cell-method {
+.finance-page.finance-verification-page .cell-method {
   color: #374151;
   white-space: nowrap;
 }
 
-.finance-page .cell-actions {
-  display: flex;
-  gap: 8px;
+.finance-page.finance-verification-page .cell-recorded-by {
+  color: #374151;
   white-space: nowrap;
 }
 
-/* Label kapag walang laman ang cell — mas mabuti kaysa blangko,
-   halatang wala talaga imbes na mukhang sirang render. */
-.finance-page .cell-empty {
+.finance-page.finance-verification-page .cell-empty {
   color: #9CA3AF;
   font-style: italic;
+}
+
+/* ==================================================================
+   LOCATION PILLS
+================================================================== */
+.finance-page.finance-verification-page .location-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.finance-page.finance-verification-page .location-city-hall {
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #F59E0B;
+}
+
+.finance-page.finance-verification-page .location-central {
+  background: #DBEAFE;
+  color: #1E40AF;
+  border: 1px solid #3B82F6;
+}
+
+.finance-page.finance-verification-page .location-online {
+  background: #EDE9FE;
+  color: #5B21B6;
+  border: 1px solid #8B5CF6;
+}
+
+.finance-page.finance-verification-page .location-unknown {
+  background: #F3F4F6;
+  color: #6B7280;
+  border: 1px solid #D1D5DB;
+}
+
+/* ==================================================================
+   VIOLATOR ID COLUMN
+================================================================== */
+.finance-page.finance-verification-page .cell-violator {
+  min-width: 150px;
+  white-space: normal;
+}
+
+.finance-page.finance-verification-page .violator-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.finance-page.finance-verification-page .violator-name {
+  font-weight: 500;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.finance-page.finance-verification-page .violator-tag {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.finance-page.finance-verification-page .violator-tag.uid {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.finance-page.finance-verification-page .violator-tag.guest {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+/* Buong UID/guestId nasa tooltip (title) kapag pinutol */
+.finance-page.finance-verification-page .violator-id {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "Courier New", monospace;
   font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.finance-page.finance-verification-page .cell-reference > span[title] {
+  display: inline-flex;
+  cursor: help;
 }
 
 /* ==================================================================
    WAITING PILLS
-   Kung gaano na katagal naghihintay ang bayad — hindi kung sino ang
-   uunahin. Strict FIFO ang proseso ayon sa Definition of Terms, kaya
-   walang priority ranking dito.
 ================================================================== */
-.finance-page .waiting-pill {
+.finance-page.finance-verification-page .waiting-pill {
   display: inline-block;
-  padding: 4px 14px;
+  padding: 5px 14px;
+  border: 1px solid transparent;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
 
-.finance-page .waiting-fresh {
-  background: #E0F2FE;
-  color: #075985;
+.finance-page.finance-verification-page .waiting-fresh {
+  background: #DCFCE7;
+  border-color: #22C55E;
+  color: #166534;
 }
 
-.finance-page .waiting-mid {
+.finance-page.finance-verification-page .waiting-mid {
   background: #FEF9C3;
+  border-color: #EAB308;
   color: #854D0E;
 }
 
-.finance-page .waiting-long {
+.finance-page.finance-verification-page .waiting-long {
   background: #FEE2E2;
+  border-color: #EF4444;
   color: #991B1B;
-}
-
-/* ==================================================================
-   ORPHANED PAYMENT
-   Walang naka-link na violation. Naka-disable ang Approve at Reject —
-   walang malalaman kung kanino at para saan ang bayad.
-================================================================== */
-.finance-page .row-orphaned {
-  background: #FFFBEB;
-}
-
-.finance-page .row-orphaned:hover {
-  background: #FEF3C7;
-}
-
-.finance-page .orphan-icon {
-  display: inline-block;
-  vertical-align: middle;
-  margin-left: 6px;
-  color: #D97706;
-  cursor: help;
 }
 
 /* ==================================================================
    ACTION BUTTONS
 ================================================================== */
-.finance-page .btn-approve {
+.finance-page.finance-verification-page .cell-actions {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.finance-page.finance-verification-page .btn-approve {
   padding: 6px 14px;
+  border-radius: 8px;
+  border: none;
   background: #16A34A;
-  border: 1px solid #16A34A;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
   color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  white-space: nowrap;
+  transition: background 0.15s ease;
 }
 
-.finance-page .btn-approve:hover:not(:disabled) {
+.finance-page.finance-verification-page .btn-approve:hover:not(:disabled) {
   background: #15803D;
-  border-color: #15803D;
 }
 
-.finance-page .btn-reject {
+.finance-page.finance-verification-page .btn-reject {
   padding: 6px 14px;
+  border-radius: 8px;
+  border: none;
   background: #DC2626;
-  border: 1px solid #DC2626;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
   color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  white-space: nowrap;
+  transition: background 0.15s ease;
 }
 
-.finance-page .btn-reject:hover:not(:disabled) {
+.finance-page.finance-verification-page .btn-reject:hover:not(:disabled) {
   background: #B91C1C;
-  border-color: #B91C1C;
 }
 
-.finance-page .btn-approve:disabled,
-.finance-page .btn-reject:disabled {
-  opacity: 0.45;
+.finance-page.finance-verification-page .btn-approve:disabled,
+.finance-page.finance-verification-page .btn-reject:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
-  filter: grayscale(0.5);
+}
+
+/* ==================================================================
+   LOADING / EMPTY
+================================================================== */
+.finance-page.finance-verification-page .table-loading,
+.finance-page.finance-verification-page .table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #6B7280;
+  font-size: 14px;
+}
+
+.finance-page.finance-verification-page .table-loading p,
+.finance-page.finance-verification-page .table-empty p {
+  margin: 0;
 }
 
 /* ==================================================================
    PAGINATION
 ================================================================== */
-.finance-page .pagination {
+.finance-page.finance-verification-page .pagination {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -183,7 +597,7 @@
   border-top: 1px solid #F3F4F6;
 }
 
-.finance-page .pagination-btn {
+.finance-page.finance-verification-page .pagination-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -199,22 +613,18 @@
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.finance-page .pagination-btn:hover:not(:disabled) {
+.finance-page.finance-verification-page .pagination-btn:hover:not(:disabled) {
   background: #F9FAFB;
   border-color: #9CA3AF;
 }
 
-.finance-page .pagination-btn:disabled {
+.finance-page.finance-verification-page .pagination-btn:disabled {
   color: #9CA3AF;
   cursor: not-allowed;
   opacity: 0.6;
 }
 
-.finance-page .pagination-btn svg {
-  flex-shrink: 0;
-}
-
-.finance-page .pagination-info {
+.finance-page.finance-verification-page .pagination-info {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -222,7 +632,7 @@
   color: #6B7280;
 }
 
-.finance-page .pagination-page {
+.finance-page.finance-verification-page .pagination-page {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -236,48 +646,61 @@
   font-size: 13px;
 }
 
-.finance-page .pagination-sep {
+.finance-page.finance-verification-page .pagination-sep {
   color: #6B7280;
   font-weight: 500;
   white-space: nowrap;
 }
 
 /* ==================================================================
-   LOADING / EMPTY
-================================================================== */
-.finance-page .table-loading,
-.finance-page .table-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-  color: #6B7280;
-  font-size: 14px;
-}
-
-/* ==================================================================
    RESPONSIVE
 ================================================================== */
+@media (max-width: 1400px) {
+  .finance-page.finance-verification-page .metric-grid-three {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}
+
 @media (max-width: 1024px) {
-  .finance-page .metric-grid-three {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .finance-page.finance-verification-page .metric-grid-three {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .finance-page.finance-verification-page .card-header-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .finance-page.finance-verification-page .location-filter-select {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .finance-page.finance-verification-page .metric-grid-three {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
 }
 
 @media (max-width: 640px) {
-  .finance-page .metric-grid-three {
+  .finance-page.finance-verification-page .metric-grid-three {
     grid-template-columns: 1fr;
   }
 
-  .finance-page .pagination {
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 12px;
+  .finance-page.finance-verification-page .main-content {
+    padding: 16px;
   }
 
-  .finance-page .btn-approve,
-  .finance-page .btn-reject {
-    padding: 5px 10px;
-    font-size: 12px;
+  .finance-page.finance-verification-page .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .finance-page.finance-verification-page .scan-actions {
+    flex-direction: column;
+  }
+
+  .finance-page.finance-verification-page .scan-actions button {
+    width: 100%;
   }
 }

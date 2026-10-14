@@ -296,7 +296,7 @@ export default function ImpoundingLog() {
       collection(db, "violations"),
       (snap) => {
         violationsRows = snap.docs
-          .map((d) => {
+          .map((d): ImpoundLogRow | null => {
             const data = d.data();
             const impoundStatusRaw = String(
               data.impoundStatus ?? ""

@@ -23,12 +23,13 @@
 }
 
 /* ==================================================================
-   STATS GRID — 6 columns for 5-state flow
+   STATS GRID — 6-column fixed grid, aligned rows
 ================================================================== */
 .it-admin-page .qr-stats-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
 }
 
 .it-admin-page .qr-stat-card {
@@ -40,6 +41,7 @@
   flex-direction: column;
   gap: 6px;
   transition: box-shadow 0.15s ease;
+  min-width: 0;
 }
 
 .it-admin-page .qr-stat-card:hover {
@@ -54,6 +56,9 @@
   letter-spacing: 0.04em;
   margin: 0;
   line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .it-admin-page .qr-stat-value {
@@ -87,6 +92,41 @@
 }
 
 /* ==================================================================
+   CONDITION STATS CARDS
+================================================================== */
+.it-admin-page .condition-good-card {
+  border-left: 4px solid #22C55E;
+}
+
+.it-admin-page .condition-good-card .qr-stat-value {
+  color: #15803D;
+}
+
+.it-admin-page .condition-damaged-card {
+  border-left: 4px solid #DC2626;
+}
+
+.it-admin-page .condition-damaged-card .qr-stat-value {
+  color: #DC2626;
+}
+
+.it-admin-page .condition-repair-card {
+  border-left: 4px solid #F59E0B;
+}
+
+.it-admin-page .condition-repair-card .qr-stat-value {
+  color: #B45309;
+}
+
+.it-admin-page .condition-lost-card {
+  border-left: 4px solid #9CA3AF;
+}
+
+.it-admin-page .condition-lost-card .qr-stat-value {
+  color: #6B7280;
+}
+
+/* ==================================================================
    TOOLBAR
 ================================================================== */
 .it-admin-page .qr-toolbar {
@@ -101,6 +141,7 @@
   gap: 10px;
   align-items: center;
   flex: 1;
+  flex-wrap: wrap;
 }
 
 .it-admin-page .qr-search {
@@ -195,7 +236,7 @@
   background: #ffffff;
   border: 1px solid #E5E7EB;
   border-radius: 10px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .it-admin-page .table-wrapper {
@@ -267,6 +308,14 @@
   color: #D1D5DB;
 }
 
+.it-admin-page .cell-location,
+.it-admin-page .cell-assigned,
+.it-admin-page .cell-plate {
+  font-size: 12.5px;
+  color: #374151;
+  white-space: nowrap;
+}
+
 /* CIN pill */
 .it-admin-page .cin-pill {
   display: inline-flex;
@@ -305,7 +354,40 @@
 }
 
 /* ==================================================================
-   STATUS PILLS — 5 QR States
+   CONDITION PILLS
+================================================================== */
+.it-admin-page .condition-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.it-admin-page .condition-good {
+  background: #DCFCE7;
+  color: #166534;
+}
+
+.it-admin-page .condition-damaged {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.it-admin-page .condition-needs-repair {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.it-admin-page .condition-lost {
+  background: #F3F4F6;
+  color: #6B7280;
+}
+
+/* ==================================================================
+   STATUS PILLS
 ================================================================== */
 .it-admin-page .status-pill {
   display: inline-flex;
@@ -354,12 +436,23 @@
 }
 
 /* ==================================================================
-   ACTION BUTTONS
+   ACTION BUTTONS (3-dots menu)
 ================================================================== */
 .it-admin-page .cell-actions {
   display: flex;
   gap: 4px;
   justify-content: flex-end;
+  position: relative;
+}
+
+.it-admin-page .row-menu-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.it-admin-page .btn-more {
+  width: 30px;
+  height: 30px;
 }
 
 .it-admin-page .btn-icon {
@@ -382,15 +475,82 @@
   color: #111827;
 }
 
-.it-admin-page .btn-icon.danger:hover:not(:disabled) {
-  background: #FEF2F2;
-  border-color: #FECACA;
-  color: #DC2626;
-}
-
 .it-admin-page .btn-icon:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+/* ==================================================================
+   3-DOTS DROPDOWN MENU
+================================================================== */
+.it-admin-page .row-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 100;
+  min-width: 190px;
+  background: #ffffff;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  animation: rowMenuFadeIn 0.12s ease-out;
+}
+
+@keyframes rowMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.it-admin-page .row-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  transition: background-color 0.1s ease;
+}
+
+.it-admin-page .row-menu-item:hover:not(:disabled) {
+  background: #F3F4F6;
+  color: #111827;
+}
+
+.it-admin-page .row-menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.it-admin-page .row-menu-item-danger {
+  color: #DC2626;
+}
+
+.it-admin-page .row-menu-item-danger:hover:not(:disabled) {
+  background: #FEF2F2;
+  color: #991B1B;
+}
+
+.it-admin-page .row-menu-divider {
+  height: 1px;
+  background: #F3F4F6;
+  margin: 4px 0;
 }
 
 /* ==================================================================
@@ -570,17 +730,6 @@
   font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
 }
 
-.it-admin-page .form-select {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  padding-right: 40px;
-}
-
-/* ==================================================================
-   FORM HINT
-================================================================== */
 .it-admin-page .form-hint {
   font-size: 12px;
   color: #9CA3AF;
@@ -589,9 +738,6 @@
   line-height: 1.4;
 }
 
-/* ==================================================================
-   FORM ERROR
-================================================================== */
 .it-admin-page .form-error {
   font-size: 13px;
   color: #991B1B;
@@ -605,7 +751,7 @@
 }
 
 /* ==================================================================
-   DETECTED TYPE (Auto-detect feedback)
+   DETECTED TYPE
 ================================================================== */
 .it-admin-page .detected-type {
   display: flex;
@@ -641,9 +787,6 @@
   border-left: 3px solid #EC4899;
 }
 
-/* ==================================================================
-   MODAL NOTE
-================================================================== */
 .it-admin-page .modal-note {
   font-size: 12.5px;
   color: #4B5563;
@@ -655,9 +798,6 @@
   line-height: 1.55;
 }
 
-/* ==================================================================
-   MODAL SUCCESS
-================================================================== */
 .it-admin-page .modal-success {
   font-size: 13.5px;
   color: #065F46;
@@ -767,7 +907,7 @@
 }
 
 /* ==================================================================
-   VIOLATION DETAILS MODAL (Read-only view)
+   VIOLATION DETAILS MODAL
 ================================================================== */
 .it-admin-page .violation-header {
   display: flex;
@@ -833,11 +973,9 @@
   font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
 }
 
-/* ---------------------------------------------------------------------------
-   IDAGDAG ITO SA DULO NG QRManagement.css
-   Para sa bagong desync banner at warning icon sa State column.
-   --------------------------------------------------------------------------- */
-
+/* ==================================================================
+   DESYNC BANNER
+================================================================== */
 .desync-banner {
   display: flex;
   align-items: flex-start;
@@ -896,31 +1034,18 @@
   cursor: help;
 }
 
-/* Dark mode variant — alisin kung light theme lang ang dashboard ninyo */
-@media (prefers-color-scheme: dark) {
-  .desync-banner {
-    background: #2a1f0a;
-    border-color: #78350f;
-  }
-
-  .desync-title {
-    color: #fbbf24;
-  }
-
-  .desync-sub {
-    color: #d1a054;
-  }
-
-  .desync-sub code {
-    background: #3f2c0c;
-  }
-}
 /* ==================================================================
    RESPONSIVE
 ================================================================== */
 @media (max-width: 1280px) {
   .it-admin-page .qr-stats-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .it-admin-page .qr-stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -944,7 +1069,7 @@
   }
 
   .it-admin-page .qr-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .it-admin-page .violation-grid {

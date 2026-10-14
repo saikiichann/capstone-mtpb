@@ -51,6 +51,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  table-layout: fixed;
 }
 
 .it-admin-page .user-table thead {
@@ -65,18 +66,23 @@
   padding: 14px 20px;
   border-bottom: 1px solid #E5E7EB;
   white-space: nowrap;
+  vertical-align: middle;
 }
 
-.it-admin-page .user-table th:last-child {
-  width: 60px;
-  text-align: center;
-}
+/* Column widths */
+.it-admin-page .user-table th:nth-child(1) { width: 22%; }
+.it-admin-page .user-table th:nth-child(2) { width: 16%; }
+.it-admin-page .user-table th:nth-child(3) { width: 18%; }
+.it-admin-page .user-table th:nth-child(4) { width: 12%; }
+.it-admin-page .user-table th:nth-child(5) { width: 14%; }
+.it-admin-page .user-table th:nth-child(6) { width: 18%; }
 
 .it-admin-page .user-table td {
   padding: 14px 20px;
   border-bottom: 1px solid #F3F4F6;
   color: #374151;
   vertical-align: middle;
+  text-align: left;
 }
 
 .it-admin-page .user-table tbody tr:last-child td {
@@ -90,10 +96,16 @@
 .it-admin-page .cell-name {
   font-weight: 600;
   color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .it-admin-page .cell-username {
   color: #6B7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .it-admin-page .cell-last-login {
@@ -102,42 +114,170 @@
 }
 
 .it-admin-page .cell-action {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 10px;
 }
 
 /* ================================================================
-   EDIT BUTTON (with custom icon)
+   ⚠️ BAGO: ROLE CELL — role pill + location sa TABI (inline)
 ================================================================ */
-.it-admin-page .edit-btn {
+.it-admin-page .user-table td:nth-child(3) {
+  vertical-align: middle;
+}
+
+.it-admin-page .role-cell-content {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  line-height: 1.2;
+}
+
+/* ⚠️ BAGO: Location inline sa tabi ng role pill */
+.it-admin-page .location-inline {
+  font-size: 12px;
+  color: #6B7280;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* ================================================================
+   DISABLE / ENABLE BUTTONS
+================================================================ */
+.it-admin-page .btn-disable {
+  padding: 6px 18px;
+  border-radius: 6px;
+  border: 1px solid #DC2626;
+  background: #FFFFFF;
+  color: #DC2626;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.it-admin-page .btn-disable:hover {
+  background: #DC2626;
+  color: #FFFFFF;
+}
+
+.it-admin-page .btn-enable {
+  padding: 6px 18px;
+  border-radius: 6px;
+  border: 1px solid #16A34A;
+  background: #16A34A;
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.it-admin-page .btn-enable:hover {
+  background: #15803D;
+  border-color: #15803D;
+}
+
+/* ================================================================
+   ICON BUTTONS (Edit only)
+================================================================ */
+.it-admin-page .btn-icon-edit {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
+  width: 30px;
+  height: 30px;
   border-radius: 6px;
-  transition: background-color 0.15s ease;
+  border: 1px solid #E5E7EB;
+  background: #FFFFFF;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.it-admin-page .edit-btn:hover {
+.it-admin-page .btn-icon-edit:hover {
   background: #F3F4F6;
+  border-color: #9CA3AF;
+  color: #111827;
 }
 
-.it-admin-page .edit-icon {
-  width: 16px;
-  height: 16px;
-  object-fit: contain;
-  display: block;
+/* ================================================================
+   PAGINATION
+================================================================ */
+.it-admin-page .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid #E5E7EB;
+  background: #FFFFFF;
 }
 
-/* Optional: tint the icon on hover */
-.it-admin-page .edit-btn:hover .edit-icon {
-  filter: brightness(0.6);
+.it-admin-page .page-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid #D1D5DB;
+  background: #FFFFFF;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
 }
 
-/* ---------------- ROLE PILLS ---------------- */
+.it-admin-page .page-btn:hover:not(:disabled) {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.it-admin-page .page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.it-admin-page .page-input {
+  width: 48px;
+  height: 32px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  font-family: inherit;
+  background: #FFFFFF;
+  -moz-appearance: textfield;
+}
+
+.it-admin-page .page-input::-webkit-outer-spin-button,
+.it-admin-page .page-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.it-admin-page .page-input:focus {
+  outline: none;
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.it-admin-page .page-total {
+  font-size: 13px;
+  color: #6B7280;
+}
+
+/* ================================================================
+   ROLE PILLS
+================================================================ */
 .it-admin-page .role-pill {
   display: inline-block;
   padding: 4px 12px;
@@ -145,6 +285,8 @@
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
+  line-height: 1.2;
+  vertical-align: middle;
 }
 
 .it-admin-page .role-oic { background: #DBEAFE; color: #1E40AF; }
@@ -164,6 +306,8 @@
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
+  line-height: 1.2;
+  vertical-align: middle;
 }
 
 .it-admin-page .status-active { background: #77f16c8e; color: #064500; }
@@ -264,6 +408,100 @@
   border-top: 1px solid #F3F4F6;
   background: #FAFAFA;
   flex-shrink: 0;
+}
+
+/* ==================================================================
+   CONFIRM MODAL
+================================================================== */
+.confirm-modal {
+  background: #FFFFFF;
+  border-radius: 12px;
+  padding: 32px 28px 24px;
+  max-width: 520px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  animation: modalIn 0.15s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.confirm-modal-body {
+  margin-bottom: 28px;
+  text-align: center;
+}
+
+.confirm-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 14px 0;
+  text-align: center;
+}
+
+.confirm-modal-text {
+  font-size: 14px;
+  color: #4B5563;
+  line-height: 22px;
+  margin: 0;
+  text-align: center;
+}
+
+.confirm-modal-text strong {
+  color: #111827;
+  font-weight: 700;
+}
+
+.confirm-modal-footer {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+}
+
+.btn-danger {
+  padding: 10px 28px;
+  border-radius: 8px;
+  border: none;
+  background: #DC2626;
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  min-width: 120px;
+  font-family: inherit;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #B91C1C;
+}
+
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-success {
+  padding: 10px 28px;
+  border-radius: 8px;
+  border: none;
+  background: #16A34A;
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  min-width: 120px;
+  font-family: inherit;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #15803D;
+}
+
+.btn-success:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* ---------------- FORM FIELDS ---------------- */
@@ -634,5 +872,9 @@
   .modal {
     max-width: 100%;
     max-height: 95vh;
+  }
+
+  .confirm-modal {
+    max-width: 100%;
   }
 }

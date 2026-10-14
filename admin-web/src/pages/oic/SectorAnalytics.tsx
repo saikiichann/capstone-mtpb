@@ -16,7 +16,6 @@ import {
   onSnapshot,
   query,
   where,
-  Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./SectorAnalytics.css";
@@ -694,4 +693,4 @@ export default function SectorAnalytics() {
       </div>
     </div>
   );
-}
+}

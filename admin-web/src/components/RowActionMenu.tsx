@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { type JSX, useState, useRef, useEffect } from 'react';
 import { MoreHorizontal } from 'lucide-react';
 import './RowActionMenu.css';
 

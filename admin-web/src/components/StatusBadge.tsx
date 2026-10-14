@@ -1,4 +1,5 @@
 import React from 'react';
+import type { JSX } from 'react';
 import './StatusBadge.css';
 
 export type StatusTone = 'green' | 'yellow' | 'gray' | 'red' | 'blue';

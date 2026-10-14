@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { type JSX, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import Modal from './Modal';
 import './ChangePasswordModal.css';

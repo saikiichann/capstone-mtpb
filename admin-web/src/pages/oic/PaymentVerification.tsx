@@ -8,6 +8,7 @@ import {
   X,
   Building2,
   Landmark,
+  Smartphone,
 } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
@@ -24,6 +25,12 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import {
+  PAYMENT_LOCATION_LABELS,
+  PAYMENT_LOCATION_OPTIONS,
+  derivePaymentLocation,
+  type PaymentLocation,
+} from "../../lib/paymentLocation";
 import "./PaymentVerification.css";
 
 import logo from "../../assets/mtpb-logo.png";
@@ -66,7 +73,6 @@ type CurrentUser = { name: string; role: RoleSlug };
 type WaitingBand = "Over 24 hrs" | "6-24 hrs" | "Under 6 hrs";
 type PaymentMethod = "GCash" | "Cash";
 type PaymentStatus = "Pending Verification" | "Verified" | "Rejected";
-type PaymentLocation = "City Hall" | "Central";
 
 type PaymentRow = {
   id: string;
@@ -88,6 +94,9 @@ type PaymentRow = {
   amountInWords: string | null;
   cashReceived: number | null;
   createdAt: Timestamp | null;
+  violatorUid: string | null;
+  guestId: string | null;
+  violatorName: string | null;
 };
 
 type Metrics = {
@@ -96,6 +105,7 @@ type Metrics = {
   rejectedToday: number;
   cityHallCount: number;
   centralCount: number;
+  onlineCount: number;
 };
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
@@ -117,18 +127,12 @@ const ROLE_LABELS: Record<RoleSlug, string> = {
   "impounding-staff": "Impounding Staff",
 };
 
-// ⚠️ CHANGED: Removed "Unknown"
 const LOCATION_OPTIONS: Array<PaymentLocation | "All Locations"> = [
   "All Locations",
-  "City Hall",
-  "Central",
+  ...PAYMENT_LOCATION_OPTIONS,
 ];
 
-// ⚠️ CHANGED: Removed "Unknown" key
-const LOCATION_LABELS: Record<PaymentLocation, string> = {
-  "City Hall": "City Hall",
-  Central: "Central (MTPB)",
-};
+const LOCATION_LABELS = PAYMENT_LOCATION_LABELS;
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -227,21 +231,37 @@ const getWaitingClass = (band: WaitingBand): string => {
   return map[band] ?? "";
 };
 
-// ⚠️ CHANGED: Added fallback return to prevent `undefined`
-const deriveLocation = (data: any): PaymentLocation => {
-  const raw = String(data.paymentLocation ?? data.location ?? "").toLowerCase();
-  if (raw.includes("city") || raw.includes("hall")) return "City Hall";
-  if (raw.includes("central") || raw.includes("mtpb")) return "Central";
-  // Fallback — treats missing/unknown location as Central (MTPB default)
-  return "Central";
-};
+/** GCash → "Online"; cash → City Hall / Central (tingnan ang lib/paymentLocation) */
+const deriveLocation = (data: any): PaymentLocation =>
+  derivePaymentLocation(data.method, data.paymentLocation ?? data.location);
 
 const getLocationClass = (location: PaymentLocation): string => {
   const map: Record<PaymentLocation, string> = {
     "City Hall": "location-city-hall",
     Central: "location-central",
+    Online: "location-online",
   };
   return map[location] ?? "";
+};
+
+const hasNoViolator = (r: {
+  violatorUid: string | null;
+  guestId: string | null;
+  violatorName: string | null;
+}) => !r.violatorUid && !r.guestId && !r.violatorName;
+
+/** "Juan Cruz (Registered)", "Guest — guest_NMK 8908", o "—". */
+const violatorLabel = (row: PaymentRow): string => {
+  if (row.violatorName) {
+    return row.violatorUid
+      ? `${row.violatorName} (Registered)`
+      : row.guestId
+      ? `${row.violatorName} (Guest)`
+      : row.violatorName;
+  }
+  if (row.violatorUid) return `Registered — ${row.violatorUid}`;
+  if (row.guestId) return `Guest — ${row.guestId}`;
+  return "—";
 };
 
 /* ------------------------------------------------------------------
@@ -264,6 +284,7 @@ export default function PaymentVerification() {
     rejectedToday: 0,
     cityHallCount: 0,
     centralCount: 0,
+    onlineCount: 0,
   });
   const [loading, setLoading] = useState(true);
   const [actioning, setActioning] = useState<string | null>(null);
@@ -280,6 +301,9 @@ export default function PaymentVerification() {
   const [scannedPayment, setScannedPayment] = useState<PaymentRow | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const scanInputRef = useRef<HTMLInputElement>(null);
+
+  /* ⚠️ CHANGED: Hoisted role check — used in multiple places */
+  const isOIC = currentUser.role === "oic";
 
   /* Current user */
   useEffect(() => {
@@ -365,11 +389,14 @@ export default function PaymentVerification() {
             amountInWords: (data.amountInWords as string) ?? null,
             cashReceived: (data.cashReceived as number) ?? null,
             createdAt: (data.createdAt as Timestamp) ?? null,
+            violatorUid: (data.violatorUid as string) ?? null,
+            guestId: (data.guestId as string) ?? null,
+            violatorName: (data.violatorName as string) ?? null,
           } as PaymentRow;
         });
 
         const needsLookup = base.filter(
-          (r) => r.violationId && (!r.cin || !r.plateNo)
+          (r) => r.violationId && (!r.cin || !r.plateNo || hasNoViolator(r))
         );
         const uniqueIds = Array.from(
           new Set(needsLookup.map((r) => r.violationId as string))
@@ -377,7 +404,14 @@ export default function PaymentVerification() {
 
         const violationCache = new Map<
           string,
-          { cin: string | null; plateNo: string | null; clampId: string | null }
+          {
+            cin: string | null;
+            plateNo: string | null;
+            clampId: string | null;
+            violatorUid: string | null;
+            guestId: string | null;
+            violatorName: string | null;
+          }
         >();
 
         await Promise.all(
@@ -390,6 +424,9 @@ export default function PaymentVerification() {
                   cin: v.cin ?? null,
                   plateNo: v.plateNo ?? null,
                   clampId: v.clampId ?? null,
+                  violatorUid: (v.violatorUid as string) ?? null,
+                  guestId: (v.guestId as string) ?? null,
+                  violatorName: (v.violatorName as string) ?? null,
                 });
               }
             } catch (err) {
@@ -409,7 +446,16 @@ export default function PaymentVerification() {
 
           const orphaned = !r.violationId && !cin;
 
-          return { ...r, cin, plateNo, clampId, orphaned };
+          return {
+            ...r,
+            cin,
+            plateNo,
+            clampId,
+            orphaned,
+            violatorUid: r.violatorUid ?? linked?.violatorUid ?? null,
+            guestId: r.guestId ?? linked?.guestId ?? null,
+            violatorName: r.violatorName ?? linked?.violatorName ?? null,
+          };
         });
 
         const pendingRows = enriched
@@ -425,11 +471,15 @@ export default function PaymentVerification() {
           rejectedToday: enriched.filter(
             (p) => p.status === "Rejected" && isToday(p.verifiedAt)
           ).length,
-          cityHallCount: enriched.filter(
+          // PENDING lang (dati, kasama pati verified at rejected)
+          cityHallCount: pendingRows.filter(
             (p) => p.paymentLocation === "City Hall"
           ).length,
-          centralCount: enriched.filter(
+          centralCount: pendingRows.filter(
             (p) => p.paymentLocation === "Central"
+          ).length,
+          onlineCount: pendingRows.filter(
+            (p) => p.paymentLocation === "Online"
           ).length,
         });
         setLoading(false);
@@ -529,7 +579,7 @@ export default function PaymentVerification() {
 
       const method = String(paymentDoc.method ?? "").toLowerCase();
       if (method !== "cash") {
-        setScanError("This is a GCash payment — verify it in Payment Verification.");
+        setScanError("This is a GCash payment — verify it from the Verification Queue below.");
         setScanInput("");
         setScanLoading(false);
         scanInputRef.current?.focus();
@@ -589,6 +639,9 @@ export default function PaymentVerification() {
         amountInWords: paymentDoc.amountInWords ?? null,
         cashReceived: paymentDoc.cashReceived ?? null,
         createdAt: (paymentDoc.createdAt as Timestamp) ?? null,
+        violatorUid: paymentDoc.violatorUid ?? null,
+        guestId: paymentDoc.guestId ?? null,
+        violatorName: paymentDoc.violatorName ?? null,
       };
 
       setScannedPayment(row);
@@ -649,18 +702,36 @@ export default function PaymentVerification() {
       return;
     }
 
-    /* SEGREGATION OF DUTIES CHECK
-       City Hall payments — OIC allowed to self-verify (kasi wala siya doon).
-       Central payments — still two-person control. */
+    /* Payment verification: OIC at Finance lang. Ang Supervisor ay para
+       sa pag-approve ng RELEASE, hindi ng payment. */
+    if (currentUser.role !== "oic" && currentUser.role !== "finance") {
+      alert(
+        "❌ PERMISSION DENIED\n\n" +
+          "Only the OIC or Finance Staff can verify payments.\n\n" +
+          `Your role: ${ROLE_LABELS[currentUser.role]}`
+      );
+      return;
+    }
+
+    /* ⚠️ CHANGED: SEGREGATION OF DUTIES CHECK — now role-aware
+       - OIC: Always allowed to verify (final approver, highest authority)
+       - Finance: Cannot self-verify on Central payments (two-person control)
+       - City Hall: Self-verification allowed for all roles (with audit log) */
     const isSelfVerification = row.recordedBy === currentUser.name;
     const isCityHallPayment = row.paymentLocation === "City Hall";
 
-    if (action === "Verified" && isSelfVerification && !isCityHallPayment) {
+    // Only block if NOT OIC and NOT City Hall — Finance/Supervisor on Central
+    if (
+      action === "Verified" &&
+      isSelfVerification &&
+      !isOIC &&
+      !isCityHallPayment
+    ) {
       alert(
         "SEGREGATION OF DUTIES VIOLATION\n\n" +
           "You cannot verify your own cash entry.\n\n" +
           `You recorded this payment (${row.reference}). ` +
-          "A DIFFERENT authorized personnel (Finance Supervisor or OIC) " +
+          "A DIFFERENT authorized personnel (another Finance Staff or the OIC) " +
           "must verify this payment.\n\n" +
           "This is required by COA Circular 2022-004 (Government Cash Handling — Two-Person Control)."
       );
@@ -687,8 +758,33 @@ export default function PaymentVerification() {
       return;
     }
 
-    /* City Hall self-verification — confirmation dialog */
-    if (action === "Verified" && isSelfVerification && isCityHallPayment) {
+    /* ⚠️ CHANGED: OIC self-verification — confirmation dialog (with audit trail)
+       OIC is the final approver, so self-verification is allowed.
+       But we still log it for accountability. */
+    if (
+      action === "Verified" &&
+      isSelfVerification &&
+      isOIC &&
+      !isCityHallPayment
+    ) {
+      const proceed = window.confirm(
+        "⚠️ OIC SELF-VERIFICATION\n\n" +
+          `You recorded this payment (${row.reference}) yourself.\n\n` +
+          "As OIC, you have the authority to verify this payment.\n" +
+          "This action will be logged in the audit trail for accountability.\n\n" +
+          "Confirm to proceed?"
+      );
+
+      if (!proceed) return;
+    }
+
+    /* City Hall self-verification — confirmation dialog (non-OIC only) */
+    if (
+      action === "Verified" &&
+      isSelfVerification &&
+      isCityHallPayment &&
+      !isOIC
+    ) {
       const proceed = window.confirm(
         "⚠️ CITY HALL SELF-VERIFICATION\n\n" +
           `You recorded this City Hall payment (${row.reference}) yourself.\n\n` +
@@ -703,7 +799,7 @@ export default function PaymentVerification() {
     let rejectionReason = "";
     if (action === "Rejected") {
       const input = window.prompt(
-        `Reject payment ${row.reference}?\n\nEnter the reason — the violator will need this to understand why the payment was not accepted:`
+        `Reject payment ${row.reference}?\n\nViolator: ${violatorLabel(row)}\n\nEnter the reason — the violator will need this to understand why the payment was not accepted:`
       );
       if (input === null) return;
       if (!input.trim()) {
@@ -711,12 +807,13 @@ export default function PaymentVerification() {
         return;
       }
       rejectionReason = input.trim();
-    } else if (!isSelfVerification || !isCityHallPayment) {
+    } else if (!isSelfVerification || (!isCityHallPayment && !isOIC)) {
+      /* ⚠️ CHANGED: Skip extra confirm dialog for OIC self-verify (already confirmed above) */
       if (
         !window.confirm(
           `Approve payment for ${row.reference}?\n\nCIN: ${
             row.cin ?? "—"
-          }\nOR Number: ${row.orNumber ?? "—"}\nAmount: ${formatCurrency(
+          }\nViolator: ${violatorLabel(row)}\nOR Number: ${row.orNumber ?? "—"}\nAmount: ${formatCurrency(
             row.amount
           )}\nMethod: ${row.method}\nLocation: ${LOCATION_LABELS[row.paymentLocation]}`
         )
@@ -756,14 +853,21 @@ export default function PaymentVerification() {
 
       const batch = writeBatch(db);
 
+      /* ⚠️ CHANGED: Self-verified flag covers both OIC and City Hall */
+      const isSelfVerifiedAction =
+        isSelfVerification && (isCityHallPayment || isOIC);
+
       // 1. Payment record
       batch.update(doc(db, "payments", row.id), {
         status: action,
         verificationStatus: action,
         verifiedBy: currentUser.name,
         verifiedAt: serverTimestamp(),
-        ...(isSelfVerification && isCityHallPayment
-          ? { selfVerified: true }
+        violatorUid: row.violatorUid,
+        guestId: row.guestId,
+        violatorName: row.violatorName,
+        ...(isSelfVerifiedAction
+          ? { selfVerified: true, selfVerifiedByOIC: isOIC }
           : {}),
         ...(action === "Rejected" ? { rejectionReason } : {}),
       });
@@ -812,11 +916,17 @@ export default function PaymentVerification() {
         action: `${action === "Verified" ? "approved" : "rejected"} payment for ${
           row.cin ?? "(no CIN)"
         } (${row.reference}${row.orNumber ? ` — OR #${row.orNumber}` : ""})${
-          isSelfVerification && isCityHallPayment ? " [CITY HALL SELF-VERIFIED]" : ""
+          isSelfVerification && isOIC
+            ? " [OIC SELF-VERIFIED]"
+            : isSelfVerification && isCityHallPayment
+            ? " [CITY HALL SELF-VERIFIED]"
+            : ""
         }`,
         record: row.cin ?? row.reference,
         type:
-          isSelfVerification && isCityHallPayment
+          isSelfVerification && isOIC
+            ? "payment-verification-self-oic"
+            : isSelfVerification && isCityHallPayment
             ? "payment-verification-self-city-hall"
             : "payment-verification",
         metadata: {
@@ -829,7 +939,8 @@ export default function PaymentVerification() {
           newStatus: action,
           recordedBy: row.recordedBy,
           verifiedBy: currentUser.name,
-          selfVerified: isSelfVerification && isCityHallPayment,
+          selfVerified: isSelfVerifiedAction,
+          selfVerifiedByOIC: isOIC && isSelfVerification,
           ...(rejectionReason ? { rejectionReason } : {}),
         },
         timestamp: serverTimestamp(),
@@ -864,6 +975,7 @@ export default function PaymentVerification() {
     { title: "Rejected Today", value: String(metrics.rejectedToday) },
     { title: "City Hall", value: String(metrics.cityHallCount) },
     { title: "Central (MTPB)", value: String(metrics.centralCount) },
+    { title: "Online (GCash)", value: String(metrics.onlineCount) },
   ];
 
   /* Pagination */
@@ -1017,6 +1129,10 @@ export default function PaymentVerification() {
                       <strong>{scannedPayment.plateNo ?? "—"}</strong>
                     </div>
                     <div className="scan-row">
+                      <span>Violator</span>
+                      <strong>{violatorLabel(scannedPayment)}</strong>
+                    </div>
+                    <div className="scan-row">
                       <span>Amount</span>
                       <strong>{formatCurrency(scannedPayment.amount)}</strong>
                     </div>
@@ -1066,12 +1182,16 @@ export default function PaymentVerification() {
                     </div>
                   </div>
 
-                  {/* Self-verification notice (City Hall only) */}
+                  {/* ⚠️ CHANGED: Self-verification notice — now covers OIC for all locations */}
                   {scannedPayment.recordedBy === currentUser.name &&
-                    scannedPayment.paymentLocation === "City Hall" && (
+                    (scannedPayment.paymentLocation === "City Hall" ||
+                      isOIC) && (
                       <div className="self-verify-notice">
-                        ⚠️ You recorded this City Hall payment. Self-verification
-                        is allowed but will be logged for accountability.
+                        ⚠️ You recorded this payment.{" "}
+                        {isOIC
+                          ? "As OIC, self-verification is allowed"
+                          : "Self-verification is allowed for City Hall transactions"}{" "}
+                        but will be logged for accountability.
                       </div>
                     )}
 
@@ -1160,6 +1280,7 @@ export default function PaymentVerification() {
                           <th>OR Number</th>
                           <th>CIN</th>
                           <th>Plate No.</th>
+                          <th>Violator ID</th>
                           <th>Amount</th>
                           <th>Method</th>
                           <th>Location</th>
@@ -1177,12 +1298,13 @@ export default function PaymentVerification() {
                             <td className="cell-reference">
                               {row.reference}
                               {row.orphaned && (
-                                <AlertTriangle
-                                  size={14}
-                                  className="orphan-icon"
-                                  aria-label="Not linked to a violation"
-                                  title="This payment is not linked to any violation."
-                                />
+                                <span title="This payment is not linked to any violation.">
+                                  <AlertTriangle
+                                    size={14}
+                                    className="orphan-icon"
+                                    aria-label="Not linked to a violation"
+                                  />
+                                </span>
                               )}
                             </td>
                             <td className="cell-or-number">
@@ -1197,6 +1319,29 @@ export default function PaymentVerification() {
                             </td>
                             <td className="cell-plate">
                               {row.plateNo ?? (
+                                <span className="cell-empty">—</span>
+                              )}
+                            </td>
+                            <td className="cell-violator">
+                              {row.violatorUid || row.guestId ? (
+                                <div className="violator-cell">
+                                  {row.violatorName && (
+                                    <span className="violator-name">
+                                      {row.violatorName}
+                                    </span>
+                                  )}
+                                  <span
+                                    className="violator-id"
+                                    title={row.violatorUid ?? row.guestId ?? ""}
+                                  >
+                                    {row.violatorUid ?? row.guestId}
+                                  </span>
+                                </div>
+                              ) : row.violatorName ? (
+                                <span className="violator-name">
+                                  {row.violatorName}
+                                </span>
+                              ) : (
                                 <span className="cell-empty">—</span>
                               )}
                             </td>
@@ -1216,6 +1361,9 @@ export default function PaymentVerification() {
                                 )}
                                 {row.paymentLocation === "Central" && (
                                   <Building2 size={12} />
+                                )}
+                                {row.paymentLocation === "Online" && (
+                                  <Smartphone size={12} />
                                 )}
                                 {LOCATION_LABELS[row.paymentLocation]}
                               </span>
@@ -1242,9 +1390,13 @@ export default function PaymentVerification() {
                                 disabled={
                                   actioning === row.id || row.orphaned
                                 }
+                                /* ⚠️ CHANGED: title now reflects OIC self-verify permission */
                                 title={
                                   row.orphaned
                                     ? "Not linked to a violation"
+                                    : row.recordedBy === currentUser.name &&
+                                      isOIC
+                                    ? "OIC self-verify payment"
                                     : row.recordedBy === currentUser.name &&
                                       row.paymentLocation !== "City Hall"
                                     ? "Cannot verify your own entry"
@@ -1313,4 +1465,4 @@ export default function PaymentVerification() {
       </div>
     </div>
   );
-}
+}

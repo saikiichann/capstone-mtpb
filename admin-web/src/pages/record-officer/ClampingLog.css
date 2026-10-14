@@ -143,6 +143,68 @@
 }
 
 /* ==================================================================
+   AUTO-FLAG IMPOUND BADGES (Record Officer)
+
+   Three states for the "Impound" column:
+     - impound-pending: green, waiting for 24hr grace period
+     - badge-impound:   red, manually flagged
+     - badge-impound-auto: amber, auto-flagged by system (24hr expired)
+     - badge-impounded: gray, already towed by Impounding Staff
+================================================================== */
+
+/* "Within 24hr grace" — waiting for grace period to expire */
+.record-page .impound-pending {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #F0FDF4;
+  color: #166534;
+  border: 1px solid #22C55E;
+}
+
+/* "Subject to Impound" — flagged (manual) */
+.record-page .badge-impound {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #FEE2E2;
+  color: #991B1B;
+  border: 1px solid #DC2626;
+}
+
+/* Auto-flagged variant — amber */
+.record-page .badge-impound-auto {
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #F59E0B;
+}
+
+/* "Impounded" — already towed */
+.record-page .badge-impounded {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #E5E7EB;
+  color: #374151;
+  border: 1px solid #9CA3AF;
+}
+
+/* Placeholder for released rows */
+.record-page .action-placeholder {
+  color: #CBD5E1;
+  font-size: 13px;
+}
+
+/* ==================================================================
    PAGINATION
 ================================================================== */
 .record-page .pagination {

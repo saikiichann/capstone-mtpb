@@ -27,6 +27,10 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { auth, db } from "../../firebase";
+import {
+  derivePaymentLocation,
+  PAYMENT_LOCATION_LABELS,
+} from "../../lib/paymentLocation";
 import "./ExportCenter.css";
 
 // Asset imports
@@ -120,22 +124,32 @@ const DATA_TYPES = [
   "Release Log",
 ] as const;
 
+type ReportKind = "violations" | "releaseLog";
+
 const DATA_TYPE_CONFIG: Record<
   string,
-  { collection: string; filterField?: string; filterValue?: string }
+  {
+    collection: string;
+    kind: ReportKind;
+    /** Field na ginagamit sa date range — iba ang releaseLog (releasedAt) */
+    dateField: string;
+    enforcement?: "clamped" | "impounded";
+  }
 > = {
-  Violations: { collection: "violations" },
+  Violations: { collection: "violations", kind: "violations", dateField: "recordedAt" },
   "Clamping Log": {
     collection: "violations",
-    filterField: "enforcementType",
-    filterValue: "clamped",
+    kind: "violations",
+    dateField: "recordedAt",
+    enforcement: "clamped",
   },
   "Impounding Log": {
     collection: "violations",
-    filterField: "enforcementType",
-    filterValue: "impounded",
+    kind: "violations",
+    dateField: "recordedAt",
+    enforcement: "impounded",
   },
-  "Release Log": { collection: "releaseLog" },
+  "Release Log": { collection: "releaseLog", kind: "releaseLog", dateField: "releasedAt" },
 };
 
 // ---------------------------------------------------------------------------
@@ -203,6 +217,25 @@ const formatDateForFilename = (dateStr: string): string => {
     return "unknown";
   }
 };
+
+/** Kung saan nagbayad: City Hall / Central (MTPB) / Online (GCash).
+ *  Hindi pa bayad → blangko. */
+const paidAtLabel = (
+  paymentMethod: unknown,
+  paymentLocation: unknown,
+  isPaid: boolean
+): string =>
+  isPaid
+    ? PAYMENT_LOCATION_LABELS[derivePaymentLocation(paymentMethod, paymentLocation)]
+    : "";
+
+const PAID_STATUSES = ["pending verification", "verified"];
+
+/** Walang enforcementType ang ibang record → clamped (default ng enforcer app). */
+const getEnforcementType = (item: any): "clamped" | "impounded" =>
+  item.enforcementType === "impounded" || item.impoundStatus === "Impounded"
+    ? "impounded"
+    : "clamped";
 
 const sanitizeData = (data: any[]): Record<string, any>[] => {
   return data.map((item) => {
@@ -325,7 +358,8 @@ const downloadPdf = (
   filename: string,
   rows: Record<string, any>[],
   title: string,
-  metadata: { exportedBy: string; dateRange: string }
+  metadata: { exportedBy: string; dateRange: string },
+  kind: ReportKind
 ): void => {
   if (rows.length === 0) {
     alert("Walang data na ma-export para sa napiling date range.");
@@ -387,27 +421,42 @@ const downloadPdf = (
   const cardWidth = (pageWidth - 80 - cardGap * 3) / 4;
 
   const totalRecords = rows.length;
-  const verifiedCount = rows.filter(
-    (r) => String(r.paymentStatus).toLowerCase() === "verified"
-  ).length;
-  const totalFines = rows.reduce(
-    (sum, r) => sum + (Number(r.fineAmount) || 0),
-    0
-  );
+  const generatedLabel = new Date().toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 
-  const summaryCards = [
-    { label: "Total Records", value: String(totalRecords) },
-    { label: "Verified Payments", value: String(verifiedCount) },
-    { label: "Total Fines", value: `PHP ${totalFines.toLocaleString()}` },
-    {
-      label: "Generated",
-      value: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-    },
-  ];
+  let summaryCards: { label: string; value: string }[];
+  if (kind === "releaseLog") {
+    const totalCollected = rows.reduce(
+      (sum, r) => sum + (Number(r.totalPaid) || 0),
+      0
+    );
+    const cityHall = rows.filter((r) => r.paidAtLocation === "City Hall").length;
+    const central = rows.filter((r) => r.paidAtLocation === "Central (MTPB)").length;
+    const online = rows.filter((r) => r.paidAtLocation === "Online (GCash)").length;
+    summaryCards = [
+      { label: "Total Released", value: String(totalRecords) },
+      { label: "Total Collected", value: `PHP ${totalCollected.toLocaleString()}` },
+      { label: "City Hall / Central / GCash", value: `${cityHall} / ${central} / ${online}` },
+      { label: "Generated", value: generatedLabel },
+    ];
+  } else {
+    const verifiedCount = rows.filter(
+      (r) => String(r.paymentStatus).toLowerCase() === "verified"
+    ).length;
+    const totalFines = rows.reduce(
+      (sum, r) => sum + (Number(r.fineAmount) || 0),
+      0
+    );
+    summaryCards = [
+      { label: "Total Records", value: String(totalRecords) },
+      { label: "Verified Payments", value: String(verifiedCount) },
+      { label: "Total Fines", value: `PHP ${totalFines.toLocaleString()}` },
+      { label: "Generated", value: generatedLabel },
+    ];
+  }
 
   summaryCards.forEach((card, i) => {
     const x = 40 + i * (cardWidth + cardGap);
@@ -428,24 +477,45 @@ const downloadPdf = (
     doc.text(card.value, x + 12, cardY + 42);
   });
 
-  const columns = [
-    { key: "cin", label: "CIN", width: 90 },
-    { key: "plateNo", label: "PLATE NO.", width: 70 },
-    { key: "violationType", label: "VIOLATION", width: 100 },
-    { key: "location", label: "LOCATION", width: 110 },
-    { key: "officer", label: "OFFICER", width: 80 },
-    { key: "recordedAt", label: "RECORDED", width: 90 },
-    { key: "fineAmount", label: "FINE", width: 55 },
-    { key: "paymentStatus", label: "PAYMENT", width: 65 },
-    { key: "releaseStatus", label: "RELEASE", width: 70 },
-  ];
+  // Iba ang laman ng releaseLog (orderId, releasedBy, releasedAt, totalPaid)
+  // kaysa sa violations — kaya hiwalay ang columns. Ang "PAID AT" ay kung
+  // saan nagbayad ang violator (City Hall / Central).
+  const columns =
+    kind === "releaseLog"
+      ? [
+          { key: "orderId", label: "ORDER NO.", width: 70 },
+          { key: "cin", label: "CIN", width: 80 },
+          { key: "plateNo", label: "PLATE NO.", width: 60 },
+          { key: "violationType", label: "VIOLATION", width: 85 },
+          { key: "location", label: "LOCATION", width: 95 },
+          { key: "paidAtLocation", label: "PAID AT", width: 65 },
+          { key: "totalPaid", label: "AMOUNT PAID", width: 60 },
+          { key: "verifiedBy", label: "VERIFIED BY", width: 80 },
+          { key: "releasedBy", label: "RELEASED BY", width: 80 },
+          { key: "releasedAt", label: "RELEASED AT", width: 85 },
+        ]
+      : [
+          { key: "cin", label: "CIN", width: 75 },
+          { key: "plateNo", label: "PLATE NO.", width: 55 },
+          { key: "violationType", label: "VIOLATION", width: 75 },
+          { key: "location", label: "LOCATION", width: 80 },
+          { key: "officer", label: "OFFICER", width: 65 },
+          { key: "recordedAt", label: "RECORDED", width: 70 },
+          { key: "fineAmount", label: "FINE", width: 45 },
+          { key: "paymentStatus", label: "PAYMENT", width: 62 },
+          { key: "paidAtLocation", label: "PAID AT", width: 55 },
+          { key: "verifiedBy", label: "VERIFIED BY", width: 62 },
+          { key: "releaseStatus", label: "RELEASE", width: 55 },
+          { key: "releasedBy", label: "RELEASED BY", width: 62 },
+        ];
+  // Kabuuang lapad ≤ 762pt (A4 landscape minus 40pt margins)
 
   const headers = columns.map((c) => c.label);
   const body = rows.map((row) =>
     columns.map((c) => {
       const value = row[c.key];
       if (value === null || value === undefined) return "";
-      if (c.key === "fineAmount") {
+      if (c.key === "fineAmount" || c.key === "totalPaid") {
         const num = Number(value);
         return isNaN(num) ? String(value) : num.toLocaleString();
       }
@@ -459,8 +529,8 @@ const downloadPdf = (
     startY: cardY + cardHeight + 20,
     theme: "plain",
     styles: {
-      fontSize: 8.5,
-      cellPadding: { top: 8, right: 6, bottom: 8, left: 6 },
+      fontSize: columns.length > 10 ? 7.5 : 8.5,
+      cellPadding: { top: 8, right: 5, bottom: 8, left: 5 },
       overflow: "linebreak",
       textColor: [51, 65, 85],
       lineColor: [241, 245, 249],
@@ -470,9 +540,9 @@ const downloadPdf = (
       fillColor: [30, 58, 138],
       textColor: [255, 255, 255],
       fontStyle: "bold",
-      fontSize: 8,
+      fontSize: columns.length > 10 ? 7 : 8,
       halign: "left",
-      cellPadding: { top: 10, right: 6, bottom: 10, left: 6 },
+      cellPadding: { top: 10, right: 5, bottom: 10, left: 5 },
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252],
@@ -679,14 +749,68 @@ export default function ExportCenter() {
         ...d.data(),
       }));
 
-      if (config.filterField && config.filterValue) {
-        data = data.filter(
-          (item) => item[config.filterField!] === config.filterValue
-        );
+      // Clamping / Impounding — walang enforcementType ang ibang record,
+      // kaya clamped ang default (dati, nawawala sila sa Clamping Log export)
+      if (config.enforcement) {
+        data = data.filter((item) => getEnforcementType(item) === config.enforcement);
       }
 
-      data = filterByDateRange(data, startDate, endDate, "recordedAt");
+      if (config.kind === "releaseLog") {
+        // Release log — cin, plate, location, releasedBy, totalPaid lang ang
+        // laman. Kunin ang violation details at payment location sa
+        // naka-link na violation.
+        const ids = Array.from(
+          new Set(data.map((i) => i.violationId).filter(Boolean))
+        ) as string[];
+        const linked = new Map<string, any>();
+        await Promise.all(
+          ids.map(async (vId) => {
+            try {
+              const vSnap = await getDoc(doc(db, "violations", vId));
+              if (vSnap.exists()) linked.set(vId, vSnap.data());
+            } catch (err) {
+              console.warn(`Violation ${vId} lookup failed:`, err);
+            }
+          })
+        );
+
+        data = data.map((item) => {
+          const v = item.violationId ? linked.get(item.violationId) : undefined;
+          return {
+            ...item,
+            violationType: item.violationType ?? v?.violationType ?? null,
+            officer: item.officer ?? v?.officer ?? null,
+            recordedAt: item.recordedAt ?? v?.recordedAt ?? null,
+            fineAmount: item.fineAmount ?? v?.fineAmount ?? null,
+            paymentMethod: item.paymentMethod ?? v?.paymentMethod ?? null,
+            orNumber: item.orNumber ?? v?.orNumber ?? null,
+            verifiedBy: item.verifiedBy ?? v?.verifiedBy ?? null,
+            paidAtLocation: paidAtLabel(
+              item.paymentMethod ?? v?.paymentMethod,
+              item.paymentLocation ?? v?.paymentLocation,
+              true // na-release na → bayad na
+            ),
+          };
+        });
+      } else {
+        data = data.map((item) => ({
+          ...item,
+          paidAtLocation: paidAtLabel(
+            item.paymentMethod,
+            item.paymentLocation,
+            PAID_STATUSES.includes(String(item.paymentStatus ?? "").toLowerCase())
+          ),
+        }));
+      }
+
+      data = filterByDateRange(data, startDate, endDate, config.dateField);
       const cleaned = sanitizeData(data);
+
+      // Walang data → huwag mag-download at huwag mag-log sa Recent Exports
+      if (cleaned.length === 0) {
+        setError(`No ${dataType.toLowerCase()} records in the selected date range.`);
+        return;
+      }
 
       const slug = slugifyDataType(dataType);
       const startSlug = formatDateForFilename(startDate);
@@ -700,10 +824,16 @@ export default function ExportCenter() {
       } else if (format === "Excel") {
         downloadExcel(filename, cleaned);
       } else {
-        downloadPdf(filename, cleaned, `${dataType} Report`, {
-          exportedBy: currentUser.name,
-          dateRange: `${startDate} to ${endDate}`,
-        });
+        downloadPdf(
+          filename,
+          cleaned,
+          `${dataType} Report`,
+          {
+            exportedBy: currentUser.name,
+            dateRange: `${startDate} to ${endDate}`,
+          },
+          config.kind
+        );
       }
 
       await addDoc(collection(db, "auditLogs"), {

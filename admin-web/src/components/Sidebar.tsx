@@ -1,4 +1,4 @@
-import React from 'react';
+import type { JSX } from 'react';
 import { NavLink } from 'react-router-dom';
 import { slugify } from '../utils/slugify';
 import './Sidebar.css';

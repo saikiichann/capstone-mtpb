@@ -14,11 +14,8 @@ import {
   X,
   ChevronDown,
   Loader2,
-  KeyRound,
-  CheckCircle,
-  Eye,
-  EyeOff,
   QrCode,
+  Pencil,
 } from "lucide-react";
 import {
   collection,
@@ -37,34 +34,28 @@ import {
   getAuth,
   onAuthStateChanged,
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updatePassword,
   signOut as firebaseSignOut,
 } from "firebase/auth";
 import { auth, db, firebaseConfig } from "../../firebase";
-import "./ITAdminHomePage.css";
+import "./ITAdminHomepage.css";
 import "./UserManagement.css";
 
 import logo from "../../assets/mtpb-logo.png";
 import avatarImg from "../../assets/user.png";
 import logoutIcon from "../../assets/logout.png";
 import keyIcon from "../../assets/key.png";
-import editIcon from "../../assets/edit-text.png";
 
 /* ------------------------------------------------------------------
    TYPES
 ------------------------------------------------------------------ */
 type NavItem = {
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: number | string; className?: string }>;
   path: string;
   active?: boolean;
 };
 
-type NavGroup = {
-  title: string;
-  items: NavItem[];
-};
+type NavGroup = { title: string; items: NavItem[] };
 
 type RoleSlug =
   | "oic"
@@ -78,6 +69,9 @@ type RoleSlug =
 
 type UserStatus = "active" | "inactive" | "suspended";
 
+// ⚠️ WALANG "Both" — dalawa lang
+type AssignedLocation = "City Hall" | "MTPB Central Market Impounding Area";
+
 type UserRow = {
   uid: string;
   name: string;
@@ -86,15 +80,23 @@ type UserRow = {
   role: RoleSlug;
   status: UserStatus;
   lastLogin: Timestamp | null;
+  assignedLocation: AssignedLocation | null;
 };
 
-type CurrentUser = {
-  name: string;
-  role: RoleSlug;
+type CurrentUser = { name: string; role: RoleSlug };
+
+/* ------------------------------------------------------------------
+   NORMALIZE STATUS
+------------------------------------------------------------------ */
+const normalizeStatus = (raw: any): UserStatus => {
+  const val = String(raw ?? "active").toLowerCase().trim();
+  if (val === "inactive" || val === "disabled" || val === "deactivated") return "inactive";
+  if (val === "suspended") return "suspended";
+  return "active";
 };
 
 /* ------------------------------------------------------------------
-   ROLE / STATUS CONFIG
+   CONFIG
 ------------------------------------------------------------------ */
 const ROLES: { slug: RoleSlug; label: string; class: string }[] = [
   { slug: "oic", label: "Officer-in-Charge", class: "role-oic" },
@@ -111,6 +113,12 @@ const STATUSES: { slug: UserStatus; label: string; class: string }[] = [
   { slug: "active", label: "Active", class: "status-active" },
   { slug: "inactive", label: "Inactive", class: "status-inactive" },
   { slug: "suspended", label: "Suspended", class: "status-suspended" },
+];
+
+// ⚠️ WALANG "Both"
+const LOCATION_OPTIONS: { slug: AssignedLocation; label: string }[] = [
+  { slug: "City Hall", label: "City Hall" },
+  { slug: "MTPB Central Market Impounding Area", label: "MTPB Central Market Impounding Area" },
 ];
 
 const ROLE_LABELS: Record<RoleSlug, string> = {
@@ -130,14 +138,12 @@ const statusLabel = (slug: UserStatus) => STATUSES.find((s) => s.slug === slug)?
 const statusClass = (slug: UserStatus) => STATUSES.find((s) => s.slug === slug)?.class ?? "";
 
 /* ------------------------------------------------------------------
-   NAV — QR Codes added sa "Enforcement Tools"
+   NAV
 ------------------------------------------------------------------ */
 const navGroups: NavGroup[] = [
   {
     title: "Dashboard",
-    items: [
-      { label: "Overview", icon: LayoutDashboard, path: "/it-admin" },
-    ],
+    items: [{ label: "Overview", icon: LayoutDashboard, path: "/it-admin" }],
   },
   {
     title: "Monitoring",
@@ -156,9 +162,7 @@ const navGroups: NavGroup[] = [
   },
   {
     title: "Enforcement Tools",
-    items: [
-      { label: "QR Codes", icon: QrCode, path: "/it-admin/qr-codes" },
-    ],
+    items: [{ label: "QR Codes", icon: QrCode, path: "/it-admin/qr-codes" }],
   },
   {
     title: "Audit & Compliance",
@@ -169,14 +173,12 @@ const navGroups: NavGroup[] = [
   },
   {
     title: "Configuration",
-    items: [
-      { label: "Settings", icon: Settings, path: "/it-admin/settings" },
-    ],
+    items: [{ label: "Settings", icon: Settings, path: "/it-admin/settings" }],
   },
 ];
 
 /* ------------------------------------------------------------------
-   DATE HELPER
+   HELPERS
 ------------------------------------------------------------------ */
 const formatLastLogin = (ts: Timestamp | null): string => {
   if (!ts) return "Never";
@@ -207,40 +209,36 @@ function AddUserModal({ onClose, onSave, currentUserId }: AddUserModalProps) {
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<RoleSlug | "">("");
   const [password, setPassword] = useState("");
+  const [assignedLocation, setAssignedLocation] = useState<AssignedLocation | "">("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const handleSave = async () => {
     setError("");
-
     if (!name || !username || !role || !password) {
       setError("Please fill in all fields.");
       return;
     }
-
     if (password.length < 6) {
       setError("Password must be at least 6 characters.");
       return;
     }
-
     if (!/^[a-z0-9.]+$/.test(username)) {
       setError("Username can only contain lowercase letters, numbers, and dots.");
       return;
     }
+    if (role === "finance" && !assignedLocation) {
+      setError("Please select an assigned location for Finance Staff.");
+      return;
+    }
 
     setSaving(true);
-
     try {
       const email = `${username}@mtpb.gov.ph`;
-
       const secondaryApp = initializeApp(firebaseConfig, `secondary-${Date.now()}`);
       const secondaryAuth = getAuth(secondaryApp);
 
-      const userCredential = await createUserWithEmailAndPassword(
-        secondaryAuth,
-        email,
-        password
-      );
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
       const newUid = userCredential.user.uid;
 
       await secondaryAuth.signOut();
@@ -253,19 +251,18 @@ function AddUserModal({ onClose, onSave, currentUserId }: AddUserModalProps) {
         role,
         status: "active",
         lastLogin: null,
+        ...(role === "finance" ? { assignedLocation } : {}),
         createdAt: serverTimestamp(),
         createdBy: currentUserId,
       });
 
-      console.log("User created successfully:", newUid);
       onSave();
     } catch (err: any) {
-      console.error("Error creating user:", err);
       if (err.code === "auth/email-already-in-use") {
         setError("Username already exists. Please choose another.");
       } else if (err.code === "auth/weak-password") {
         setError("Password is too weak. Use at least 6 characters.");
-      } else if (err.code === "permission-denied" || err.message?.includes("insufficient permissions")) {
+      } else if (err.code === "permission-denied") {
         setError("Permission denied. Please check your Firestore rules.");
       } else {
         setError(err.message || "Failed to create user.");
@@ -280,13 +277,7 @@ function AddUserModal({ onClose, onSave, currentUserId }: AddUserModalProps) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Add New User</h2>
-          <button
-            type="button"
-            className="modal-close"
-            onClick={onClose}
-            disabled={saving}
-            aria-label="Close"
-          >
+          <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
             <X size={20} />
           </button>
         </div>
@@ -316,14 +307,19 @@ function AddUserModal({ onClose, onSave, currentUserId }: AddUserModalProps) {
                 disabled={saving}
               />
             </div>
-
             <div className="form-field">
               <label htmlFor="add-role">Role</label>
               <div className="select-wrap">
                 <select
                   id="add-role"
                   value={role}
-                  onChange={(e) => setRole(e.target.value as RoleSlug)}
+                  onChange={(e) => {
+                    const newRole = e.target.value as RoleSlug;
+                    setRole(newRole);
+                    if (newRole !== "finance") {
+                      setAssignedLocation("");
+                    }
+                  }}
                   disabled={saving}
                 >
                   <option value="" disabled>Role</option>
@@ -335,6 +331,26 @@ function AddUserModal({ onClose, onSave, currentUserId }: AddUserModalProps) {
               </div>
             </div>
           </div>
+
+          {role === "finance" && (
+            <div className="form-field">
+              <label htmlFor="add-location">Assigned Location *</label>
+              <div className="select-wrap">
+                <select
+                  id="add-location"
+                  value={assignedLocation}
+                  onChange={(e) => setAssignedLocation(e.target.value as AssignedLocation)}
+                  disabled={saving}
+                >
+                  <option value="" disabled>Select location...</option>
+                  {LOCATION_OPTIONS.map((loc) => (
+                    <option key={loc.slug} value={loc.slug}>{loc.label}</option>
+                  ))}
+                </select>
+                <ChevronDown size={16} className="select-icon" />
+              </div>
+            </div>
+          )}
 
           <div className="form-field">
             <label htmlFor="add-password">Temporary Password</label>
@@ -377,43 +393,44 @@ function EditUserModal({ user, onClose, onSave }: EditUserModalProps) {
   const [name, setName] = useState(user.name);
   const [role, setRole] = useState<RoleSlug>(user.role);
   const [status, setStatus] = useState<UserStatus>(user.status);
+  const [assignedLocation, setAssignedLocation] = useState<AssignedLocation | "">(
+    user.assignedLocation ?? ""
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const [showPasswordSection, setShowPasswordSection] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [passwordChanged, setPasswordChanged] = useState(false);
-  const [passwordError, setPasswordError] = useState("");
-
   const handleSave = async () => {
     setError("");
-
     if (!name || !role || !status) {
       setError("Please fill in all fields.");
       return;
     }
+    if (role === "finance" && !assignedLocation) {
+      setError("Please select an assigned location for Finance Staff.");
+      return;
+    }
 
     setSaving(true);
-
     try {
       const userDocRef = doc(db, "users", user.uid);
-      await updateDoc(userDocRef, {
+
+      const updateData: any = {
         name: name.trim(),
         role,
         status,
         updatedAt: serverTimestamp(),
-      });
+      };
 
-      console.log("User updated:", user.uid);
+      if (role === "finance") {
+        updateData.assignedLocation = assignedLocation;
+      } else {
+        updateData.assignedLocation = null;
+      }
+
+      await updateDoc(userDocRef, updateData);
       onSave();
     } catch (err: any) {
-      console.error("Error updating user:", err);
-      if (err.code === "permission-denied" || err.message?.includes("insufficient permissions")) {
+      if (err.code === "permission-denied") {
         setError("Permission denied. Please check your Firestore rules.");
       } else {
         setError(err.message || "Failed to update user.");
@@ -423,86 +440,12 @@ function EditUserModal({ user, onClose, onSave }: EditUserModalProps) {
     }
   };
 
-  const handleChangePassword = async () => {
-    setPasswordError("");
-    setPasswordChanged(false);
-
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setPasswordError("Please fill in all password fields.");
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setPasswordError("New password must be at least 6 characters.");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setPasswordError("New passwords do not match.");
-      return;
-    }
-
-    if (currentPassword === newPassword) {
-      setPasswordError("New password must be different from current password.");
-      return;
-    }
-
-    setChangingPassword(true);
-
-    try {
-      const secondaryApp = initializeApp(firebaseConfig, `edit-${Date.now()}`);
-      const secondaryAuth = getAuth(secondaryApp);
-
-      const userCredential = await signInWithEmailAndPassword(
-        secondaryAuth,
-        user.email,
-        currentPassword
-      );
-
-      await updatePassword(userCredential.user, newPassword);
-
-      await secondaryAuth.signOut();
-      await deleteApp(secondaryApp);
-
-      console.log("Password updated for:", user.email);
-      setPasswordChanged(true);
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-
-      setTimeout(() => setPasswordChanged(false), 5000);
-    } catch (err: any) {
-      console.error("Error changing password:", err);
-      await deleteApp(initializeApp(firebaseConfig, `cleanup-${Date.now()}`)).catch(() => {});
-
-      if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
-        setPasswordError("Current password is incorrect.");
-      } else if (err.code === "auth/weak-password") {
-        setPasswordError("New password is too weak.");
-      } else if (err.code === "auth/too-many-requests") {
-        setPasswordError("Too many attempts. Please try again later.");
-      } else {
-        setPasswordError(err.message || "Failed to change password.");
-      }
-    } finally {
-      setChangingPassword(false);
-    }
-  };
-
-  const isBusy = saving || changingPassword;
-
   return (
-    <div className="modal-backdrop" onClick={isBusy ? undefined : onClose}>
+    <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Edit User: {user.name}</h2>
-          <button
-            type="button"
-            className="modal-close"
-            onClick={onClose}
-            disabled={isBusy}
-            aria-label="Close"
-          >
+          <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
             <X size={20} />
           </button>
         </div>
@@ -515,7 +458,7 @@ function EditUserModal({ user, onClose, onSave }: EditUserModalProps) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              disabled={isBusy}
+              disabled={saving}
             />
           </div>
 
@@ -537,8 +480,14 @@ function EditUserModal({ user, onClose, onSave }: EditUserModalProps) {
                 <select
                   id="edit-role"
                   value={role}
-                  onChange={(e) => setRole(e.target.value as RoleSlug)}
-                  disabled={isBusy}
+                  onChange={(e) => {
+                    const newRole = e.target.value as RoleSlug;
+                    setRole(newRole);
+                    if (newRole !== "finance") {
+                      setAssignedLocation("");
+                    }
+                  }}
+                  disabled={saving}
                 >
                   {ROLES.map((r) => (
                     <option key={r.slug} value={r.slug}>{r.label}</option>
@@ -555,7 +504,7 @@ function EditUserModal({ user, onClose, onSave }: EditUserModalProps) {
                   id="edit-status"
                   value={status}
                   onChange={(e) => setStatus(e.target.value as UserStatus)}
-                  disabled={isBusy}
+                  disabled={saving}
                 >
                   {STATUSES.map((s) => (
                     <option key={s.slug} value={s.slug}>{s.label}</option>
@@ -566,114 +515,23 @@ function EditUserModal({ user, onClose, onSave }: EditUserModalProps) {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="password-toggle-btn"
-            onClick={() => setShowPasswordSection(!showPasswordSection)}
-            disabled={isBusy}
-          >
-            <KeyRound size={16} />
-            <span>{showPasswordSection ? "Hide" : "Change"} Password</span>
-            <ChevronDown
-              size={16}
-              style={{
-                transform: showPasswordSection ? "rotate(180deg)" : "rotate(0deg)",
-                transition: "transform 0.2s",
-              }}
-            />
-          </button>
-
-          {showPasswordSection && (
-            <div className="password-reset-box">
-              <div className="password-reset-header">
-                <h3>Change Password</h3>
-                <p>
-                  Enter the user's <strong>current password</strong> and the{" "}
-                  <strong>new password</strong> you want to set.
-                </p>
+          {role === "finance" && (
+            <div className="form-field">
+              <label htmlFor="edit-location">Assigned Location *</label>
+              <div className="select-wrap">
+                <select
+                  id="edit-location"
+                  value={assignedLocation}
+                  onChange={(e) => setAssignedLocation(e.target.value as AssignedLocation)}
+                  disabled={saving}
+                >
+                  <option value="" disabled>Select location...</option>
+                  {LOCATION_OPTIONS.map((loc) => (
+                    <option key={loc.slug} value={loc.slug}>{loc.label}</option>
+                  ))}
+                </select>
+                <ChevronDown size={16} className="select-icon" />
               </div>
-
-              <div className="form-field">
-                <label htmlFor="current-password">Current Password</label>
-                <div className="input-with-icon">
-                  <input
-                    id="current-password"
-                    type={showCurrent ? "text" : "password"}
-                    placeholder="User's current password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    disabled={isBusy}
-                  />
-                  <button
-                    type="button"
-                    className="password-eye"
-                    onClick={() => setShowCurrent(!showCurrent)}
-                    tabIndex={-1}
-                  >
-                    {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="form-field">
-                <label htmlFor="new-password">New Password</label>
-                <div className="input-with-icon">
-                  <input
-                    id="new-password"
-                    type={showNew ? "text" : "password"}
-                    placeholder="At least 6 characters"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    disabled={isBusy}
-                  />
-                  <button
-                    type="button"
-                    className="password-eye"
-                    onClick={() => setShowNew(!showNew)}
-                    tabIndex={-1}
-                  >
-                    {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="form-field">
-                <label htmlFor="confirm-password">Confirm New Password</label>
-                <input
-                  id="confirm-password"
-                  type="password"
-                  placeholder="Re-enter new password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  disabled={isBusy}
-                />
-              </div>
-
-              {passwordError && <p className="reset-error">{passwordError}</p>}
-
-              <button
-                type="button"
-                className={`btn-reset-password${passwordChanged ? " success" : ""}`}
-                onClick={handleChangePassword}
-                disabled={isBusy}
-              >
-                {changingPassword ? (
-                  <>
-                    <Loader2 size={16} className="spin" />
-                    Changing...
-                  </>
-                ) : passwordChanged ? (
-                  <>
-                    <CheckCircle size={16} />
-                    Password Changed!
-                  </>
-                ) : (
-                  <>
-                    <KeyRound size={16} />
-                    Update Password
-                  </>
-                )}
-              </button>
             </div>
           )}
 
@@ -681,11 +539,66 @@ function EditUserModal({ user, onClose, onSave }: EditUserModalProps) {
         </div>
 
         <div className="modal-footer">
-          <button type="button" className="btn-cancel" onClick={onClose} disabled={isBusy}>
+          <button type="button" className="btn-cancel" onClick={onClose} disabled={saving}>
             Cancel
           </button>
-          <button type="button" className="btn-save" onClick={handleSave} disabled={isBusy}>
+          <button type="button" className="btn-save" onClick={handleSave} disabled={saving}>
             {saving ? <><Loader2 size={14} className="spin" /> Saving...</> : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------
+   DISABLE/ENABLE CONFIRM MODAL
+------------------------------------------------------------------ */
+type DisableModalProps = {
+  user: UserRow;
+  mode: "disable" | "enable";
+  onClose: () => void;
+  onConfirm: () => void;
+  loading: boolean;
+};
+
+function DisableModal({ user, mode, onClose, onConfirm, loading }: DisableModalProps) {
+  const isDisable = mode === "disable";
+
+  return (
+    <div className="modal-backdrop" onClick={loading ? undefined : onClose}>
+      <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="confirm-modal-body">
+          <h3 className="confirm-modal-title">
+            {isDisable ? "Disable this account?" : "Enable this account?"}
+          </h3>
+          <p className="confirm-modal-text">
+            <strong>{user.name}</strong> ({user.username}) will{" "}
+            {isDisable ? "no longer be able to log in until re-enabled" : "be able to log in again"}.
+            Their past activity and audit trail will be kept.
+          </p>
+        </div>
+
+        <div className="confirm-modal-footer">
+          <button
+            type="button"
+            className="btn-cancel"
+            onClick={onClose}
+            disabled={loading}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={isDisable ? "btn-danger" : "btn-success"}
+            onClick={onConfirm}
+            disabled={loading}
+          >
+            {loading ? (
+              <><Loader2 size={14} className="spin" /> {isDisable ? "Disabling..." : "Enabling..."}</>
+            ) : (
+              isDisable ? "Disable" : "Enable"
+            )}
           </button>
         </div>
       </div>
@@ -702,6 +615,11 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
+  const [confirmUser, setConfirmUser] = useState<{ user: UserRow; mode: "disable" | "enable" } | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(8);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
@@ -752,8 +670,9 @@ export default function UserManagement() {
             username: data.username ?? "",
             email: data.email ?? "",
             role: (data.role ?? "oic") as RoleSlug,
-            status: (data.status ?? "active") as UserStatus,
+            status: normalizeStatus(data.status),
             lastLogin: data.lastLogin ?? null,
+            assignedLocation: (data.assignedLocation as AssignedLocation) ?? null,
           };
         });
         setUsers(fetchedUsers);
@@ -778,6 +697,7 @@ export default function UserManagement() {
         setMenuOpen(false);
         setIsAddModalOpen(false);
         setEditingUser(null);
+        setConfirmUser(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -802,6 +722,42 @@ export default function UserManagement() {
       navigate("/");
     }
   };
+
+  const handleConfirmToggle = async () => {
+    if (!confirmUser) return;
+    setActionLoading(true);
+
+    try {
+      const newStatus: UserStatus = confirmUser.mode === "disable" ? "inactive" : "active";
+      await updateDoc(doc(db, "users", confirmUser.user.uid), {
+        status: newStatus,
+        updatedAt: serverTimestamp(),
+      });
+
+      await setDoc(doc(collection(db, "auditLogs")), {
+        userName: currentUser.name,
+        action: `${confirmUser.mode === "disable" ? "disabled" : "enabled"} account ${confirmUser.user.username}`,
+        record: confirmUser.user.username,
+        type: "user-management",
+        timestamp: serverTimestamp(),
+      });
+
+      setConfirmUser(null);
+    } catch (err: any) {
+      console.error("Error toggling user status:", err);
+      alert(err.message || "Failed to update user status.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const totalPages = Math.max(1, Math.ceil(users.length / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedUsers = users.slice(startIndex, endIndex);
+
+  const goToPrevPage = () => setCurrentPage((p) => Math.max(1, p - 1));
+  const goToNextPage = () => setCurrentPage((p) => Math.min(totalPages, p + 1));
 
   return (
     <div className="it-admin-page">
@@ -844,7 +800,7 @@ export default function UserManagement() {
           <header className="main-header">
             <div>
               <h1>User Management</h1>
-              <p>May 3, 2026</p>
+              <p>{new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
             </div>
 
             <div className="avatar-container" ref={menuRef}>
@@ -860,19 +816,11 @@ export default function UserManagement() {
                     <p className="dropdown-name">{currentUser.name}</p>
                     <p className="dropdown-role">{ROLE_LABELS[currentUser.role]}</p>
                   </div>
-                  <button
-                    type="button"
-                    className="dropdown-item"
-                    onClick={() => setMenuOpen(false)}
-                  >
+                  <button type="button" className="dropdown-item" onClick={() => setMenuOpen(false)}>
                     <img src={keyIcon} alt="" className="dropdown-icon" />
                     <span>Change Password</span>
                   </button>
-                  <button
-                    type="button"
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
+                  <button type="button" className="dropdown-item logout" onClick={handleLogout}>
                     <img src={logoutIcon} alt="" className="dropdown-icon" />
                     <span>Log Out</span>
                   </button>
@@ -907,51 +855,114 @@ export default function UserManagement() {
                   <p>No users found. Click "Add User" to create one.</p>
                 </div>
               ) : (
-                <table className="user-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Username</th>
-                      <th>Role</th>
-                      <th>Status</th>
-                      <th>Last login</th>
-                      <th aria-label="Actions"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map((user) => (
-                      <tr key={user.uid}>
-                        <td className="cell-name">{user.name}</td>
-                        <td className="cell-username">{user.username}</td>
-                        <td>
-                          <span className={`role-pill ${roleClass(user.role)}`}>
-                            {roleLabel(user.role)}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`status-pill ${statusClass(user.status)}`}>
-                            {statusLabel(user.status)}
-                          </span>
-                        </td>
-                        <td className="cell-last-login">{formatLastLogin(user.lastLogin)}</td>
-                        <td className="cell-action">
-                          <button
-                            type="button"
-                            className="edit-btn"
-                            onClick={() => setEditingUser(user)}
-                            aria-label={`Edit ${user.name}`}
-                          >
-                            <img
-                              src={editIcon}
-                              alt="Edit"
-                              className="edit-icon"
-                            />
-                          </button>
-                        </td>
+                <>
+                  <table className="user-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Username</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Last login</th>
+                        <th>Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {paginatedUsers.map((user) => {
+                        const normalizedStatus = normalizeStatus(user.status);
+                        const isActive = normalizedStatus === "active";
+
+                        return (
+                          <tr key={user.uid}>
+                            <td className="cell-name">{user.name}</td>
+                            <td className="cell-username">{user.username}</td>
+
+                            {/* ⚠️ CHANGED: Role pill + location sa TABI (inline) */}
+                            <td>
+                              <div className="role-cell-content">
+                                <span className={`role-pill ${roleClass(user.role)}`}>
+                                  {roleLabel(user.role)}
+                                </span>
+                                {user.role === "finance" && user.assignedLocation && (
+                                  <span className="location-inline">
+                                    — {user.assignedLocation}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td>
+                              <span className={`status-pill ${statusClass(normalizedStatus)}`}>
+                                {statusLabel(normalizedStatus)}
+                              </span>
+                            </td>
+                            <td className="cell-last-login">{formatLastLogin(user.lastLogin)}</td>
+                            <td className="cell-action">
+                              {isActive ? (
+                                <button
+                                  type="button"
+                                  className="btn-disable"
+                                  onClick={() => setConfirmUser({ user, mode: "disable" })}
+                                >
+                                  Disable
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn-enable"
+                                  onClick={() => setConfirmUser({ user, mode: "enable" })}
+                                >
+                                  Enable
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="btn-icon-edit"
+                                onClick={() => setEditingUser(user)}
+                                aria-label={`Edit ${user.name}`}
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  <div className="pagination">
+                    <button
+                      type="button"
+                      className="page-btn"
+                      onClick={goToPrevPage}
+                      disabled={currentPage === 1}
+                    >
+                      ‹ Previous
+                    </button>
+
+                    <input
+                      type="number"
+                      className="page-input"
+                      value={currentPage}
+                      min={1}
+                      max={totalPages}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (val >= 1 && val <= totalPages) setCurrentPage(val);
+                      }}
+                    />
+                    <span className="page-total">of {totalPages} pages</span>
+
+                    <button
+                      type="button"
+                      className="page-btn"
+                      onClick={goToNextPage}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next ›
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -971,6 +982,16 @@ export default function UserManagement() {
           user={editingUser}
           onClose={() => setEditingUser(null)}
           onSave={() => setEditingUser(null)}
+        />
+      )}
+
+      {confirmUser && (
+        <DisableModal
+          user={confirmUser.user}
+          mode={confirmUser.mode}
+          onClose={() => setConfirmUser(null)}
+          onConfirm={handleConfirmToggle}
+          loading={actionLoading}
         />
       )}
     </div>

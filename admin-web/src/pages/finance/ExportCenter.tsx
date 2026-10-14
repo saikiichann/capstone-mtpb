@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   KeyRound,
@@ -10,7 +10,7 @@ import {
   FileSpreadsheet,
   FileText,
 } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { signOut as firebaseSignOut } from "firebase/auth";
 import {
   addDoc,
   collection,
@@ -29,6 +29,13 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { auth, db } from "../../firebase";
+import { useStaffProfile } from "../../lib/useStaffProfile";
+import {
+  derivePaymentLocation,
+  isInStaffScope,
+  PAYMENT_LOCATION_LABELS,
+  type PaymentLocation,
+} from "../../lib/paymentLocation";
 import "./ExportCenter.css";
 
 import mtpbLogo from "../../assets/mtpb-logo.png";
@@ -55,9 +62,14 @@ type RoleSlug =
   | "clamping-staff"
   | "impounding-staff";
 
+// ⚠️ WALANG "Both" — dalawa lang
+type AssignedLocation = "City Hall" | "Central";
+
 type CurrentUser = {
   name: string;
   role: RoleSlug;
+  assignedLocation: AssignedLocation | null;  // "City Hall" | "Central" — para sa filter
+  assignedLocationName: string | null;        // buong pangalan — para sa display
 };
 
 type DataType = "Transactions" | "Revenue" | "Release Log";
@@ -233,6 +245,16 @@ const sanitizeData = (data: any[]): Record<string, any>[] => {
     return out;
   });
 };
+
+/** GCash → "Online"; cash → City Hall / Central (tingnan ang lib/paymentLocation) */
+const deriveLocation = (data: any): PaymentLocation =>
+  derivePaymentLocation(data.method, data.paymentLocation ?? data.location);
+
+/** Pareho ng Transaction History / Revenue Reports. */
+const isVerifiedPayment = (data: any): boolean =>
+  ["verified", "succeeded", "approved"].includes(
+    String(data.verificationStatus ?? data.status ?? "").toLowerCase()
+  );
 
 // ---------------------------------------------------------------------------
 // DATA TYPE CONFIG
@@ -481,7 +503,6 @@ const downloadPdf = (
     { key: "orNumber", label: "OR NO." },
     { key: "cin", label: "CIN" },
     { key: "plateNo", label: "PLATE NO." },
-    // ⚠️ ADDED: Violator column
     { key: "violatorDisplay", label: "VIOLATOR" },
     { key: "amount", label: "AMOUNT" },
     { key: "method", label: "METHOD" },
@@ -495,7 +516,6 @@ const downloadPdf = (
   const fallbackColumnKeys = [
     { key: "cin", label: "CIN" },
     { key: "plateNo", label: "PLATE NO." },
-    // ⚠️ ADDED: Violator column sa fallback (Release Log)
     { key: "violatorDisplay", label: "VIOLATOR" },
     { key: "location", label: "LOCATION" },
     { key: "releasedBy", label: "RELEASED BY" },
@@ -509,16 +529,13 @@ const downloadPdf = (
   const tableMargin = 40;
   const availableWidth = pageWidth - tableMargin * 2;
 
-  // ─── getCellValue: handles fallbacks for amount, recordedAt, plateNo, at violatorDisplay ───
   const getCellValue = (row: Record<string, any>, key: string): string => {
-    // Amount — fallback chain
     if (key === "amount") {
       const raw = row.amount ?? row.totalAmount ?? row.fineAmount ?? "";
       const num = Number(raw);
       return isNaN(num) ? String(raw) : num.toLocaleString();
     }
 
-    // Recorded At — fallback sa createdAt, orIssuedAt, paidAt
     if (key === "recordedAt") {
       const v =
         row.recordedAt ??
@@ -529,13 +546,11 @@ const downloadPdf = (
       return v ? String(v) : "";
     }
 
-    // Plate No — kung wala, blank (pero naka-enrich na sa handleExport)
     if (key === "plateNo") {
       const v = row.plateNo ?? row.plateNumber ?? "";
       return v ? String(v) : "";
     }
 
-    // ⚠️ ADDED: Violator display — name + type tag
     if (key === "violatorDisplay") {
       const name = row.violatorName;
       const uid = row.violatorUid;
@@ -656,10 +671,18 @@ export default function ExportCenter() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
-    name: "Loading...",
-    role: "finance",
-  });
+  /* Profile ng naka-login na staff — naka-cache sa lahat ng Finance pages,
+     kaya hindi na nagfi-flash ang data ng ibang location paglipat ng tab. */
+  const { profile, ready: userReady } = useStaffProfile();
+  const currentUser: CurrentUser = useMemo(
+    () => ({
+      name: profile?.name ?? "Loading...",
+      role: ((profile?.role || "finance") as RoleSlug),
+      assignedLocation: profile?.assignedLocation ?? null,
+      assignedLocationName: profile?.assignedLocationName ?? null,
+    }),
+    [profile]
+  );
 
   const defaultRange = getDefaultDateRange();
   const [dataType, setDataType] = useState<DataType | "">("");
@@ -670,34 +693,6 @@ export default function ExportCenter() {
 
   const [recentExports, setRecentExports] = useState<ExportLogRow[]>([]);
   const [loadingExports, setLoadingExports] = useState(true);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
-      if (!loggedUser) {
-        setCurrentUser({ name: "Guest", role: "finance" });
-        return;
-      }
-      try {
-        const userDocRef = doc(db, "users", loggedUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const data = userDocSnap.data();
-          setCurrentUser({
-            name: data.name ?? "Unknown",
-            role: (data.role ?? "finance") as RoleSlug,
-          });
-        } else {
-          setCurrentUser({
-            name: loggedUser.email?.split("@")[0] ?? "Unknown",
-            role: "finance",
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching current user:", err);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
 
   useEffect(() => {
     const ref = collection(db, "exportLogs");
@@ -764,6 +759,11 @@ export default function ExportCenter() {
   const handleExport = async (format: ExportFormat) => {
     setError("");
 
+    if (!userReady) {
+      setError("Still loading your account — please try again in a moment.");
+      return;
+    }
+
     if (!dataType) {
       setError("Please select a data type.");
       return;
@@ -789,13 +789,26 @@ export default function ExportCenter() {
         ...d.data(),
       }));
 
+      // Revenue = verified payments lang (hindi kasama ang pending/rejected)
+      if (dataType === "Revenue") {
+        data = data.filter((item) => isVerifiedPayment(item));
+      }
+
+      // Location-based filtering para sa Finance (City Hall / Central)
+      if (
+        currentUser.role === "finance" &&
+        (dataType === "Transactions" || dataType === "Revenue")
+      ) {
+        data = data.filter((item) =>
+          isInStaffScope(currentUser.assignedLocation, deriveLocation(item))
+        );
+      }
+
       // ─── ENRICH: Fetch plateNo + violator fields mula sa violations ───
-      // ⚠️ CHANGED: Kasama na ang violator fields sa enrichment
       if (dataType === "Transactions" || dataType === "Revenue") {
         const needsLookup = data.filter(
           (item) =>
             (!item.plateNo && (item.violationId || item.cin)) ||
-            // ⚠️ ADDED: kailangan din lookup kung walang violator info
             (!item.violatorUid &&
               !item.guestId &&
               !item.violatorName &&
@@ -806,14 +819,12 @@ export default function ExportCenter() {
           string,
           {
             plateNo: string | null;
-            // ⚠️ ADDED: violator fields sa cache
             violatorUid: string | null;
             guestId: string | null;
             violatorName: string | null;
           }
         >();
 
-        // Fetch by violationId
         const vIds = Array.from(
           new Set(
             needsLookup
@@ -830,7 +841,6 @@ export default function ExportCenter() {
                 const v = vSnap.data();
                 violationCache.set(`id:${vId}`, {
                   plateNo: (v.plateNo as string) ?? null,
-                  // ⚠️ ADDED: violator fields
                   violatorUid: (v.violatorUid as string) ?? null,
                   guestId: (v.guestId as string) ?? null,
                   violatorName: (v.violatorName as string) ?? null,
@@ -842,7 +852,6 @@ export default function ExportCenter() {
           })
         );
 
-        // Fetch by cin (fallback)
         const cins = Array.from(
           new Set(
             needsLookup
@@ -863,7 +872,6 @@ export default function ExportCenter() {
                 const v = snap.docs[0].data();
                 violationCache.set(`cin:${cin}`, {
                   plateNo: (v.plateNo as string) ?? null,
-                  // ⚠️ ADDED: violator fields
                   violatorUid: (v.violatorUid as string) ?? null,
                   guestId: (v.guestId as string) ?? null,
                   violatorName: (v.violatorName as string) ?? null,
@@ -875,8 +883,6 @@ export default function ExportCenter() {
           })
         );
 
-        // Apply fallbacks (plateNo + violator fields)
-        // ⚠️ CHANGED: Idinagdag ang violator fields sa fallback
         data = data.map((item) => {
           const linked =
             item.violationId
@@ -890,7 +896,6 @@ export default function ExportCenter() {
           return {
             ...item,
             plateNo: item.plateNo ?? linked.plateNo,
-            // ⚠️ ADDED: violator fields fallback
             violatorUid: item.violatorUid ?? linked.violatorUid,
             guestId: item.guestId ?? linked.guestId,
             violatorName: item.violatorName ?? linked.violatorName,
@@ -898,9 +903,21 @@ export default function ExportCenter() {
         });
       }
 
+      // "Paid At" — City Hall / Central (MTPB) / Online (GCash)
+      if (dataType === "Transactions" || dataType === "Revenue") {
+        data = data.map((item) => ({
+          ...item,
+          paidAtLocation: PAYMENT_LOCATION_LABELS[deriveLocation(item)],
+        }));
+      }
+
       // Filter by date range
       const timestampField =
-        dataType === "Release Log" ? "releasedAt" : "paidAt";
+        dataType === "Release Log"
+          ? "releasedAt"
+          : dataType === "Revenue"
+          ? "verifiedAt"
+          : "paidAt";
 
       data = data.filter((item) => {
         const ts = item[timestampField] || item.timestamp || item.createdAt;
@@ -918,6 +935,16 @@ export default function ExportCenter() {
       });
 
       const cleaned = sanitizeData(data);
+
+      // Walang data → huwag mag-download at huwag mag-log sa Recent Exports
+      if (cleaned.length === 0) {
+        setError(
+          currentUser.role === "finance" && currentUser.assignedLocation
+            ? `No ${dataType.toLowerCase()} records for ${currentUser.assignedLocation} in the selected date range.`
+            : "No records found for the selected date range."
+        );
+        return;
+      }
 
       const slug = slugifyDataType(dataType);
       const startSlug = formatDateForFilename(startDate);
@@ -950,6 +977,7 @@ export default function ExportCenter() {
         endDate,
         recordCount: cleaned.length,
         exportedBy: currentUser.name,
+        exportedByLocation: currentUser.assignedLocation,
         timestamp: serverTimestamp(),
       });
 
@@ -974,7 +1002,16 @@ export default function ExportCenter() {
             <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
             <div>
               <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Finance Staff</p>
+              <p className="sidebar-brand-role">
+                Finance Staff
+                {/* ⚠️ BAGO: Location indicator */}
+                {currentUser.assignedLocationName && (
+                  <span className="sidebar-brand-location">
+                    {" · "}
+                    {currentUser.assignedLocationName}
+                  </span>
+                )}
+              </p>
             </div>
           </div>
 
@@ -1024,6 +1061,7 @@ export default function ExportCenter() {
                     <p className="dropdown-name">{currentUser.name}</p>
                     <p className="dropdown-role">
                       {ROLE_LABELS[currentUser.role]}
+                      {currentUser.assignedLocationName && ` · ${currentUser.assignedLocationName}`}
                     </p>
                   </div>
                   <button
@@ -1125,7 +1163,7 @@ export default function ExportCenter() {
                     type="button"
                     className="btn-export btn-export-csv"
                     onClick={() => handleExport("CSV")}
-                    disabled={exporting !== null}
+                    disabled={exporting !== null || !userReady}
                   >
                     <FileText size={15} />
                     {exporting === "CSV" ? "Exporting..." : "Export CSV"}
@@ -1134,7 +1172,7 @@ export default function ExportCenter() {
                     type="button"
                     className="btn-export btn-export-excel"
                     onClick={() => handleExport("Excel")}
-                    disabled={exporting !== null}
+                    disabled={exporting !== null || !userReady}
                   >
                     <FileSpreadsheet size={15} />
                     {exporting === "Excel" ? "Exporting..." : "Export Excel"}
@@ -1143,7 +1181,7 @@ export default function ExportCenter() {
                     type="button"
                     className="btn-export btn-export-pdf"
                     onClick={() => handleExport("PDF")}
-                    disabled={exporting !== null}
+                    disabled={exporting !== null || !userReady}
                   >
                     <FileText size={15} />
                     {exporting === "PDF" ? "Exporting..." : "Export PDF"}
@@ -1202,4 +1240,4 @@ export default function ExportCenter() {
       </div>
     </div>
   );
-}
+}

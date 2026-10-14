@@ -38,9 +38,13 @@ type RoleSlug =
   | "clamping-staff"
   | "impounding-staff";
 
+// ⚠️ WALANG "Both" — dalawa lang
+type AssignedLocation = "City Hall" | "Central";
+
 type CurrentUser = {
   name: string;
   role: RoleSlug;
+  assignedLocation: AssignedLocation | null;   // ⚠️ BAGO
 };
 
 type ReportStatus = "Active" | "Inactive";
@@ -150,6 +154,7 @@ export default function AllReports() {
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "finance",
+    assignedLocation: null,   // ⚠️ BAGO
   });
 
   const [reports, setReports] = useState<ReportRow[]>([]);
@@ -161,7 +166,11 @@ export default function AllReports() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
       if (!loggedUser) {
-        setCurrentUser({ name: "Guest", role: "finance" });
+        setCurrentUser({
+          name: "Guest",
+          role: "finance",
+          assignedLocation: null,
+        });
         return;
       }
       try {
@@ -172,11 +181,13 @@ export default function AllReports() {
           setCurrentUser({
             name: data.name ?? "Unknown",
             role: (data.role ?? "finance") as RoleSlug,
+            assignedLocation: (data.assignedLocation as AssignedLocation) ?? null,
           });
         } else {
           setCurrentUser({
             name: loggedUser.email?.split("@")[0] ?? "Unknown",
             role: "finance",
+            assignedLocation: null,
           });
         }
       } catch (err) {
@@ -303,7 +314,16 @@ export default function AllReports() {
             <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
             <div>
               <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Finance Staff</p>
+              <p className="sidebar-brand-role">
+                Finance Staff
+                {/* ⚠️ BAGO: Location indicator */}
+                {currentUser.assignedLocation && (
+                  <span className="sidebar-brand-location">
+                    {" · "}
+                    {currentUser.assignedLocation}
+                  </span>
+                )}
+              </p>
             </div>
           </div>
 
@@ -360,6 +380,7 @@ export default function AllReports() {
                     <p className="dropdown-name">{currentUser.name}</p>
                     <p className="dropdown-role">
                       {ROLE_LABELS[currentUser.role]}
+                      {currentUser.assignedLocation && ` · ${currentUser.assignedLocation}`}
                     </p>
                   </div>
                   <button

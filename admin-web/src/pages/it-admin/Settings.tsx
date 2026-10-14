@@ -22,12 +22,12 @@ import {
   onSnapshot,
   orderBy,
   query,
-  updateDoc,
   setDoc,
   serverTimestamp,
+  writeBatch,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
-import "./ITAdminHomePage.css";
+import "./ITAdminHomepage.css";
 import "./Settings.css";
 
 import logo from "../../assets/mtpb-logo.png";
@@ -40,7 +40,7 @@ import keyIcon from "../../assets/key.png";
 ------------------------------------------------------------------ */
 type NavItem = {
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: number | string; className?: string }>;
   path: string;
   active?: boolean;
 };
@@ -86,7 +86,7 @@ const ROLE_LABELS: Record<RoleSlug, string> = {
 };
 
 /* ------------------------------------------------------------------
-   NAV — QR Codes added sa "Enforcement Tools"
+   NAV
 ------------------------------------------------------------------ */
 const navGroups: NavGroup[] = [
   {
@@ -132,24 +132,24 @@ const navGroups: NavGroup[] = [
 ];
 
 /* ------------------------------------------------------------------
-   FALLBACK DATA (kung walang Firestore data)
+   FALLBACK DATA (pinagmulan ng auto-seed)
 ------------------------------------------------------------------ */
 const FALLBACK_CLAMPING: FineRow[] = [
-  { id: "clamping-blocking-driveway", violationType: "Blocking Driveway", amount: 1000 },
-  { id: "clamping-blocking-pwd-lane", violationType: "Blocking PWD Lane", amount: 500 },
-  { id: "clamping-blocking-fire-hydrant", violationType: "Blocking Fire Hydrant", amount: 1000 },
-  { id: "clamping-complaint-area", violationType: "Complaint Area", amount: 500 },
-  { id: "clamping-no-parking-zone", violationType: "No Parking Zone / Both Sides", amount: 1000 },
-  { id: "clamping-blocking-pedestrian", violationType: "Blocking Pedestrian Lane", amount: 500 },
-  { id: "clamping-blocking-fire-truck", violationType: "Blocking Fire Truck Lane", amount: 1000 },
-  { id: "clamping-double-parking", violationType: "Double Parking", amount: 500 },
-  { id: "clamping-sidewalk-parking", violationType: "Sidewalk Parking", amount: 500 },
-  { id: "clamping-street-corner", violationType: "Street Corner Parking", amount: 1000 },
-  { id: "clamping-left-side", violationType: "Left Side Parking / One Way Street", amount: 1000 },
-  { id: "clamping-right-side", violationType: "Right Side Parking / One Way Street", amount: 500 },
-  { id: "clamping-bridge-top", violationType: "Top of the Bridge Parking", amount: 1000 },
-  { id: "clamping-obstruction", violationType: "Obstruction", amount: 500 },
-  { id: "clamping-loading", violationType: "Loading & Unloading Area", amount: 1000 },
+  { id: "clamping-blocking-driveway", violationType: "Blocking Driveway", amount: 900 },
+  { id: "clamping-blocking-pwd-lane", violationType: "Blocking PWD Lane", amount: 900 },
+  { id: "clamping-blocking-fire-hydrant", violationType: "Blocking Fire Hydrant", amount: 900 },
+  { id: "clamping-complaint-area", violationType: "Complaint Area", amount: 900 },
+  { id: "clamping-no-parking-zone", violationType: "No Parking Zone / Both Sides", amount: 900 },
+  { id: "clamping-blocking-pedestrian", violationType: "Blocking Pedestrian Lane", amount: 900 },
+  { id: "clamping-blocking-fire-truck", violationType: "Blocking Fire Truck Lane", amount: 900 },
+  { id: "clamping-double-parking", violationType: "Double Parking", amount: 900 },
+  { id: "clamping-sidewalk-parking", violationType: "Sidewalk Parking", amount: 900 },
+  { id: "clamping-street-corner", violationType: "Street Corner Parking", amount: 900 },
+  { id: "clamping-left-side", violationType: "Left Side Parking / One Way Street", amount: 900 },
+  { id: "clamping-right-side", violationType: "Right Side Parking / One Way Street", amount: 900 },
+  { id: "clamping-bridge-top", violationType: "Top of the Bridge Parking", amount: 900 },
+  { id: "clamping-obstruction", violationType: "Obstruction", amount: 900 },
+  { id: "clamping-loading", violationType: "Loading & Unloading Area", amount: 900 },
 ];
 
 const FALLBACK_IMPOUNDING: FineRow[] = [
@@ -178,21 +178,12 @@ export default function Settings() {
     role: "it-admin",
   });
 
-  /* Clamping */
   const [clamping, setClamping] = useState<FineRow[]>([]);
   const [clampingLoading, setClampingLoading] = useState(true);
-  const [clampingDraft, setClampingDraft] = useState<Record<string, string>>({});
-  const [clampingSaving, setClampingSaving] = useState(false);
-  const [clampingSaved, setClampingSaved] = useState(false);
 
-  /* Impounding */
   const [impounding, setImpounding] = useState<FineRow[]>([]);
   const [impoundingLoading, setImpoundingLoading] = useState(true);
-  const [impoundingDraft, setImpoundingDraft] = useState<Record<string, string>>({});
-  const [impoundingSaving, setImpoundingSaving] = useState(false);
-  const [impoundingSaved, setImpoundingSaved] = useState(false);
 
-  /* Thresholds */
   const [redemptionWindow, setRedemptionWindow] = useState("24");
   const [overdueAlert, setOverdueAlert] = useState("72");
   const [thresholdsSaving, setThresholdsSaving] = useState(false);
@@ -227,16 +218,35 @@ export default function Settings() {
     return () => unsubscribe();
   }, []);
 
-  /* Real-time: clampingFines */
+  /* ==================================================================
+     Real-time: clampingFines — MAY AUTO-SEED
+  ================================================================== */
   useEffect(() => {
     const finesRef = collection(db, "clampingFines");
     const finesQuery = query(finesRef, orderBy("order", "asc"));
 
     const unsubscribe = onSnapshot(
       finesQuery,
-      (snapshot) => {
+      async (snapshot) => {
         if (snapshot.empty) {
-          setClamping(FALLBACK_CLAMPING);
+          console.log("📦 clampingFines is empty — auto-seeding...");
+          try {
+            const batch = writeBatch(db);
+            FALLBACK_CLAMPING.forEach((fine, index) => {
+              const ref = doc(collection(db, "clampingFines"));
+              batch.set(ref, {
+                violationType: fine.violationType,
+                amount: fine.amount,
+                order: index + 1,
+              });
+            });
+            await batch.commit();
+            console.log("✅ Auto-seeded 15 clamping fines");
+          } catch (err) {
+            console.error("Auto-seed clamping fines failed:", err);
+            setClamping(FALLBACK_CLAMPING);
+            setClampingLoading(false);
+          }
         } else {
           const fetched: FineRow[] = snapshot.docs.map((d) => {
             const data = d.data();
@@ -247,8 +257,8 @@ export default function Settings() {
             };
           });
           setClamping(fetched);
+          setClampingLoading(false);
         }
-        setClampingLoading(false);
       },
       (error) => {
         console.error("Error fetching clamping fines:", error);
@@ -259,16 +269,35 @@ export default function Settings() {
     return () => unsubscribe();
   }, []);
 
-  /* Real-time: impoundingFines */
+  /* ==================================================================
+     Real-time: impoundingFines — MAY AUTO-SEED
+  ================================================================== */
   useEffect(() => {
     const finesRef = collection(db, "impoundingFines");
     const finesQuery = query(finesRef, orderBy("order", "asc"));
 
     const unsubscribe = onSnapshot(
       finesQuery,
-      (snapshot) => {
+      async (snapshot) => {
         if (snapshot.empty) {
-          setImpounding(FALLBACK_IMPOUNDING);
+          console.log("📦 impoundingFines is empty — auto-seeding...");
+          try {
+            const batch = writeBatch(db);
+            FALLBACK_IMPOUNDING.forEach((fine, index) => {
+              const ref = doc(collection(db, "impoundingFines"));
+              batch.set(ref, {
+                violationType: fine.violationType,
+                amount: fine.amount,
+                order: index + 1,
+              });
+            });
+            await batch.commit();
+            console.log("✅ Auto-seeded 10 impounding fines");
+          } catch (err) {
+            console.error("Auto-seed impounding fines failed:", err);
+            setImpounding(FALLBACK_IMPOUNDING);
+            setImpoundingLoading(false);
+          }
         } else {
           const fetched: FineRow[] = snapshot.docs.map((d) => {
             const data = d.data();
@@ -279,8 +308,8 @@ export default function Settings() {
             };
           });
           setImpounding(fetched);
+          setImpoundingLoading(false);
         }
-        setImpoundingLoading(false);
       },
       (error) => {
         console.error("Error fetching impounding fines:", error);
@@ -344,88 +373,6 @@ export default function Settings() {
   };
 
   /* ================================================================
-     SAVE: Clamping fines
-  ================================================================ */
-  const handleSaveClamping = async () => {
-    setClampingSaving(true);
-    setClampingSaved(false);
-
-    try {
-      const updates = clamping.map(async (row) => {
-        const draft = clampingDraft[row.id];
-        if (draft === undefined || draft === "") return;
-
-        const newAmount = parseInt(draft, 10);
-        if (isNaN(newAmount) || newAmount < 0) return;
-        if (newAmount === row.amount) return;
-
-        await setDoc(
-          doc(db, "clampingFines", row.id),
-          {
-            violationType: row.violationType,
-            amount: newAmount,
-            updatedAt: serverTimestamp(),
-            updatedBy: currentUser.name,
-          },
-          { merge: true }
-        );
-      });
-
-      await Promise.all(updates);
-
-      setClampingDraft({});
-      setClampingSaved(true);
-      setTimeout(() => setClampingSaved(false), 3000);
-    } catch (err: any) {
-      console.error("Error saving clamping fines:", err);
-      alert(err.message || "Failed to save clamping fines.");
-    } finally {
-      setClampingSaving(false);
-    }
-  };
-
-  /* ================================================================
-     SAVE: Impounding fines
-  ================================================================ */
-  const handleSaveImpounding = async () => {
-    setImpoundingSaving(true);
-    setImpoundingSaved(false);
-
-    try {
-      const updates = impounding.map(async (row) => {
-        const draft = impoundingDraft[row.id];
-        if (draft === undefined || draft === "") return;
-
-        const newAmount = parseInt(draft, 10);
-        if (isNaN(newAmount) || newAmount < 0) return;
-        if (newAmount === row.amount) return;
-
-        await setDoc(
-          doc(db, "impoundingFines", row.id),
-          {
-            violationType: row.violationType,
-            amount: newAmount,
-            updatedAt: serverTimestamp(),
-            updatedBy: currentUser.name,
-          },
-          { merge: true }
-        );
-      });
-
-      await Promise.all(updates);
-
-      setImpoundingDraft({});
-      setImpoundingSaved(true);
-      setTimeout(() => setImpoundingSaved(false), 3000);
-    } catch (err: any) {
-      console.error("Error saving impounding fines:", err);
-      alert(err.message || "Failed to save impounding fines.");
-    } finally {
-      setImpoundingSaving(false);
-    }
-  };
-
-  /* ================================================================
      SAVE: Thresholds
   ================================================================ */
   const handleSaveThresholds = async () => {
@@ -462,18 +409,6 @@ export default function Settings() {
     } finally {
       setThresholdsSaving(false);
     }
-  };
-
-  const getClampingValue = (row: FineRow): string => {
-    return clampingDraft[row.id] !== undefined
-      ? clampingDraft[row.id]
-      : String(row.amount);
-  };
-
-  const getImpoundingValue = (row: FineRow): string => {
-    return impoundingDraft[row.id] !== undefined
-      ? impoundingDraft[row.id]
-      : String(row.amount);
   };
 
   return (
@@ -571,6 +506,9 @@ export default function Settings() {
                   <h2 className="card-title-static">
                     Fine Amount – Clamping Violations
                   </h2>
+                  <p className="card-subtitle-static">
+                    Fixed by ordinance — view only
+                  </p>
                 </div>
 
                 {clampingLoading ? (
@@ -579,58 +517,26 @@ export default function Settings() {
                     <p>Loading...</p>
                   </div>
                 ) : (
-                  <>
-                    <div className="fine-table-wrapper">
-                      <table className="fine-table">
-                        <thead>
-                          <tr>
-                            <th>Violation type</th>
-                            <th className="col-amount">Fine amount (₱)</th>
+                  <div className="fine-table-wrapper">
+                    <table className="fine-table">
+                      <thead>
+                        <tr>
+                          <th>Violation type</th>
+                          <th className="col-amount">Fine amount (₱)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {clamping.map((row) => (
+                          <tr key={row.id}>
+                            <td className="cell-violation">{row.violationType}</td>
+                            <td className="cell-amount cell-amount-static">
+                              ₱{row.amount.toLocaleString()}
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {clamping.map((row) => (
-                            <tr key={row.id}>
-                              <td className="cell-violation">{row.violationType}</td>
-                              <td className="cell-amount">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={getClampingValue(row)}
-                                  onChange={(e) =>
-                                    setClampingDraft((prev) => ({
-                                      ...prev,
-                                      [row.id]: e.target.value,
-                                    }))
-                                  }
-                                  disabled={clampingSaving}
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="fine-table-footer">
-                      <button
-                        type="button"
-                        className="btn-save"
-                        onClick={handleSaveClamping}
-                        disabled={clampingSaving}
-                      >
-                        {clampingSaving ? (
-                          <>
-                            <Loader2 size={14} className="spin" /> Saving...
-                          </>
-                        ) : clampingSaved ? (
-                          "Saved!"
-                        ) : (
-                          "Save Changes"
-                        )}
-                      </button>
-                    </div>
-                  </>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </article>
 
@@ -640,6 +546,9 @@ export default function Settings() {
                   <h2 className="card-title-static">
                     Fine Amount – Impounding Violations
                   </h2>
+                  <p className="card-subtitle-static">
+                    Fixed by ordinance — view only
+                  </p>
                 </div>
 
                 {impoundingLoading ? (
@@ -648,58 +557,26 @@ export default function Settings() {
                     <p>Loading...</p>
                   </div>
                 ) : (
-                  <>
-                    <div className="fine-table-wrapper">
-                      <table className="fine-table">
-                        <thead>
-                          <tr>
-                            <th>Violation type</th>
-                            <th className="col-amount">Fine amount (₱)</th>
+                  <div className="fine-table-wrapper">
+                    <table className="fine-table">
+                      <thead>
+                        <tr>
+                          <th>Violation type</th>
+                          <th className="col-amount">Fine amount (₱)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {impounding.map((row) => (
+                          <tr key={row.id}>
+                            <td className="cell-violation">{row.violationType}</td>
+                            <td className="cell-amount cell-amount-static">
+                              ₱{row.amount.toLocaleString()}
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {impounding.map((row) => (
-                            <tr key={row.id}>
-                              <td className="cell-violation">{row.violationType}</td>
-                              <td className="cell-amount">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={getImpoundingValue(row)}
-                                  onChange={(e) =>
-                                    setImpoundingDraft((prev) => ({
-                                      ...prev,
-                                      [row.id]: e.target.value,
-                                    }))
-                                  }
-                                  disabled={impoundingSaving}
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="fine-table-footer">
-                      <button
-                        type="button"
-                        className="btn-save"
-                        onClick={handleSaveImpounding}
-                        disabled={impoundingSaving}
-                      >
-                        {impoundingSaving ? (
-                          <>
-                            <Loader2 size={14} className="spin" /> Saving...
-                          </>
-                        ) : impoundingSaved ? (
-                          "Saved!"
-                        ) : (
-                          "Save Changes"
-                        )}
-                      </button>
-                    </div>
-                  </>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </article>
             </div>

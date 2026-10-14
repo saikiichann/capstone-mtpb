@@ -585,4 +585,4 @@ export default function ReleaseQueue() {
       </div>
     </div>
   );
-}
+}
