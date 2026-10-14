@@ -632,4 +632,4 @@ export default function ReleaseLog() {
       </div>
     </div>
   );
-}
+}

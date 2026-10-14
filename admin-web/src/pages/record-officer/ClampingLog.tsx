@@ -15,6 +15,8 @@ import {
   onSnapshot,
   query,
   where,
+  writeBatch,
+  serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
@@ -50,10 +52,6 @@ type CurrentUser = {
   role: RoleSlug;
 };
 
-// Matches this page's own Figma design exactly — "Clamped"/"Released",
-// not the "Removed" wording used on the OIC Clamping Log, and not the
-// three-state Active/Released/Impounded the old mock invented (nothing
-// in this screenshot shows an "Impounded" status on a clamping log).
 type ClampStatus = "Clamped" | "Released";
 
 type ClampingRow = {
@@ -66,6 +64,14 @@ type ClampingRow = {
   officer: string;
   recordedAt: Timestamp | null;
   status: ClampStatus;
+  /** True once "Subject to Impound" has been set (auto or manual). */
+  alreadyFlagged: boolean;
+  /** True kapag auto-flagged ng system (24hr expired). */
+  autoFlagged: boolean;
+  /** The impound status field from Firestore. */
+  impoundStatus: string | null;
+  /** Hours since clamping. */
+  hoursSinceClamp: number;
 };
 
 type NavItem = {
@@ -85,18 +91,9 @@ type NavGroup = {
 // ---------------------------------------------------------------------------
 const ITEMS_PER_PAGE = 10;
 const ALL_VIOLATIONS = "All Violations";
+const GRACE_PERIOD_HOURS = 24;
+const IMPOUND_FEE = 2000;
 
-/**
- * Master list ng lahat ng violation types na supported ng MTPB.
- *
- * Ito ang source of truth para sa dropdown options — hindi ito naka-derive
- * lang sa existing data, kasi kung 2 violations pa lang ang naka-record,
- * 2 options lang ang lalabas sa dropdown. Ang master list na ito ay
- * naka-merge sa actual data para kumpleto yung dropdown.
- *
- * Kung may bagong violation type sa future, i-add lang dito. Kopya ito
- * mula sa OIC Clamping Log — dapat parehong listahan ang dalawa.
- */
 const MASTER_VIOLATIONS = [
   "Illegal Parking",
   "No Parking Zone",
@@ -127,10 +124,6 @@ const ROLE_LABELS: Record<RoleSlug, string> = {
   "impounding-staff": "Impounding Staff",
 };
 
-// Trimmed to match the Figma design — Queue Monitor, Vehicle History,
-// Release Requests, and Release Orders removed; none of those appear in
-// the design. All Violations is kept, consistent with Homepage.tsx and
-// AllViolations.tsx.
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
@@ -205,20 +198,22 @@ const millis = (ts: Timestamp | null): number => {
 };
 
 /**
- * Normalizes violation type strings for consistent display.
- *
- * Ang mga violation types ay naka-store sa Firestore nang iba-ibang casing
- * (e.g. "Illegal parking" vs "Illegal Parking") depende kung saan na-create.
- * Ito ay nagna-normalize para consistent ang display sa filter dropdown at
- * sa table cells — Title Case na may proper capitalization. Kopya ito mula
- * sa OIC Clamping Log.
+ * Computes hours elapsed since the vehicle was clamped.
  */
+const computeHoursSinceClamp = (ts: Timestamp | null): number => {
+  if (!ts) return 0;
+  try {
+    return (Date.now() - ts.toDate().getTime()) / (1000 * 60 * 60);
+  } catch {
+    return 0;
+  }
+};
+
 const normalizeViolationType = (raw: unknown): string => {
   if (typeof raw !== "string") return "—";
   const trimmed = raw.trim();
   if (!trimmed) return "—";
 
-  // Special case: known multi-word violations na dapat may specific casing
   const knownMap: Record<string, string> = {
     "illegal parking": "Illegal Parking",
     "no parking zone": "No Parking Zone",
@@ -241,21 +236,16 @@ const normalizeViolationType = (raw: unknown): string => {
   const key = trimmed.toLowerCase();
   if (key in knownMap) return knownMap[key];
 
-  // Fallback: title-case each word, pero panatilihin yung acronyms
   return trimmed
     .split(" ")
     .map((word) => {
       if (!word) return word;
-      // All-caps acronym (PWD, LTO, MMDA, etc.) — keep as-is
       if (word === word.toUpperCase() && word.length <= 4) return word;
       return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
     })
     .join(" ");
 };
 
-/** Same two-state rule as every other real-data log in this system:
- *  "Released" once the release flow has actually released it
- *  (releaseStatus === "Released"); "Clamped" for everything before that. */
 const deriveStatus = (releaseStatus: unknown): ClampStatus =>
   releaseStatus === "Released" ? "Released" : "Clamped";
 
@@ -313,14 +303,9 @@ export default function ClampingLog() {
     return () => unsubscribe();
   }, []);
 
-  /**
-   * Reads `violations` filtered to enforcementType == "clamped" — the
-   * same real collection every other Clamping Log in this system reads
-   * (OIC's, for one), instead of the separate `clampingRecords`
-   * collection this page used before. No orderBy() on purpose: Firestore
-   * silently drops documents missing the ordered field, so sorting
-   * happens client-side instead.
-   */
+  // -----------------------------------------------------------------------
+  // EFFECT: Fetch clamping records
+  // -----------------------------------------------------------------------
   useEffect(() => {
     const q = query(
       collection(db, "violations"),
@@ -333,6 +318,9 @@ export default function ClampingLog() {
         const fetched: ClampingRow[] = snap.docs
           .map((d) => {
             const data = d.data();
+            const recordedAt = (data.recordedAt as Timestamp) ?? null;
+            const hoursSinceClamp = computeHoursSinceClamp(recordedAt);
+
             return {
               id: d.id,
               reference:
@@ -344,8 +332,12 @@ export default function ClampingLog() {
               violation: normalizeViolationType(data.violationType),
               location: data.location ?? "—",
               officer: data.officer ?? "—",
-              recordedAt: (data.recordedAt as Timestamp) ?? null,
+              recordedAt,
               status: deriveStatus(data.releaseStatus),
+              alreadyFlagged: data.impoundStatus === "Subject to Impound",
+              autoFlagged: data.impoundAutoFlagged ?? false,
+              impoundStatus: data.impoundStatus ?? null,
+              hoursSinceClamp,
             };
           })
           .sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
@@ -360,6 +352,78 @@ export default function ClampingLog() {
     );
     return () => unsubscribe();
   }, []);
+
+  // -----------------------------------------------------------------------
+  // AUTO-FLAG OVERDUE VIOLATIONS (Client-Side)
+  //
+  // Runs on every page load. Finds clamped violations that have exceeded
+  // the 24-hour grace period and auto-flags them as "Subject to Impound"
+  // with a fixed impound fee of ₱2,000.
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    if (loading || rows.length === 0) return;
+
+    const autoFlagOverdue = async () => {
+      const overdueRows = rows.filter(
+        (row) =>
+          row.status === "Clamped" &&
+          row.hoursSinceClamp >= GRACE_PERIOD_HOURS &&
+          row.impoundStatus !== "Subject to Impound" &&
+          row.impoundStatus !== "Impounded"
+      );
+
+      if (overdueRows.length === 0) return;
+
+      console.log(
+        `[auto-flag] Found ${overdueRows.length} overdue clamped violation(s) to flag`
+      );
+
+      try {
+        const batch = writeBatch(db);
+
+        overdueRows.forEach((row) => {
+          const violationRef = doc(db, "violations", row.id);
+          const auditRef = doc(collection(db, "auditLogs"));
+
+          batch.update(violationRef, {
+            impoundStatus: "Subject to Impound",
+            impoundFlaggedAt: serverTimestamp(),
+            impoundFlaggedBy: "system",
+            impoundFlaggedByRole: "system",
+            impoundAutoFlagged: true,
+            impoundFee: IMPOUND_FEE,
+            updatedAt: serverTimestamp(),
+            updatedBy: "system",
+          });
+
+          batch.set(auditRef, {
+            userName: "System",
+            userRole: "system",
+            action: `auto-flagged violation ${row.cin} as Subject to Impound (24hr grace period expired)`,
+            record: row.cin,
+            type: "impound-flag-auto",
+            metadata: {
+              cin: row.cin,
+              plateNo: row.plateNo,
+              hoursSinceClamp: Math.round(row.hoursSinceClamp),
+              impoundFee: IMPOUND_FEE,
+              method: "client-side",
+            },
+            timestamp: serverTimestamp(),
+          });
+        });
+
+        await batch.commit();
+        console.log(
+          `[auto-flag] Successfully flagged ${overdueRows.length} violation(s)`
+        );
+      } catch (err) {
+        console.error("[auto-flag] Failed to flag overdue violations:", err);
+      }
+    };
+
+    autoFlagOverdue();
+  }, [loading, rows]);
 
   // -----------------------------------------------------------------------
   // EFFECT: Click-outside for dropdown
@@ -397,11 +461,6 @@ export default function ClampingLog() {
     setIsMenuOpen(false);
   };
 
-  /**
-   * Dropdown options: master list + actual data — matches OIC's approach,
-   * so all 16+ violation types always show even if few are recorded yet,
-   * and any unexpected manual-entry type still appears automatically.
-   */
   const violationOptions = useMemo(() => {
     const unique = new Set<string>(MASTER_VIOLATIONS);
     rows.forEach((row) => {
@@ -590,6 +649,7 @@ export default function ClampingLog() {
                         <th>Clamped by</th>
                         <th>Time</th>
                         <th>Status</th>
+                        <th>Impound</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -616,6 +676,42 @@ export default function ClampingLog() {
                             >
                               {row.status}
                             </span>
+                          </td>
+                          <td>
+                            {/* AUTO-FLAG INDICATOR */}
+                            {row.status === "Clamped" &&
+                              row.hoursSinceClamp < GRACE_PERIOD_HOURS &&
+                              row.impoundStatus !== "Subject to Impound" &&
+                              row.impoundStatus !== "Impounded" && (
+                                <span className="impound-pending">
+                                  Within {GRACE_PERIOD_HOURS}hr grace
+                                </span>
+                              )}
+
+                            {row.impoundStatus === "Subject to Impound" && (
+                              <span
+                                className={`badge-impound ${
+                                  row.autoFlagged ? "badge-impound-auto" : ""
+                                }`}
+                                title={
+                                  row.autoFlagged
+                                    ? "Auto-flagged by system (24hr grace period expired)"
+                                    : "Flagged as Subject to Impound"
+                                }
+                              >
+                                {row.autoFlagged
+                                  ? `🤖 Auto-flagged (₱${IMPOUND_FEE.toLocaleString()})`
+                                  : `Subject to Impound (₱${IMPOUND_FEE.toLocaleString()})`}
+                              </span>
+                            )}
+
+                            {row.impoundStatus === "Impounded" && (
+                              <span className="badge-impounded">Impounded</span>
+                            )}
+
+                            {row.status === "Released" && (
+                              <span className="action-placeholder">—</span>
+                            )}
                           </td>
                         </tr>
                       ))}

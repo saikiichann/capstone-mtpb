@@ -3,7 +3,7 @@ import { supabase, SUPABASE_BUCKET } from "../supabase";
 // Image compression helper
 export const compressImage = async (
   file: File,
-  maxSizeKB: number = 500,
+  _maxSizeKB: number = 500,
   maxDimension: number = 1024
 ): Promise<File> => {
   return new Promise((resolve, reject) => {

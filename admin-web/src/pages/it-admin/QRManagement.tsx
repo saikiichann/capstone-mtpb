@@ -58,7 +58,7 @@ import keyIcon from "../../assets/key.png";
 // ---------------------------------------------------------------------------
 type NavItem = {
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: number | string; className?: string }>;
   path: string;
   active?: boolean;
 };
@@ -1264,12 +1264,15 @@ export default function QRManagement() {
                               {STATUS_LABELS[row.state]}
                             </span>
                             {row.hasStateMismatch && (
-                              <AlertTriangle
-                                size={14}
-                                className="state-warning-icon"
-                                aria-label="State out of sync"
+                              <span
                                 title={`Saved: "${row.storedStatus ?? "(none)"}" — derived: "${row.state}"`}
-                              />
+                              >
+                                <AlertTriangle
+                                  size={14}
+                                  className="state-warning-icon"
+                                  aria-label="State out of sync"
+                                />
+                              </span>
                             )}
                           </td>
                           <td>
@@ -1648,4 +1651,4 @@ export default function QRManagement() {
       )}
     </div>
   );
-}
+}

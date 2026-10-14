@@ -10,17 +10,20 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
-  doc,
-  getDoc,
   onSnapshot,
-  query,
-  where,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { useStaffProfile } from "../../lib/useStaffProfile";
+import {
+  derivePaymentLocation,
+  isInStaffScope,
+  staffScopeLabel,
+  type PaymentLocation,
+} from "../../lib/paymentLocation";
 import "./RevenueReports.css";
 
 import mtpbLogo from "../../assets/mtpb-logo.png";
@@ -47,7 +50,15 @@ type RoleSlug =
   | "clamping-staff"
   | "impounding-staff";
 
-type CurrentUser = { name: string; role: RoleSlug };
+// ⚠️ WALANG "Both" — dalawa lang
+type AssignedLocation = "City Hall" | "Central";
+
+type CurrentUser = {
+  name: string;
+  role: RoleSlug;
+  assignedLocation: AssignedLocation | null;  // "City Hall" | "Central" — para sa filter
+  assignedLocationName: string | null;        // buong pangalan — para sa display
+};
 
 type RevenuePoint = { day: string; value: number };
 
@@ -63,6 +74,7 @@ type PaymentRecord = {
   orNumber: string | null;
   amount: number;
   verifiedAt: Timestamp | null;
+  paymentLocation: PaymentLocation;
 };
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
@@ -146,6 +158,16 @@ const isThisMonth = (ts: Timestamp | null): boolean => {
   }
 };
 
+/** GCash → "Online"; cash → City Hall / Central (tingnan ang lib/paymentLocation) */
+const derivePaymentLocationFromDoc = (data: any): PaymentLocation =>
+  derivePaymentLocation(data.method, data.paymentLocation ?? data.location);
+
+/** Pareho ng Transaction History: verified / succeeded / approved = bayad na. */
+const isVerifiedPayment = (data: any): boolean =>
+  ["verified", "succeeded", "approved"].includes(
+    String(data.verificationStatus ?? data.status ?? "").toLowerCase()
+  );
+
 // ---------------------------------------------------------------------------
 // COMPONENT
 // ---------------------------------------------------------------------------
@@ -154,110 +176,41 @@ export default function RevenueReports() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
-    name: "Loading...",
-    role: "finance",
-  });
+  /* Profile ng naka-login na staff — naka-cache sa lahat ng Finance pages,
+     kaya hindi na nagfi-flash ang data ng ibang location paglipat ng tab. */
+  const { profile, ready: userReady } = useStaffProfile();
+  const currentUser: CurrentUser = useMemo(
+    () => ({
+      name: profile?.name ?? "Loading...",
+      role: ((profile?.role || "finance") as RoleSlug),
+      assignedLocation: profile?.assignedLocation ?? null,
+      assignedLocationName: profile?.assignedLocationName ?? null,
+    }),
+    [profile]
+  );
 
-  const [metrics, setMetrics] = useState<Metrics>({
-    todayRevenue: 0,
-    totalRevenue: 0,
-    thisMonthRevenue: 0,
-  });
-  const [revenueData, setRevenueData] = useState<RevenuePoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [allPayments, setAllPayments] = useState<PaymentRecord[]>([]);
 
-  /* Current user */
+  /* Payments listener — lahat ng verified payments (walang filter dito,
+     para hindi mag-resubscribe kapag na-load ang user) */
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
-      if (!loggedUser) {
-        setCurrentUser({ name: "Guest", role: "finance" });
-        return;
-      }
-      try {
-        const userDocRef = doc(db, "users", loggedUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const data = userDocSnap.data();
-          setCurrentUser({
-            name: data.name ?? "Unknown",
-            role: (data.role ?? "finance") as RoleSlug,
-          });
-        } else {
-          setCurrentUser({
-            name: loggedUser.email?.split("@")[0] ?? "Unknown",
-            role: "finance",
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching current user:", err);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  /* Payments listener */
-  useEffect(() => {
-    const q = query(
-      collection(db, "payments"),
-      where("status", "==", "Verified")
-    );
-
     const unsubscribe = onSnapshot(
-      q,
+      collection(db, "payments"),
       (snap) => {
-        const payments: PaymentRecord[] = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            referenceNumber: data.referenceNumber ?? d.id,
-            orNumber: data.orNumber ?? null,
-            amount: Number(data.totalAmount ?? data.amount ?? 0),
-            verifiedAt: (data.verifiedAt as Timestamp) ?? null,
-          };
-        });
-
-        // Metrics
-        const todayRevenue = payments
-          .filter((p) => isToday(p.verifiedAt))
-          .reduce((sum, p) => sum + p.amount, 0);
-
-        const thisMonthRevenue = payments
-          .filter((p) => isThisMonth(p.verifiedAt))
-          .reduce((sum, p) => sum + p.amount, 0);
-
-        const totalRevenue = payments.reduce((sum, p) => sum + p.amount, 0);
-
-        setMetrics({ todayRevenue, totalRevenue, thisMonthRevenue });
-
-        // Chart — last 7 days
-        const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-        const revenueMap: Record<string, number> = {};
-        days.forEach((d) => (revenueMap[d] = 0));
-
-        const today = new Date();
-        payments.forEach((p) => {
-          if (p.verifiedAt) {
-            try {
-              const date = p.verifiedAt.toDate();
-              const diffDays = Math.floor(
-                (today.getTime() - date.getTime()) / 86400000
-              );
-              if (diffDays >= 0 && diffDays <= 6) {
-                const jsDay = date.getDay();
-                const dayLabel = days[(jsDay + 6) % 7];
-                if (dayLabel in revenueMap) revenueMap[dayLabel] += p.amount;
-              }
-            } catch {
-              // skip
-            }
-          }
-        });
-
-        setRevenueData(
-          days.map((day) => ({ day, value: revenueMap[day] }))
-        );
+        const payments: PaymentRecord[] = snap.docs
+          .filter((d) => isVerifiedPayment(d.data()))
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              referenceNumber: data.referenceNumber ?? d.id,
+              orNumber: data.orNumber ?? null,
+              amount: Number(data.totalAmount ?? data.amount ?? 0),
+              verifiedAt: (data.verifiedAt as Timestamp) ?? null,
+              paymentLocation: derivePaymentLocationFromDoc(data),
+            };
+          });
 
         setAllPayments(payments);
         setLoading(false);
@@ -269,6 +222,53 @@ export default function RevenueReports() {
     );
     return () => unsubscribe();
   }, []);
+
+  /* Location filter — Finance: sariling location lang. OIC/Supervisor: lahat. */
+  const payments = useMemo(() => {
+    if (!userReady) return [];
+    if (currentUser.role !== "finance") {
+      return allPayments;
+    }
+    return allPayments.filter((p) =>
+      isInStaffScope(currentUser.assignedLocation, p.paymentLocation)
+    );
+  }, [allPayments, userReady, currentUser.role, currentUser.assignedLocation]);
+
+  /* Metrics */
+  const metrics: Metrics = useMemo(() => {
+    const todayRevenue = payments
+      .filter((p) => isToday(p.verifiedAt))
+      .reduce((sum, p) => sum + p.amount, 0);
+    const thisMonthRevenue = payments
+      .filter((p) => isThisMonth(p.verifiedAt))
+      .reduce((sum, p) => sum + p.amount, 0);
+    const totalRevenue = payments.reduce((sum, p) => sum + p.amount, 0);
+    return { todayRevenue, totalRevenue, thisMonthRevenue };
+  }, [payments]);
+
+  /* Chart — last 7 days */
+  const revenueData: RevenuePoint[] = useMemo(() => {
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const revenueMap: Record<string, number> = {};
+    days.forEach((d) => (revenueMap[d] = 0));
+
+    const today = new Date();
+    payments.forEach((p) => {
+      if (!p.verifiedAt) return;
+      try {
+        const date = p.verifiedAt.toDate();
+        const diffDays = Math.floor((today.getTime() - date.getTime()) / 86400000);
+        if (diffDays >= 0 && diffDays <= 6) {
+          const dayLabel = days[(date.getDay() + 6) % 7];
+          revenueMap[dayLabel] += p.amount;
+        }
+      } catch {
+        // skip
+      }
+    });
+
+    return days.map((day) => ({ day, value: revenueMap[day] }));
+  }, [payments]);
 
   /* Click outside */
   useEffect(() => {
@@ -301,9 +301,9 @@ export default function RevenueReports() {
     setIsMenuOpen(false);
   };
 
-  /* OR Range summary — mula sa lahat ng payments */
+  /* OR Range summary — mula sa (filtered) payments */
   const orRange = useMemo(() => {
-    const orNumbers = allPayments
+    const orNumbers = payments
       .map((p) => p.orNumber)
       .filter(Boolean) as string[];
 
@@ -323,7 +323,12 @@ export default function RevenueReports() {
       to: sorted[sorted.length - 1],
       count: orNumbers.length,
     };
-  }, [allPayments]);
+  }, [payments]);
+
+  const locationLabel =
+    currentUser.role === "finance" && currentUser.assignedLocation
+      ? staffScopeLabel(currentUser.assignedLocation)
+      : null;
 
   const metricCards = [
     {
@@ -334,7 +339,7 @@ export default function RevenueReports() {
     {
       title: "Total Revenue",
       value: formatCurrency(metrics.totalRevenue),
-      subtitle: "Sector 3, Last 7 days",
+      subtitle: "Sector 3 · All time",
     },
     {
       title: "This Month",
@@ -350,7 +355,16 @@ export default function RevenueReports() {
             <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
             <div>
               <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Finance Staff</p>
+              <p className="sidebar-brand-role">
+                Finance Staff
+                {/* ⚠️ BAGO: Location indicator */}
+                {currentUser.assignedLocationName && (
+                  <span className="sidebar-brand-location">
+                    {" · "}
+                    {currentUser.assignedLocationName}
+                  </span>
+                )}
+              </p>
             </div>
           </div>
 
@@ -404,6 +418,7 @@ export default function RevenueReports() {
                     <p className="dropdown-name">{currentUser.name}</p>
                     <p className="dropdown-role">
                       {ROLE_LABELS[currentUser.role]}
+                      {currentUser.assignedLocationName && ` · ${currentUser.assignedLocationName}`}
                     </p>
                   </div>
                   <button className="dropdown-item" onClick={handleChangePassword}>
@@ -435,7 +450,9 @@ export default function RevenueReports() {
 
             {/* OR RANGE SUMMARY */}
             <div className="card">
-              <p className="card-eyebrow">Official Receipts</p>
+              <p className="card-eyebrow">
+                Official Receipts{locationLabel ? ` · ${locationLabel}` : ""}
+              </p>
               <h2 className="card-title">OR Range Summary</h2>
 
               <div className="or-summary-grid">
@@ -467,10 +484,12 @@ export default function RevenueReports() {
 
             {/* REVENUE CHART */}
             <div className="card">
-              <p className="card-eyebrow">Sector 3 · Last 7 days</p>
+              <p className="card-eyebrow">
+                Sector 3{locationLabel ? ` · ${locationLabel}` : ""} · Last 7 days
+              </p>
               <h2 className="card-title">Revenue by day</h2>
 
-              {loading ? (
+              {loading || !userReady ? (
                 <div className="table-loading">
                   <p>Loading chart...</p>
                 </div>
@@ -495,7 +514,7 @@ export default function RevenueReports() {
                       tickFormatter={(value) => formatCompactCurrency(value)}
                     />
                     <Tooltip
-                      formatter={(value: number) => formatCurrency(value)}
+                      formatter={(value) => formatCurrency(Number(value))}
                       cursor={{ fill: "rgba(59, 130, 246, 0.08)" }}
                     />
                     <Bar

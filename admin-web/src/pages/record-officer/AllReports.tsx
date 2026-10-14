@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { KeyRound, MoreHorizontal } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
-  collection,
   doc,
   getDoc,
 } from "firebase/firestore";

@@ -33,7 +33,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
-import "./ITAdminHomePage.css";
+import "./ITAdminHomepage.css";
 import "./BackupRestore.css";
 
 import logo from "../../assets/mtpb-logo.png";
@@ -46,7 +46,7 @@ import keyIcon from "../../assets/key.png";
 ------------------------------------------------------------------ */
 type NavItem = {
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: number | string; className?: string }>;
   path: string;
   active?: boolean;
 };
@@ -211,16 +211,6 @@ const formatDate = (ts: Timestamp | null): string => {
   } catch {
     return "—";
   }
-};
-
-const generateOICCode = (): string => {
-  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const digits = "0123456789";
-  let code = "OIC-";
-  for (let i = 0; i < 4; i++) code += letters[Math.floor(Math.random() * letters.length)];
-  code += "-";
-  for (let i = 0; i < 4; i++) code += digits[Math.floor(Math.random() * digits.length)];
-  return code;
 };
 
 /* ------------------------------------------------------------------
@@ -426,7 +416,7 @@ type RestoreModalProps = {
   onConfirm: (authCode: string, reason: string) => Promise<void>;
 };
 
-function RestoreModal({ row, currentUser, onClose, onConfirm }: RestoreModalProps) {
+function RestoreModal({ row, onClose, onConfirm }: RestoreModalProps) {
   const [authCode, setAuthCode] = useState("");
   const [reason, setReason] = useState("");
   const [restoring, setRestoring] = useState(false);

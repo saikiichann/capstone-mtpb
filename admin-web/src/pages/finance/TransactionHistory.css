@@ -1,29 +1,142 @@
 /* ==================================================================
-   TransactionHistory.css
-   Extends Homepage.css (finance) — Transaction History styles
+   TransactionHistory.css (Finance)
+   Sidebar, header at avatar — galing pa rin sa Finance Homepage.css
+   (.finance-page). Ang CONTENT styles dito (search bar, table,
+   Violator ID column, status pills, pagination) ay kopya ng OIC
+   TransactionHistory.css para pareho ang itsura ng dalawang page.
+
+   Wrapper: <div className="finance-page finance-transactions-page">
+   Hindi ".transaction-history-page" — yun ang prefix ng OIC CSS, at
+   kung gagamitin din dito, tatamaan ng OIC sidebar styles ang Finance.
+
+   Kapag may binago sa OIC content CSS, gawin din dito (palitan lang
+   ang prefix ng ".finance-page.finance-transactions-page").
 ================================================================== */
 
 /* ==================================================================
-   TABLE CELLS
+   LOCATION INDICATOR SA SIDEBAR (Finance assignment)
 ================================================================== */
-.finance-page .cell-reference {
-  color: #111827;
+.finance-page .sidebar-brand-location {
+  font-size: 11px;
+  color: #94A3B8;
+  margin-top: 2px;
   font-weight: 500;
-  white-space: nowrap;
+  letter-spacing: 0.3px;
 }
 
-/* OR Number cell — same treatment as Reference for audit readability */
-.finance-page .cell-or-number {
+/* ==================================================================
+   MAIN CONTENT + CARD
+================================================================== */
+.finance-page.finance-transactions-page .main-content {
+  flex: 1;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.finance-page.finance-transactions-page .card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #F3F4F6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  width: 100%;
+}
+
+.finance-page.finance-transactions-page .card-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.finance-page.finance-transactions-page .card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 0 0 16px;
+}
+
+/* ==================================================================
+   SEARCH
+================================================================== */
+.finance-page.finance-transactions-page .search-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 13px 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.finance-page.finance-transactions-page .search-bar-icon {
+  color: #9CA3AF;
+  flex-shrink: 0;
+}
+
+.finance-page.finance-transactions-page .search-bar-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: #111827;
   font-family: inherit;
-  font-weight: 500;
-  color: #111827;
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
 }
 
-.finance-page .cin-pill {
+.finance-page.finance-transactions-page .search-bar-input::placeholder {
+  color: #9CA3AF;
+}
+
+/* ==================================================================
+   TABLE
+================================================================== */
+.finance-page.finance-transactions-page .table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.finance-page.finance-transactions-page .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.finance-page.finance-transactions-page .data-table thead {
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.finance-page.finance-transactions-page .data-table th {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  padding: 12px 8px;
+  white-space: nowrap;
+}
+
+.finance-page.finance-transactions-page .data-table td {
+  padding: 14px 8px;
+  color: #374151;
+  vertical-align: middle;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.finance-page.finance-transactions-page .data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.finance-page.finance-transactions-page .data-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+.finance-page.finance-transactions-page .cin-pill {
   display: inline-block;
   padding: 4px 12px;
   background: #DBEAFE;
@@ -31,74 +144,138 @@
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
-.finance-page .cell-plate {
+.finance-page.finance-transactions-page .cell-reference {
+  color: #111827;
+  white-space: nowrap;
+}
+
+.finance-page.finance-transactions-page .cell-plate {
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.finance-page.finance-transactions-page .cell-amount {
   color: #111827;
   font-weight: 600;
   white-space: nowrap;
 }
 
-.finance-page .cell-amount {
-  color: #111827;
-  font-weight: 600;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.finance-page .cell-method {
+.finance-page.finance-transactions-page .cell-method {
   color: #374151;
   white-space: nowrap;
 }
 
-.finance-page .cell-verified-by {
+.finance-page.finance-transactions-page .cell-verified-by {
   color: #374151;
   white-space: nowrap;
 }
 
-.finance-page .cell-datetime {
-  color: #6B7280;
+.finance-page.finance-transactions-page .cell-datetime {
+  color: #374151;
   white-space: nowrap;
   font-size: 13px;
 }
 
-/* Label kapag walang naitalang payment method.
-   Mas mabuti ito kaysa blangkong cell — halatang wala talagang naitala,
-   hindi mukhang sirang render. */
-.finance-page .cell-empty {
+.finance-page.finance-transactions-page .cell-empty {
   color: #9CA3AF;
   font-style: italic;
-  font-size: 13px;
+}
+
+/* ==================================================================
+   VIOLATOR COLUMN
+================================================================== */
+.finance-page.finance-transactions-page .cell-violator {
+  min-width: 150px;
+  white-space: normal;
+}
+
+.finance-page.finance-transactions-page .violator-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.finance-page.finance-transactions-page .violator-name {
+  font-weight: 500;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.finance-page.finance-transactions-page .violator-tag {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.finance-page.finance-transactions-page .violator-tag.uid {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.finance-page.finance-transactions-page .violator-tag.guest {
+  background: #FEF3C7;
+  color: #92400E;
 }
 
 /* ==================================================================
    STATUS PILLS
-   Kailangan ito kasi kasama sa listahan ang Rejected. Kung walang
-   column, magkamukha ang tinanggap at tinanggihang bayad.
 ================================================================== */
-.finance-page .status-pill {
+.finance-page.finance-transactions-page .status-pill {
   display: inline-block;
-  padding: 6px 14px;
+  padding: 5px 14px;
+  border: 1px solid transparent;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
 
-.finance-page .status-verified {
+.finance-page.finance-transactions-page .status-verified {
   background: #DCFCE7;
+  border-color: #22C55E;
   color: #166534;
 }
 
-.finance-page .status-rejected {
+.finance-page.finance-transactions-page .status-rejected {
   background: #FEE2E2;
+  border-color: #EF4444;
   color: #991B1B;
+}
+
+/* ==================================================================
+   LOADING / EMPTY
+================================================================== */
+.finance-page.finance-transactions-page .table-loading,
+.finance-page.finance-transactions-page .table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #6B7280;
+  font-size: 14px;
+}
+
+.finance-page.finance-transactions-page .table-loading p,
+.finance-page.finance-transactions-page .table-empty p {
+  margin: 0;
 }
 
 /* ==================================================================
    PAGINATION
 ================================================================== */
-.finance-page .pagination {
+.finance-page.finance-transactions-page .pagination {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -108,7 +285,7 @@
   border-top: 1px solid #F3F4F6;
 }
 
-.finance-page .pagination-btn {
+.finance-page.finance-transactions-page .pagination-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -124,22 +301,18 @@
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.finance-page .pagination-btn:hover:not(:disabled) {
+.finance-page.finance-transactions-page .pagination-btn:hover:not(:disabled) {
   background: #F9FAFB;
   border-color: #9CA3AF;
 }
 
-.finance-page .pagination-btn:disabled {
+.finance-page.finance-transactions-page .pagination-btn:disabled {
   color: #9CA3AF;
   cursor: not-allowed;
   opacity: 0.6;
 }
 
-.finance-page .pagination-btn svg {
-  flex-shrink: 0;
-}
-
-.finance-page .pagination-info {
+.finance-page.finance-transactions-page .pagination-info {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -147,7 +320,7 @@
   color: #6B7280;
 }
 
-.finance-page .pagination-page {
+.finance-page.finance-transactions-page .pagination-page {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -161,32 +334,35 @@
   font-size: 13px;
 }
 
-.finance-page .pagination-sep {
+.finance-page.finance-transactions-page .pagination-sep {
   color: #6B7280;
   font-weight: 500;
   white-space: nowrap;
 }
 
 /* ==================================================================
-   LOADING / EMPTY
-================================================================== */
-.finance-page .table-loading,
-.finance-page .table-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-  color: #6B7280;
-  font-size: 14px;
-}
-
-/* ==================================================================
    RESPONSIVE
 ================================================================== */
 @media (max-width: 640px) {
-  .finance-page .pagination {
+  .finance-page.finance-transactions-page .main-content {
+    padding: 16px;
+  }
+
+  .finance-page.finance-transactions-page .pagination {
     flex-wrap: wrap;
     justify-content: center;
-    gap: 12px;
+  }
+
+  .finance-page.finance-transactions-page .cell-violator {
+    min-width: 120px;
+  }
+
+  .finance-page.finance-transactions-page .violator-name {
+    font-size: 13px;
+  }
+
+  .finance-page.finance-transactions-page .violator-tag {
+    font-size: 11px;
+    padding: 3px 10px;
   }
 }

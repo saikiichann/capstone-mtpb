@@ -15,7 +15,9 @@ import {
   Calendar,
   AlertTriangle,
   X,
-  QrCode,              // ✅ ADDED
+  QrCode,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
@@ -29,7 +31,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
-import "./ITAdminHomePage.css";
+import "./ITAdminHomepage.css";
 import "./AuditLog.css";
 
 import logo from "../../assets/mtpb-logo.png";
@@ -42,7 +44,7 @@ import keyIcon from "../../assets/key.png";
 ------------------------------------------------------------------ */
 type NavItem = {
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: number | string; className?: string }>;
   path: string;
   active?: boolean;
 };
@@ -68,6 +70,17 @@ type CurrentUser = {
   role: RoleSlug;
 };
 
+type LogCategory =
+  | "Payment"
+  | "Release"
+  | "Clamping"
+  | "Impounding"
+  | "Auth"
+  | "Users"
+  | "System";
+
+type CategoryFilter = "All" | LogCategory;
+
 type AuditLogRow = {
   id: string;
   timestamp: Timestamp | null;
@@ -78,6 +91,7 @@ type AuditLogRow = {
   record: string;
   ipAddress: string;
   flagged: boolean;
+  category: LogCategory;
   metadata?: Record<string, any>;
 };
 
@@ -86,6 +100,22 @@ type AuditLogFull = AuditLogRow & {
   after?: string;
   systemNotes?: string;
 };
+
+/* ------------------------------------------------------------------
+   CONSTANTS
+------------------------------------------------------------------ */
+const PAGE_SIZE = 10;
+
+const CATEGORY_FILTERS: CategoryFilter[] = [
+  "All",
+  "Payment",
+  "Release",
+  "Clamping",
+  "Impounding",
+  "Auth",
+  "Users",
+  "System",
+];
 
 /* ------------------------------------------------------------------
    ROLE MAP
@@ -102,14 +132,15 @@ const ROLE_LABELS: Record<RoleSlug, string> = {
   "system": "System",
 };
 
+/* Labels shown in the table pills (matches the design) */
 const ROLE_SHORT_LABELS: Record<RoleSlug, string> = {
   "oic": "OIC",
   "it-admin": "IT Admin",
-  "supervisor": "Admin Staff",
-  "record-officer": "Admin Staff",
-  "release-officer": "Release",
-  "finance": "Enforcer",
-  "clamping-staff": "Clamping Leader",
+  "supervisor": "Supervisor",
+  "record-officer": "Record Officer",
+  "release-officer": "Release Officer",
+  "finance": "Finance",
+  "clamping-staff": "Clamping",
   "impounding-staff": "Impounding",
   "system": "System",
 };
@@ -120,21 +151,19 @@ const ROLE_BADGE_CLASS: Record<RoleSlug, string> = {
   "supervisor": "role-admin",
   "record-officer": "role-admin",
   "release-officer": "role-release",
-  "finance": "role-enforcer",
+  "finance": "role-finance",
   "clamping-staff": "role-clamping",
   "impounding-staff": "role-impounding",
   "system": "role-system",
 };
 
 /* ------------------------------------------------------------------
-   NAV — ✅ QR Codes added sa "Enforcement Tools" group
+   NAV
 ------------------------------------------------------------------ */
 const navGroups: NavGroup[] = [
   {
     title: "Dashboard",
-    items: [
-      { label: "Overview", icon: LayoutDashboard, path: "/it-admin" },
-    ],
+    items: [{ label: "Overview", icon: LayoutDashboard, path: "/it-admin" }],
   },
   {
     title: "Monitoring",
@@ -154,7 +183,7 @@ const navGroups: NavGroup[] = [
   {
     title: "Enforcement Tools",
     items: [
-      { label: "QR Codes", icon: QrCode, path: "/it-admin/qr-codes" },
+      { label: "QR Code Management", icon: QrCode, path: "/it-admin/qr-codes" },
     ],
   },
   {
@@ -166,9 +195,7 @@ const navGroups: NavGroup[] = [
   },
   {
     title: "Configuration",
-    items: [
-      { label: "Settings", icon: Settings, path: "/it-admin/settings" },
-    ],
+    items: [{ label: "Settings", icon: Settings, path: "/it-admin/settings" }],
   },
 ];
 
@@ -196,6 +223,38 @@ const formatDateForInput = (date: Date): string => {
   return `${y}-${m}-${d}`;
 };
 
+const VALID_CATEGORIES: LogCategory[] = [
+  "Payment",
+  "Release",
+  "Clamping",
+  "Impounding",
+  "Auth",
+  "Users",
+  "System",
+];
+
+/**
+ * Uses the `category` field from Firestore if present.
+ * Otherwise, infers the category from the action text.
+ */
+const resolveCategory = (rawCategory: unknown, action: string): LogCategory => {
+  if (typeof rawCategory === "string") {
+    const match = VALID_CATEGORIES.find(
+      (c) => c.toLowerCase() === rawCategory.toLowerCase()
+    );
+    if (match) return match;
+  }
+
+  const a = action.toLowerCase();
+  if (/(login|logout|log in|log out|password|sign in|sign out|auth)/.test(a)) return "Auth";
+  if (/payment|paid|receipt|or no/.test(a)) return "Payment";
+  if (/release/.test(a)) return "Release";
+  if (/clamp/.test(a)) return "Clamping";
+  if (/impound/.test(a)) return "Impounding";
+  if (/(user|account|role|permission)/.test(a)) return "Users";
+  return "System";
+};
+
 /* ------------------------------------------------------------------
    VIEW DETAILS MODAL
 ------------------------------------------------------------------ */
@@ -209,7 +268,7 @@ function ViewModal({ row, onClose }: ViewModalProps) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2 className="modal-title">Audit log — event details</h2>
+          <h2 className="modal-title">Audit log event details</h2>
           <button
             type="button"
             className="modal-close"
@@ -241,7 +300,7 @@ function ViewModal({ row, onClose }: ViewModalProps) {
               <label>Role</label>
               <input
                 type="text"
-                value={ROLE_SHORT_LABELS[row.role] || row.role}
+                value={ROLE_SHORT_LABELS[row.role] ?? row.role}
                 readOnly
               />
             </div>
@@ -277,10 +336,7 @@ function ViewModal({ row, onClose }: ViewModalProps) {
 
         <div className="modal-footer">
           <button type="button" className="btn-cancel" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" className="btn-save" onClick={onClose}>
-            Save Changes
+            Close
           </button>
         </div>
       </div>
@@ -307,6 +363,9 @@ export default function AuditLog() {
   const [selectedDate, setSelectedDate] = useState<string>(
     formatDateForInput(new Date())
   );
+  const [activeCategory, setActiveCategory] = useState<CategoryFilter>("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
   const [viewingLog, setViewingLog] = useState<AuditLogFull | null>(null);
 
   /* Fetch current user */
@@ -317,8 +376,7 @@ export default function AuditLog() {
         return;
       }
       try {
-        const userDocRef = doc(db, "users", loggedUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
+        const userDocSnap = await getDoc(doc(db, "users", loggedUser.uid));
         if (userDocSnap.exists()) {
           const data = userDocSnap.data();
           setCurrentUser({
@@ -340,24 +398,29 @@ export default function AuditLog() {
 
   /* Real-time: auditLogs collection */
   useEffect(() => {
-    const auditRef = collection(db, "auditLogs");
-    const auditQuery = query(auditRef, orderBy("timestamp", "desc"), limit(200));
+    const auditQuery = query(
+      collection(db, "auditLogs"),
+      orderBy("timestamp", "desc"),
+      limit(500)
+    );
 
     const unsubscribe = onSnapshot(
       auditQuery,
       (snapshot) => {
         const fetched: AuditLogRow[] = snapshot.docs.map((d) => {
           const data = d.data();
+          const action: string = data.action ?? "";
           return {
             id: d.id,
             timestamp: data.timestamp ?? null,
-            time: formatTime(data.timestamp),
+            time: formatTime(data.timestamp ?? null),
             userName: data.userName ?? "Unknown",
             role: (data.role ?? "system") as RoleSlug,
-            action: data.action ?? "",
+            action,
             record: data.record ?? data.targetId ?? "—",
             ipAddress: data.ipAddress ?? "—",
             flagged: data.flagged === true,
+            category: resolveCategory(data.category, action),
             metadata: data.metadata,
           };
         });
@@ -400,45 +463,86 @@ export default function AuditLog() {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       sessionStorage.clear();
-      setMenuOpen(false);
-      navigate("/");
     } catch (err) {
       console.error("Logout error:", err);
+    } finally {
       setMenuOpen(false);
       navigate("/");
     }
   };
 
-  /* Filter logs based on search + date */
+  /* Filter logs: search + date + category */
   const filteredLogs = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+
     return logs.filter((log) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+      if (q) {
+        const roleLabel = (ROLE_SHORT_LABELS[log.role] ?? log.role).toLowerCase();
         const matchesSearch =
           log.userName.toLowerCase().includes(q) ||
           log.action.toLowerCase().includes(q) ||
           log.record.toLowerCase().includes(q) ||
-          log.role.toLowerCase().includes(q);
+          log.ipAddress.toLowerCase().includes(q) ||
+          roleLabel.includes(q);
         if (!matchesSearch) return false;
       }
 
-      if (selectedDate && log.timestamp) {
-        const logDate = formatDateForInput(log.timestamp.toDate());
-        if (logDate !== selectedDate) return false;
+      if (selectedDate) {
+        if (!log.timestamp) return false;
+        if (formatDateForInput(log.timestamp.toDate()) !== selectedDate) return false;
       }
+
+      if (activeCategory !== "All" && log.category !== activeCategory) return false;
 
       return true;
     });
-  }, [logs, searchQuery, selectedDate]);
+  }, [logs, searchQuery, selectedDate, activeCategory]);
+
+  /* Pagination */
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
+
+  const pagedLogs = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredLogs.slice(start, start + PAGE_SIZE);
+  }, [filteredLogs, currentPage]);
+
+  // Back to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedDate, activeCategory]);
+
+  // Keep current page valid if data shrinks
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  // Sync the page box with the current page
+  useEffect(() => {
+    setPageInput(String(currentPage));
+  }, [currentPage]);
+
+  const goToPage = (page: number) => {
+    const clamped = Math.min(Math.max(1, page), totalPages);
+    setCurrentPage(clamped);
+    setPageInput(String(clamped));
+  };
+
+  const commitPageInput = () => {
+    const parsed = parseInt(pageInput, 10);
+    if (Number.isNaN(parsed)) {
+      setPageInput(String(currentPage));
+      return;
+    }
+    goToPage(parsed);
+  };
 
   const handleView = (row: AuditLogRow) => {
-    const full: AuditLogFull = {
+    setViewingLog({
       ...row,
       before: row.metadata?.before,
       after: row.metadata?.after,
       systemNotes: row.metadata?.systemNotes,
-    };
-    setViewingLog(full);
+    });
   };
 
   return (
@@ -528,7 +632,7 @@ export default function AuditLog() {
           </header>
 
           <div className="audit-content">
-            {/* Search + Date filter row */}
+            {/* Search + Date */}
             <div className="audit-toolbar">
               <div className="search-box">
                 <input
@@ -537,7 +641,7 @@ export default function AuditLog() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
-                <Search size={18} className="search-icon" />
+                <Search size={20} className="search-icon" />
               </div>
 
               <div className="date-box">
@@ -546,12 +650,28 @@ export default function AuditLog() {
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
                 />
-                <Calendar size={18} className="date-icon" />
+                <Calendar size={20} className="date-icon" />
               </div>
             </div>
 
-            {/* Audit Log table */}
-            <article className="card">
+            {/* Category chips */}
+            <div className="audit-filters" role="tablist" aria-label="Filter by category">
+              {CATEGORY_FILTERS.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeCategory === cat}
+                  className={`filter-chip${activeCategory === cat ? " active" : ""}`}
+                  onClick={() => setActiveCategory(cat)}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* Table card */}
+            <article className="card audit-card">
               {loading ? (
                 <div className="table-loading">
                   <RefreshCw size={20} className="spin" />
@@ -562,63 +682,98 @@ export default function AuditLog() {
                   <p>No audit log entries found for the selected filters.</p>
                 </div>
               ) : (
-                <table className="audit-table">
-                  <thead>
-                    <tr>
-                      <th>Timestamp</th>
-                      <th>User</th>
-                      <th>Role</th>
-                      <th>Action</th>
-                      <th>Record</th>
-                      <th>IP address</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredLogs.map((row) => (
-                      <tr key={row.id} className={row.flagged ? "row-flagged" : ""}>
-                        <td className="cell-time">{row.time}</td>
-                        <td className="cell-user">{row.userName}</td>
-                        <td>
-                          <span className={`audit-role-pill ${ROLE_BADGE_CLASS[row.role]}`}>
-                            {ROLE_SHORT_LABELS[row.role]}
-                          </span>
-                        </td>
-                        <td className="cell-action">
-                          {row.flagged && (
-                            <AlertTriangle
-                              size={14}
-                              className="flagged-icon"
-                              style={{ display: "inline", marginRight: 6 }}
-                            />
-                          )}
-                          {row.action}
-                        </td>
-                        <td className="cell-record">{row.record}</td>
-                        <td className="cell-ip">{row.ipAddress}</td>
-                        <td className="cell-action-btn">
-                          {row.flagged ? (
-                            <button
-                              type="button"
-                              className="btn-flagged"
-                              onClick={() => handleView(row)}
-                            >
-                              Flagged
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="btn-view"
-                              onClick={() => handleView(row)}
-                            >
-                              View
-                            </button>
-                          )}
-                        </td>
+                <div className="audit-table-wrap">
+                  <table className="audit-table">
+                    <thead>
+                      <tr>
+                        <th>Timestamp</th>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>Action</th>
+                        <th>Record</th>
+                        <th>IP address</th>
+                        <th aria-label="Actions"></th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {pagedLogs.map((row) => (
+                        <tr key={row.id} className={row.flagged ? "row-flagged" : ""}>
+                          <td className="cell-time">{row.time}</td>
+                          <td className="cell-user">{row.userName}</td>
+                          <td>
+                            <span
+                              className={`audit-role-pill ${
+                                ROLE_BADGE_CLASS[row.role] ?? "role-system"
+                              }`}
+                            >
+                              {ROLE_SHORT_LABELS[row.role] ?? row.role}
+                            </span>
+                          </td>
+                          <td className="cell-action">
+                            {row.flagged && (
+                              <AlertTriangle size={13} className="flagged-icon" />
+                            )}
+                            {row.action}
+                          </td>
+                          <td className="cell-record">{row.record}</td>
+                          <td className="cell-ip">{row.ipAddress}</td>
+                          <td className="cell-action-btn">
+                            <button
+                              type="button"
+                              className={row.flagged ? "btn-flagged" : "btn-view"}
+                              onClick={() => handleView(row)}
+                            >
+                              {row.flagged ? "Flagged" : "View"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Pagination */}
+              {!loading && filteredLogs.length > 0 && (
+                <div className="audit-pagination">
+                  <button
+                    type="button"
+                    className="page-btn"
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft size={16} />
+                    <span>Previous</span>
+                  </button>
+
+                  <div className="page-indicator">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className="page-input"
+                      aria-label="Current page"
+                      value={pageInput}
+                      onChange={(e) => setPageInput(e.target.value.replace(/\D/g, ""))}
+                      onBlur={commitPageInput}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitPageInput();
+                      }}
+                    />
+                    <span>
+                      of {totalPages} {totalPages === 1 ? "page" : "pages"}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="page-btn"
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    <span>Next</span>
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
               )}
             </article>
 
@@ -627,7 +782,6 @@ export default function AuditLog() {
         </main>
       </div>
 
-      {/* VIEW MODAL */}
       {viewingLog && (
         <ViewModal row={viewingLog} onClose={() => setViewingLog(null)} />
       )}

@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, ChevronLeft, ChevronRight } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  Timestamp,
-} from "firebase/firestore";
+import { KeyRound, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { signOut as firebaseSignOut } from "firebase/auth";
+import { collection, doc, getDoc, onSnapshot, Timestamp } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { useStaffProfile } from "../../lib/useStaffProfile";
+import {
+  derivePaymentLocation,
+  isInStaffScope,
+  staffScopeLabel,
+  type PaymentLocation,
+  type StaffLocation,
+} from "../../lib/paymentLocation";
 import "./TransactionHistory.css";
 
 // Asset imports
@@ -24,9 +26,9 @@ import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
 import logoutIcon from "../../assets/logout.png";
 
-// ---------------------------------------------------------------------------
-// TYPES
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   TYPES
+------------------------------------------------------------------ */
 type RoleSlug =
   | "oic"
   | "it-admin"
@@ -37,7 +39,12 @@ type RoleSlug =
   | "clamping-staff"
   | "impounding-staff";
 
-type CurrentUser = { name: string; role: RoleSlug };
+type CurrentUser = {
+  name: string;
+  role: RoleSlug;
+  assignedLocation: StaffLocation | null;  // "City Hall" | "Central" — para sa filter
+  assignedLocationName: string | null;       // buong pangalan — para sa display
+};
 
 type PaymentMethod = "GCash" | "Cash";
 type TransactionStatus = "Verified" | "Rejected";
@@ -54,14 +61,18 @@ type TransactionRow = {
   verifiedAt: Timestamp | null;
   status: TransactionStatus;
   rejectionReason: string | null;
+  violatorUid: string | null;
+  guestId: string | null;
+  violatorName: string | null;
+  paymentLocation: PaymentLocation;
 };
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
-// ---------------------------------------------------------------------------
-// CONSTANTS
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   CONSTANTS
+------------------------------------------------------------------ */
 const ITEMS_PER_PAGE = 10;
 
 const ROLE_LABELS: Record<RoleSlug, string> = {
@@ -75,6 +86,7 @@ const ROLE_LABELS: Record<RoleSlug, string> = {
   "impounding-staff": "Impounding Staff",
 };
 
+/* Finance navigation — ito lang ang naiiba sa OIC version */
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
@@ -83,16 +95,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Payment/Finance",
     items: [
-      {
-        label: "Pending Payments",
-        icon: pendingPaymentsIcon,
-        path: "/finance/pending",
-      },
-      {
-        label: "Payment Verification",
-        icon: paymentVerificationIcon,
-        path: "/finance/verification",
-      },
+      { label: "Pending Payments", icon: pendingPaymentsIcon, path: "/finance/pending" },
+      { label: "Payment Verification", icon: paymentVerificationIcon, path: "/finance/verification" },
       {
         label: "Transaction History",
         icon: transactionIcon,
@@ -106,18 +110,14 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Reports",
     items: [
       { label: "All Reports", icon: allReportsIcon, path: "/finance/reports" },
-      {
-        label: "Export Center",
-        icon: exportCenterIcon,
-        path: "/finance/export",
-      },
+      { label: "Export Center", icon: exportCenterIcon, path: "/finance/export" },
     ],
   },
 ];
 
-// ---------------------------------------------------------------------------
-// HELPERS
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   HELPERS
+------------------------------------------------------------------ */
 const formatCurrency = (amount: number): string =>
   `₱${amount.toLocaleString("en-US", {
     minimumFractionDigits: 2,
@@ -146,53 +146,38 @@ const millis = (ts: Timestamp | null): number => {
   }
 };
 
+/** GCash → "Online"; cash → City Hall / Central (tingnan ang lib/paymentLocation) */
+const derivePaymentLocationFromDoc = (data: any): PaymentLocation =>
+  derivePaymentLocation(data.method, data.paymentLocation ?? data.location);
+
 const getStatusClass = (status: TransactionStatus): string =>
   status === "Rejected" ? "status-rejected" : "status-verified";
 
-// ---------------------------------------------------------------------------
-// COMPONENT
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   COMPONENT
+------------------------------------------------------------------ */
 export default function TransactionHistory() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
-    name: "Loading...",
-    role: "finance",
-  });
+  /* Profile ng naka-login na staff — naka-cache sa lahat ng Finance pages,
+     kaya hindi na nagfi-flash ang data ng ibang location paglipat ng tab. */
+  const { profile, ready: userReady } = useStaffProfile();
+  const currentUser: CurrentUser = useMemo(
+    () => ({
+      name: profile?.name ?? "Loading...",
+      role: ((profile?.role || "finance") as RoleSlug),
+      assignedLocation: profile?.assignedLocation ?? null,
+      assignedLocationName: profile?.assignedLocationName ?? null,
+    }),
+    [profile]
+  );
 
   const [rows, setRows] = useState<TransactionRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-
-  /* Current user */
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
-      if (!loggedUser) {
-        setCurrentUser({ name: "Guest", role: "finance" });
-        return;
-      }
-      try {
-        const snap = await getDoc(doc(db, "users", loggedUser.uid));
-        if (snap.exists()) {
-          const data = snap.data();
-          setCurrentUser({
-            name: data.name ?? "Unknown",
-            role: (data.role ?? "finance") as RoleSlug,
-          });
-        } else {
-          setCurrentUser({
-            name: loggedUser.email?.split("@")[0] ?? "Unknown",
-            role: "finance",
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching current user:", err);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
 
   /* Payments listener */
   useEffect(() => {
@@ -229,8 +214,7 @@ export default function TransactionHistory() {
 
             return {
               id: d.id,
-              reference:
-                data.referenceNumber ?? data.paymentReference ?? d.id,
+              reference: data.referenceNumber ?? data.paymentReference ?? d.id,
               orNumber: (data.orNumber as string) ?? null,
               cin: ((data.cin ?? data.violationCin) as string) ?? null,
               plateNo: ((data.plateNo ?? data.plateNumber) as string) ?? null,
@@ -245,22 +229,37 @@ export default function TransactionHistory() {
               status,
               rejectionReason: (data.rejectionReason as string) ?? null,
               violationId: (data.violationId as string) ?? null,
+              violatorUid: (data.violatorUid as string) ?? null,
+              guestId: (data.guestId as string) ?? null,
+              violatorName: (data.violatorName as string) ?? null,
+              paymentLocation: derivePaymentLocationFromDoc(data),
             };
           })
           .filter((r): r is NonNullable<typeof r> => r !== null);
 
-        // Kunin ang kulang na CIN at plate mula sa naka-link na violation.
         const uniqueIds = Array.from(
           new Set(
             base
-              .filter((r) => r.violationId && (!r.cin || !r.plateNo))
+              .filter(
+                (r) =>
+                  r.violationId &&
+                  (!r.cin ||
+                    !r.plateNo ||
+                    (!r.violatorUid && !r.guestId && !r.violatorName))
+              )
               .map((r) => r.violationId as string)
           )
         );
 
         const cache = new Map<
           string,
-          { cin: string | null; plateNo: string | null }
+          {
+            cin: string | null;
+            plateNo: string | null;
+            violatorUid: string | null;
+            guestId: string | null;
+            violatorName: string | null;
+          }
         >();
 
         await Promise.all(
@@ -272,6 +271,9 @@ export default function TransactionHistory() {
                 cache.set(vId, {
                   cin: v.cin ?? null,
                   plateNo: v.plateNo ?? null,
+                  violatorUid: (v.violatorUid as string) ?? null,
+                  guestId: (v.guestId as string) ?? null,
+                  violatorName: (v.violatorName as string) ?? null,
                 });
               }
             } catch (err) {
@@ -287,6 +289,9 @@ export default function TransactionHistory() {
               ...r,
               cin: r.cin ?? linked?.cin ?? null,
               plateNo: r.plateNo ?? linked?.plateNo ?? null,
+              violatorUid: r.violatorUid ?? linked?.violatorUid ?? null,
+              guestId: r.guestId ?? linked?.guestId ?? null,
+              violatorName: r.violatorName ?? linked?.violatorName ?? null,
             };
           })
           .sort((a, b) => millis(b.verifiedAt) - millis(a.verifiedAt));
@@ -332,32 +337,61 @@ export default function TransactionHistory() {
   };
 
   const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
     setIsMenuOpen(false);
   };
 
+  /* Location — Finance staff: sariling location lang (City Hall o Central).
+     Ginagawa dito sa render (hindi sa listener) para hindi na kailangang
+     mag-resubscribe sa Firestore kapag na-load ang user. */
+  const locationRows = useMemo(() => {
+    if (!userReady) return [];
+    if (currentUser.role !== "finance") return rows;
+    return rows.filter((r) =>
+      isInStaffScope(currentUser.assignedLocation, r.paymentLocation)
+    );
+  }, [rows, userReady, currentUser.role, currentUser.assignedLocation]);
+
+  /* Search — OR Number, CIN, plate, reference, at pangalan ng violator */
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return locationRows;
+    return locationRows.filter(
+      (row) =>
+        (row.cin ?? "").toLowerCase().includes(q) ||
+        (row.plateNo ?? "").toLowerCase().includes(q) ||
+        row.reference.toLowerCase().includes(q) ||
+        (row.orNumber ?? "").toLowerCase().includes(q) ||
+        (row.violatorName ?? "").toLowerCase().includes(q)
+    );
+  }, [locationRows, searchQuery]);
+
   /* Pagination */
-  const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE)),
-    [rows.length]
-  );
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedRows = rows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+  const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   return (
-    <div className="finance-page">
+    <div className="finance-page finance-transactions-page">
       <div className="dashboard">
-        {/* SIDEBAR */}
         <aside className="sidebar">
           <div className="sidebar-brand">
             <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
             <div>
               <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Finance Staff</p>
+              <p className="sidebar-brand-role">
+                Finance Staff
+                {currentUser.assignedLocationName && (
+                  <span className="sidebar-brand-location">
+                    {" · "}
+                    {currentUser.assignedLocationName}
+                  </span>
+                )}
+              </p>
             </div>
           </div>
 
@@ -376,7 +410,7 @@ export default function TransactionHistory() {
                         onClick={() => navigate(item.path)}
                       >
                         <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
+                        <span>{item.label}</span>
                       </button>
                     </li>
                   ))}
@@ -386,7 +420,6 @@ export default function TransactionHistory() {
           </nav>
         </aside>
 
-        {/* MAIN CONTENT */}
         <div className="main">
           <header className="main-header">
             <div>
@@ -414,6 +447,8 @@ export default function TransactionHistory() {
                     <p className="dropdown-name">{currentUser.name}</p>
                     <p className="dropdown-role">
                       {ROLE_LABELS[currentUser.role]}
+                      {currentUser.assignedLocationName &&
+                        ` · ${currentUser.assignedLocationName}`}
                     </p>
                   </div>
                   <button
@@ -436,17 +471,38 @@ export default function TransactionHistory() {
           </header>
 
           <main className="main-content">
+            {/* SEARCH */}
+            <div className="search-bar-container">
+              <Search size={18} className="search-bar-icon" />
+              <input
+                type="text"
+                className="search-bar-input"
+                placeholder="Search OR, CIN, plate, reference, or violator..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
             <div className="card">
-              <p className="card-eyebrow">Sector 3 · All records</p>
+              <p className="card-eyebrow">
+                Sector 3 ·{" "}
+                {currentUser.role === "finance" && currentUser.assignedLocation
+                  ? `${staffScopeLabel(currentUser.assignedLocation)} records`
+                  : "All records"}
+              </p>
               <h2 className="card-title">History</h2>
 
-              {loading ? (
+              {loading || !userReady ? (
                 <div className="table-loading">
                   <p>Loading transactions...</p>
                 </div>
-              ) : rows.length === 0 ? (
+              ) : paginatedRows.length === 0 ? (
                 <div className="table-empty">
-                  <p>No transaction history yet.</p>
+                  <p>
+                    {locationRows.length === 0
+                      ? "No transaction history yet."
+                      : "No transactions match your search."}
+                  </p>
                 </div>
               ) : (
                 <>
@@ -458,6 +514,7 @@ export default function TransactionHistory() {
                           <th>OR Number</th>
                           <th>CIN</th>
                           <th>Plate No.</th>
+                          <th>Violator</th>
                           <th>Amount</th>
                           <th>Method</th>
                           <th>Status</th>
@@ -483,6 +540,29 @@ export default function TransactionHistory() {
                             </td>
                             <td className="cell-plate">
                               {row.plateNo ?? (
+                                <span className="cell-empty">—</span>
+                              )}
+                            </td>
+                            {/* Violator — pangalan + Registered/Guest tag (walang ID) */}
+                            <td className="cell-violator">
+                              {row.violatorName || row.violatorUid || row.guestId ? (
+                                <div className="violator-cell">
+                                  {row.violatorName && (
+                                    <span className="violator-name">
+                                      {row.violatorName}
+                                    </span>
+                                  )}
+                                  {(row.violatorUid || row.guestId) && (
+                                    <span
+                                      className={`violator-tag ${
+                                        row.violatorUid ? "uid" : "guest"
+                                      }`}
+                                    >
+                                      {row.violatorUid ? "Registered" : "Guest"}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
                                 <span className="cell-empty">—</span>
                               )}
                             </td>
@@ -521,15 +601,15 @@ export default function TransactionHistory() {
                     <button
                       type="button"
                       className="pagination-btn"
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(Math.max(1, safePage - 1))}
+                      disabled={safePage === 1}
                     >
                       <ChevronLeft size={16} />
                       Previous
                     </button>
 
                     <div className="pagination-info">
-                      <span className="pagination-page">{currentPage}</span>
+                      <span className="pagination-page">{safePage}</span>
                       <span className="pagination-sep">
                         of {totalPages} pages
                       </span>
@@ -539,9 +619,9 @@ export default function TransactionHistory() {
                       type="button"
                       className="pagination-btn"
                       onClick={() =>
-                        setCurrentPage((p) => Math.min(totalPages, p + 1))
+                        setCurrentPage(Math.min(totalPages, safePage + 1))
                       }
-                      disabled={currentPage === totalPages}
+                      disabled={safePage === totalPages}
                     >
                       Next
                       <ChevronRight size={16} />

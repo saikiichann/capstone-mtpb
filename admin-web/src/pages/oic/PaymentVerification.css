@@ -503,7 +503,7 @@
 ================================================================== */
 .payment-verification-page .metric-grid-three {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
   width: 100%;
 }
@@ -657,10 +657,77 @@
   border: 1px solid #3B82F6;
 }
 
+.payment-verification-page .location-online {
+  background: #EDE9FE;
+  color: #5B21B6;
+  border: 1px solid #8B5CF6;
+}
+
 .payment-verification-page .location-unknown {
   background: #F3F4F6;
   color: #6B7280;
   border: 1px solid #D1D5DB;
+}
+
+/* ==================================================================
+   VIOLATOR ID COLUMN
+================================================================== */
+.payment-verification-page .cell-violator {
+  min-width: 150px;
+  white-space: normal;
+}
+
+.payment-verification-page .violator-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.payment-verification-page .violator-name {
+  font-weight: 500;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.payment-verification-page .violator-tag {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.payment-verification-page .violator-tag.uid {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.payment-verification-page .violator-tag.guest {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+/* Buong UID/guestId nasa tooltip (title) kapag pinutol */
+.payment-verification-page .violator-id {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "Courier New", monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.payment-verification-page .cell-reference > span[title] {
+  display: inline-flex;
+  cursor: help;
 }
 
 /* ==================================================================
@@ -836,13 +903,13 @@
 ================================================================== */
 @media (max-width: 1400px) {
   .payment-verification-page .metric-grid-three {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
 }
 
 @media (max-width: 1024px) {
   .payment-verification-page .metric-grid-three {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
 
   .payment-verification-page .card-header-row {
@@ -857,7 +924,7 @@
 
 @media (max-width: 768px) {
   .payment-verification-page .metric-grid-three {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
 }
 
@@ -882,4 +949,4 @@
   .payment-verification-page .scan-actions button {
     width: 100%;
   }
-}
+}

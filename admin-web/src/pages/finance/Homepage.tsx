@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { KeyRound } from "lucide-react";
 import {
@@ -10,22 +10,21 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { signOut as firebaseSignOut } from "firebase/auth";
 import {
-  addDoc,
   collection,
-  doc,
-  getDoc,
-  getDocs,
   onSnapshot,
   orderBy,
   query,
-  serverTimestamp,
   Timestamp,
-  updateDoc,
-  where,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { useStaffProfile } from "../../lib/useStaffProfile";
+import {
+  derivePaymentLocation,
+  isInStaffScope,
+  type PaymentLocation,
+} from "../../lib/paymentLocation";
 import "./Homepage.css";
 
 // ---------------------------------------------------------------------------
@@ -55,9 +54,14 @@ type RoleSlug =
   | "clamping-staff"
   | "impounding-staff";
 
+// ⚠️ WALANG "Both" — dalawa lang
+type AssignedLocation = "City Hall" | "Central";
+
 type CurrentUser = {
   name: string;
   role: RoleSlug;
+  assignedLocation: AssignedLocation | null;  // "City Hall" | "Central" — para sa filter
+  assignedLocationName: string | null;        // buong pangalan — para sa display
 };
 
 type PaymentPriority = "High" | "Medium" | "Normal";
@@ -73,10 +77,14 @@ type PaymentRow = {
   method: PaymentMethod;
   priority: PaymentPriority;
   status: PaymentStatus;
+  paymentLocation: PaymentLocation;
+  recordedAt: Timestamp | null;
+  verifiedAt: Timestamp | null;
 };
 
 type Metrics = {
   pendingSettlement: number;
+  unpaidCount: number;
   awaitingVerification: number;
   verified: number;
   overdue: number;
@@ -138,12 +146,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-const INITIAL_METRICS: Metrics = {
-  pendingSettlement: 0,
-  awaitingVerification: 0,
-  verified: 0,
-  overdue: 0,
-};
+const PAYMENT_DUE_HOURS = 24;
 
 // ---------------------------------------------------------------------------
 // HELPERS
@@ -166,6 +169,22 @@ const getPriorityClass = (priority: PaymentPriority): string => {
   return map[priority] ?? "";
 };
 
+/** Lumampas na ba sa 24-hour grace period mula recordedAt? */
+const isOverdue = (recordedAt: Timestamp | null): boolean => {
+  if (!recordedAt) return false;
+  try {
+    return Date.now() - recordedAt.toMillis() > PAYMENT_DUE_HOURS * 3600 * 1000;
+  } catch {
+    return false;
+  }
+};
+
+/** GCash → "Online"; cash → City Hall / Central (tingnan ang lib/paymentLocation).
+ *  Violations doc: paymentMethod + paymentLocation (HINDI ang `location` —
+ *  street iyon kung saan na-clamp). */
+const deriveLocation = (data: any): PaymentLocation =>
+  derivePaymentLocation(data.paymentMethod, data.paymentLocation);
+
 // ---------------------------------------------------------------------------
 // COMPONENT
 // ---------------------------------------------------------------------------
@@ -174,125 +193,50 @@ export default function FinanceHomepage() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
-    name: "Loading...",
-    role: "finance",
-  });
+  /* Profile ng naka-login na staff — naka-cache sa lahat ng Finance pages,
+     kaya hindi na nagfi-flash ang data ng ibang location paglipat ng tab. */
+  const { profile, ready: userReady } = useStaffProfile();
+  const currentUser: CurrentUser = useMemo(
+    () => ({
+      name: profile?.name ?? "Loading...",
+      role: ((profile?.role || "finance") as RoleSlug),
+      assignedLocation: profile?.assignedLocation ?? null,
+      assignedLocationName: profile?.assignedLocationName ?? null,
+    }),
+    [profile]
+  );
 
-  const [metrics, setMetrics] = useState<Metrics>(INITIAL_METRICS);
-  const [pendingPayments, setPendingPayments] = useState<PaymentRow[]>([]);
-  const [revenueData, setRevenueData] = useState<RevenuePoint[]>([]);
+  const [allRows, setAllRows] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actioning, setActioning] = useState<string | null>(null);
 
   // -----------------------------------------------------------------------
-  // EFFECT: Fetch current user
+  // EFFECT: Fetch violations — raw lang; ang location filter at metrics
+  // ay nasa useMemo sa ibaba (hindi na nagre-resubscribe paglipat ng tab)
   // -----------------------------------------------------------------------
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
-      if (!loggedUser) {
-        setCurrentUser({ name: "Guest", role: "finance" });
-        return;
-      }
-      try {
-        const userDocRef = doc(db, "users", loggedUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const data = userDocSnap.data();
-          setCurrentUser({
-            name: data.name ?? "Unknown",
-            role: (data.role ?? "finance") as RoleSlug,
-          });
-        } else {
-          setCurrentUser({
-            name: loggedUser.email?.split("@")[0] ?? "Unknown",
-            role: "finance",
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching current user:", err);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-  useEffect(() => {
-    const ref = collection(db, "violations");
-    const q = query(ref, orderBy("recordedAt", "desc"));
+    const q = query(collection(db, "violations"), orderBy("recordedAt", "desc"));
 
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        const allPayments: (PaymentRow & { verifiedAt?: Timestamp })[] = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            reference: data.paymentReference ?? data.cin ?? "—",
-            cin: data.cin ?? "—",
-            plateNo: data.plateNo ?? "—",
-            amount: Number(data.fineAmount ?? 0),
-            method: (data.paymentMethod ?? "Cash") as PaymentMethod,
-            priority: "Normal" as PaymentPriority,
-            status: (data.paymentStatus ?? "Unpaid") as PaymentStatus,
-            verifiedAt: data.verifiedAt ?? null,
-          };
-        });
-
-        // Compute metrics
-        const newMetrics: Metrics = { ...INITIAL_METRICS };
-        let pendingSum = 0;
-
-        allPayments.forEach((p) => {
-          if (p.status === "Unpaid") {
-            newMetrics.pendingSettlement += p.amount;
-          }
-          if (p.status === "Pending Verification") {
-            newMetrics.awaitingVerification++;
-          }
-          if (p.status === "Verified") {
-            newMetrics.verified++;
-          }
-          if (p.status === "Rejected") {
-            newMetrics.overdue++;
-          }
-        });
-
-        setMetrics(newMetrics);
-
-        // Table only shows pending verification (max 10)
-        const pendingOnly = allPayments
-          .filter((p) => p.status === "Pending Verification")
-          .slice(0, 10);
-        setPendingPayments(pendingOnly);
-
-        // Compute revenue last 7 days (from Verified violations)
-        const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-        const revenueMap: Record<string, number> = {};
-        days.forEach((d) => (revenueMap[d] = 0));
-
-        const today = new Date();
-        allPayments.forEach((p) => {
-          if (p.status === "Verified" && p.verifiedAt) {
-            try {
-              const date = p.verifiedAt.toDate();
-              const diffDays = Math.floor(
-                (today.getTime() - date.getTime()) / 86400000
-              );
-              if (diffDays >= 0 && diffDays <= 6) {
-                const jsDay = date.getDay();
-                const dayLabel = days[(jsDay + 6) % 7];
-                if (dayLabel in revenueMap) revenueMap[dayLabel] += p.amount;
-              }
-            } catch {
-              // skip
-            }
-          }
-        });
-
-        const revenueArr: RevenuePoint[] = days.map((day) => ({
-          day,
-          value: revenueMap[day],
-        }));
-        setRevenueData(revenueArr);
+        setAllRows(
+          snap.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              reference: data.paymentReference ?? data.cin ?? "—",
+              cin: data.cin ?? "—",
+              plateNo: data.plateNo ?? "—",
+              amount: Number(data.fineAmount ?? 0),
+              method: (data.paymentMethod ?? "Cash") as PaymentMethod,
+              priority: "Normal" as PaymentPriority,
+              status: (data.paymentStatus ?? "Unpaid") as PaymentStatus,
+              paymentLocation: deriveLocation(data),
+              recordedAt: (data.recordedAt as Timestamp) ?? null,
+              verifiedAt: (data.verifiedAt as Timestamp) ?? null,
+            };
+          })
+        );
         setLoading(false);
       },
       (err) => {
@@ -302,6 +246,72 @@ export default function FinanceHomepage() {
     );
     return () => unsubscribe();
   }, []);
+
+  // -----------------------------------------------------------------------
+  // DERIVED: location filter + metrics + table + chart
+  //
+  // Unpaid — wala pang location (hindi pa nagbabayad), kaya hindi
+  //   fini-filter. Pareho ng Pending Payments page.
+  // Pending Verification / Verified — may location na, kaya sariling
+  //   location lang ng Finance staff ang makikita.
+  // -----------------------------------------------------------------------
+  const { metrics, pendingPayments, revenueData } = useMemo(() => {
+    const empty = {
+      metrics: {
+        pendingSettlement: 0,
+        unpaidCount: 0,
+        awaitingVerification: 0,
+        verified: 0,
+        overdue: 0,
+      } as Metrics,
+      pendingPayments: [] as PaymentRow[],
+      revenueData: [] as RevenuePoint[],
+    };
+    if (!userReady) return empty;
+
+    // Finance: sariling sakop lang (City Hall; o Central + GCash)
+    const filterByLocation = currentUser.role === "finance";
+    const inMyLocation = (p: PaymentRow) =>
+      !filterByLocation || isInStaffScope(currentUser.assignedLocation, p.paymentLocation);
+
+    const unpaid = allRows.filter((p) => p.status === "Unpaid");
+    const located = allRows.filter((p) => p.status !== "Unpaid" && inMyLocation(p));
+
+    const m: Metrics = {
+      pendingSettlement: unpaid.reduce((sum, p) => sum + p.amount, 0),
+      unpaidCount: unpaid.length,
+      awaitingVerification: located.filter((p) => p.status === "Pending Verification").length,
+      verified: located.filter((p) => p.status === "Verified").length,
+      overdue: unpaid.filter((p) => isOverdue(p.recordedAt)).length,
+    };
+
+    const pending = located
+      .filter((p) => p.status === "Pending Verification")
+      .slice(0, 10);
+
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const revenueMap: Record<string, number> = {};
+    days.forEach((d) => (revenueMap[d] = 0));
+    const today = new Date();
+    located.forEach((p) => {
+      if (p.status !== "Verified" || !p.verifiedAt) return;
+      try {
+        const date = p.verifiedAt.toDate();
+        const diffDays = Math.floor((today.getTime() - date.getTime()) / 86400000);
+        if (diffDays >= 0 && diffDays <= 6) {
+          revenueMap[days[(date.getDay() + 6) % 7]] += p.amount;
+        }
+      } catch {
+        // skip
+      }
+    });
+
+    return {
+      metrics: m,
+      pendingPayments: pending,
+      revenueData: days.map((day) => ({ day, value: revenueMap[day] })),
+    };
+  }, [allRows, userReady, currentUser.role, currentUser.assignedLocation]);
 
   // -----------------------------------------------------------------------
   // EFFECT: Click-outside for dropdown
@@ -339,76 +349,11 @@ export default function FinanceHomepage() {
     setIsMenuOpen(false);
   };
 
-  const handlePaymentAction = async (
-    row: PaymentRow,
-    action: "Verified" | "Rejected"
-  ) => {
-    setActioning(row.id);
-
-    try {
-      const violationRef = doc(db, "violations", row.id);
-      const violationSnap = await getDoc(violationRef);
-      const violationData = violationSnap.data();
-
-      // 1. Update violations doc
-      await updateDoc(violationRef, {
-        paymentStatus: action,
-        verifiedBy: currentUser.name,
-        verifiedAt: serverTimestamp(),
-      });
-
-      // 2. If verified, update clamps doc
-      if (action === "Verified" && violationData) {
-        let clampId: string | null = null;
-        if (violationData.clampId) clampId = violationData.clampId;
-        else if (violationData.clampQrId) clampId = violationData.clampQrId;
-
-        if (clampId) {
-          const clampQuery = query(
-            collection(db, "clamps"),
-            where("clampId", "==", clampId)
-          );
-          const clampSnap = await getDocs(clampQuery);
-
-          if (!clampSnap.empty) {
-            const clampDocRef = clampSnap.docs[0].ref;
-            await updateDoc(clampDocRef, {
-              status: "paid",
-              paidAt: serverTimestamp(),
-            });
-          }
-        }
-      }
-
-      // 3. Log to auditLogs
-      await addDoc(collection(db, "auditLogs"), {
-        userName: currentUser.name,
-        action: `${action === "Verified" ? "approved" : "rejected"} payment ${row.cin}`,
-        record: row.cin,
-        type: "payment-verification",
-        metadata: {
-          cin: row.cin,
-          amount: row.amount,
-          method: row.method,
-          newStatus: action,
-        },
-        timestamp: serverTimestamp(),
-      });
-
-      console.log(`Violation ${row.cin} payment ${action}.`);
-    } catch (err: any) {
-      console.error("Error updating payment:", err);
-      alert(err.message || "Failed to update payment.");
-    } finally {
-      setActioning(null);
-    }
-  };
-
   const metricCards = [
     {
       title: "Pending Settlement",
       value: formatCurrency(metrics.pendingSettlement),
-      subtitle: `${pendingPayments.length} unpaid violations`,
+      subtitle: `${metrics.unpaidCount} unpaid violation${metrics.unpaidCount === 1 ? "" : "s"}`,
     },
     {
       title: "Awaiting Verification",
@@ -423,7 +368,7 @@ export default function FinanceHomepage() {
     {
       title: "Overdue",
       value: String(metrics.overdue),
-      subtitle: "Past due date",
+      subtitle: `Unpaid past ${PAYMENT_DUE_HOURS} hrs`,
     },
   ];
 
@@ -439,7 +384,16 @@ export default function FinanceHomepage() {
             <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
             <div>
               <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Finance Staff</p>
+              <p className="sidebar-brand-role">
+                Finance Staff
+                {/* ⚠️ BAGO: Location indicator */}
+                {currentUser.assignedLocationName && (
+                  <span className="sidebar-brand-location">
+                    {" · "}
+                    {currentUser.assignedLocationName}
+                  </span>
+                )}
+              </p>
             </div>
           </div>
 
@@ -494,6 +448,7 @@ export default function FinanceHomepage() {
                     <p className="dropdown-name">{currentUser.name}</p>
                     <p className="dropdown-role">
                       {ROLE_LABELS[currentUser.role]}
+                      {currentUser.assignedLocationName && ` · ${currentUser.assignedLocationName}`}
                     </p>
                   </div>
                   <button className="dropdown-item" onClick={handleChangePassword}>
@@ -548,7 +503,7 @@ export default function FinanceHomepage() {
                     tickFormatter={(value) => formatCompactCurrency(value)}
                   />
                   <Tooltip
-                    formatter={(value: number) => formatCurrency(value)}
+                    formatter={(value) => formatCurrency(Number(value))}
                     cursor={{ fill: "rgba(59, 130, 246, 0.08)" }}
                   />
                   <Bar dataKey="value" fill="#3B82F6" radius={[4, 4, 0, 0]} maxBarSize={60} />
@@ -561,7 +516,7 @@ export default function FinanceHomepage() {
               <p className="card-eyebrow">Sector 3</p>
               <h2 className="card-title">Payment Verification</h2>
 
-              {loading ? (
+              {loading || !userReady ? (
                 <div className="table-loading">
                   <p>Loading payments...</p>
                 </div>
@@ -599,21 +554,15 @@ export default function FinanceHomepage() {
                             </span>
                           </td>
                           <td className="cell-actions">
+                            {/* Approve/Reject ay sa Payment Verification page —
+                                doon ang segregation-of-duties check, rejection
+                                reason, OR, at pag-update ng payment record. */}
                             <button
                               type="button"
                               className="btn-approve"
-                              onClick={() => handlePaymentAction(row, "Verified")}
-                              disabled={actioning === row.id}
+                              onClick={() => navigate("/finance/verification")}
                             >
-                              {actioning === row.id ? "..." : "Approve"}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-reject"
-                              onClick={() => handlePaymentAction(row, "Rejected")}
-                              disabled={actioning === row.id}
-                            >
-                              {actioning === row.id ? "..." : "Reject"}
+                              Review
                             </button>
                           </td>
                         </tr>

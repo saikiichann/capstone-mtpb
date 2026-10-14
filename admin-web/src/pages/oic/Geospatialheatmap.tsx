@@ -22,7 +22,7 @@ import {
   where,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
-import "./GeospatialHeatmap.css";
+import "./Geospatialheatmap.css";
 
 import logo from "../../assets/mtpb-logo.png";
 import avatarImg from "../../assets/user.png";
@@ -814,4 +814,4 @@ export default function GeospatialHeatmap() {
       </div>
     </div>
   );
-}
+}

@@ -1,448 +1,529 @@
 /* ==================================================================
-   PendingPayments.css
-   Extends Homepage.css (finance) — Pending Payments styles
-   + Cash Payment modal
+   PendingPayments.css (Finance)
+   Sidebar, header at avatar — galing pa rin sa Finance Homepage.css
+   (.finance-page). Ang CONTENT styles dito (toolbar, table, pills,
+   impound badges, cash modal) ay kopya ng OIC PendingPayments.css
+   para pareho ang itsura ng dalawang page.
+
+   Wrapper: <div className="finance-page finance-pending-page">
+   Hindi ".pending-payments-page" — yun ang prefix ng OIC CSS, at kung
+   gagamitin din dito, tatamaan ng OIC sidebar styles ang Finance.
+
+   Kapag may binago sa OIC content CSS, gawin din dito (palitan lang
+   ang prefix ng ".finance-page.finance-pending-page").
+
+   Ang .btn-subject-impound, .btn-danger at .impound-warning ay hindi
+   ginagamit sa Finance (OIC-only ang impound action) — naiwan lang
+   para identical pa rin sa OIC file.
 ================================================================== */
+
+/* ==================================================================
+   ⚠️ BAGO: LOCATION INDICATOR SA SIDEBAR (Finance assignment)
+================================================================== */
+.finance-page .sidebar-brand-location {
+  font-size: 11px;
+  color: #94A3B8;
+  margin-top: 2px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+/* ==================================================================
+   MAIN CONTENT + CARD
+================================================================== */
+.finance-page.finance-pending-page .main-content {
+  flex: 1;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.finance-page.finance-pending-page .card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #F3F4F6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  width: 100%;
+}
+
+.finance-page.finance-pending-page .card-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.finance-page.finance-pending-page .card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
 
 /* ==================================================================
    METRIC CARDS (3 columns)
 ================================================================== */
-.finance-page .metric-grid-three {
+.finance-page.finance-pending-page .metric-grid-three {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   width: 100%;
 }
 
-.finance-page .metric-grid-three .metric-card {
+.finance-page.finance-pending-page .metric-grid-three .metric-card {
   padding: 20px 24px;
 }
 
-.finance-page .metric-grid-three .metric-title {
+.finance-page.finance-pending-page .metric-grid-three .metric-title {
   font-size: 14px;
   font-weight: 600;
   color: #111827;
   margin: 0;
 }
 
-.finance-page .metric-grid-three .metric-value {
-  font-size: 32px;
+.finance-page.finance-pending-page .metric-grid-three .metric-value {
+  font-size: 36px;
   font-weight: 700;
   color: #000;
-  margin: 8px 0 4px;
-  line-height: 1.1;
+  margin: 8px 0 0;
+  line-height: 1;
 }
 
 /* ==================================================================
-   TABLE — global cell alignment
-   All th + td are left-aligned by default. The Action column gets
-   its own overrides below.
+   TABLE TOOLBAR — Search + Filters
 ================================================================== */
-.finance-page .data-table th,
-.finance-page .data-table td {
+.finance-page.finance-pending-page .table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px;
+  background: #F9FAFB;
+  border: 1px solid #F3F4F6;
+  border-radius: 8px;
+}
+
+/* Search box */
+.finance-page.finance-pending-page .toolbar-search {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+  display: flex;
+  align-items: center;
+}
+
+.finance-page.finance-pending-page .toolbar-search-icon {
+  position: absolute;
+  left: 12px;
+  color: #9CA3AF;
+  pointer-events: none;
+}
+
+.finance-page.finance-pending-page .toolbar-search-input {
+  width: 100%;
+  padding: 9px 36px 9px 36px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #111827;
+  background: #FFFFFF;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+
+.finance-page.finance-pending-page .toolbar-search-input:focus {
+  outline: none;
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.finance-page.finance-pending-page .toolbar-search-input::placeholder {
+  color: #9CA3AF;
+}
+
+.finance-page.finance-pending-page .toolbar-search-clear {
+  position: absolute;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #6B7280;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.finance-page.finance-pending-page .toolbar-search-clear:hover {
+  background: #E5E7EB;
+  color: #111827;
+}
+
+/* ==================================================================
+   DROPDOWN FILTERS — Custom arrow with proper spacing
+================================================================== */
+.finance-page.finance-pending-page .toolbar-select {
+  padding: 9px 40px 9px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #374151;
+  background-color: #FFFFFF;
+  cursor: pointer;
+  min-width: 180px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+}
+
+.finance-page.finance-pending-page .toolbar-select:hover {
+  border-color: #9CA3AF;
+}
+
+.finance-page.finance-pending-page .toolbar-select:focus {
+  outline: none;
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Result count line */
+.finance-page.finance-pending-page .toolbar-result-count {
+  font-size: 12px;
+  color: #6B7280;
+  margin: 10px 0 0;
+  font-weight: 500;
+}
+
+.finance-page.finance-pending-page .toolbar-result-count strong {
+  color: #111827;
+  font-weight: 700;
+}
+
+/* ==================================================================
+   TABLE
+================================================================== */
+.finance-page.finance-pending-page .table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.finance-page.finance-pending-page .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin-top: 16px;
+}
+
+.finance-page.finance-pending-page .data-table thead {
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.finance-page.finance-pending-page .data-table th {
   text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  padding: 12px 8px;
+  white-space: nowrap;
 }
 
-/* ==================================================================
-   TABLE CELLS — cell-specific styling
-================================================================== */
-.finance-page .cell-due-date {
+.finance-page.finance-pending-page .data-table td {
+  padding: 14px 8px;
+  color: #374151;
+  vertical-align: middle;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.finance-page.finance-pending-page .data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.finance-page.finance-pending-page .data-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+.finance-page.finance-pending-page .cin-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.finance-page.finance-pending-page .cell-violation-no {
+  color: #111827;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.finance-page.finance-pending-page .cell-plate {
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.finance-page.finance-pending-page .cell-amount {
+  color: #111827;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.finance-page.finance-pending-page .cell-due-date {
   color: #374151;
   white-space: nowrap;
 }
 
-.finance-page .cell-days-left {
+.finance-page.finance-pending-page .cell-days-left {
   color: #16A34A;
   font-weight: 600;
   white-space: nowrap;
 }
 
-.finance-page .cell-days-left.text-red {
+.finance-page.finance-pending-page .cell-days-left.text-red {
   color: #DC2626;
 }
 
-.finance-page .cell-violation-no {
+.finance-page.finance-pending-page .cell-action {
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   STATUS PILLS
+================================================================== */
+.finance-page.finance-pending-page .status-pill {
+  display: inline-block;
+  padding: 5px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
   font-weight: 600;
-  color: #111827;
   white-space: nowrap;
 }
 
-/* ==================================================================
-   ACTION COLUMN — pulled slightly left, centered content
-   Right padding shifts the visual center toward the left so the
-   button doesn't hug the far-right edge of the table.
-================================================================== */
-.finance-page .data-table th:last-child,
-.finance-page .data-table td.cell-action {
-  width: 160px;
-  min-width: 160px;
-  max-width: 160px;
-  text-align: center;
-  padding-right: 40px;
-}
-
-.finance-page .cell-action {
-  white-space: nowrap;
-}
-
-/* ==================================================================
-   STATUS PILLS (Pending Payments)
-================================================================== */
-.finance-page .status-unpaid {
+.finance-page.finance-pending-page .status-unpaid {
   background: #FEF9C3;
+  border-color: #EAB308;
   color: #854D0E;
 }
 
-.finance-page .status-overdue {
+.finance-page.finance-pending-page .status-overdue {
+  background: #FEE2E2;
+  border-color: #EF4444;
+  color: #991B1B;
+}
+
+/* ==================================================================
+   IMPOUND BADGES (OIC)
+================================================================== */
+.finance-page.finance-pending-page .badge-impound {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  margin-left: 8px;
   background: #FEE2E2;
   color: #991B1B;
+  border: 1px solid #DC2626;
+}
+
+.finance-page.finance-pending-page .badge-impound-auto {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  margin-left: 8px;
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #F59E0B;
+}
+
+.finance-page.finance-pending-page .badge-impounded {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  margin-left: 8px;
+  background: #E5E7EB;
+  color: #374151;
+  border: 1px solid #9CA3AF;
 }
 
 /* ==================================================================
    CASH PAYMENT BUTTON
 ================================================================== */
-.finance-page .btn-cash-payment {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 16px;
+.finance-page.finance-pending-page .btn-cash-payment {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: none;
   background: #16A34A;
   color: #FFFFFF;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   font-family: inherit;
-  border: none;
-  border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s ease, transform 0.05s ease;
-}
-
-.finance-page .btn-cash-payment:hover:not(:disabled) {
-  background: #15803D;
-}
-
-.finance-page .btn-cash-payment:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-.finance-page .btn-cash-payment:disabled {
-  background: #9CA3AF;
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-/* ==================================================================
-   CASH PAYMENT MODAL
-================================================================== */
-.finance-page .modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-}
-
-.finance-page .modal-content {
-  background: #FFFFFF;
-  border-radius: 14px;
-  width: 100%;
-  max-width: 480px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
-}
-
-.finance-page .modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 20px 24px;
-  border-bottom: 1px solid #F3F4F6;
-}
-
-.finance-page .modal-title {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 700;
-  color: #111827;
-}
-
-.finance-page .modal-close-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: transparent;
-  color: #6B7280;
-  border-radius: 6px;
-  cursor: pointer;
   transition: background 0.15s ease;
 }
 
-.finance-page .modal-close-btn:hover {
-  background: #F3F4F6;
-  color: #111827;
+.finance-page.finance-pending-page .btn-cash-payment:hover {
+  background: #15803D;
 }
 
-.finance-page .modal-body {
-  padding: 20px 24px;
+/* ==================================================================
+   SUBJECT TO IMPOUND BUTTON (OIC)
+================================================================== */
+.finance-page.finance-pending-page .btn-subject-impound {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #DC2626;
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-left: 8px;
+  transition: background 0.15s ease;
 }
 
-.finance-page .modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 24px 20px;
+.finance-page.finance-pending-page .btn-subject-impound:hover {
+  background: #B91C1C;
 }
 
-/* ------------------------------------------------------------------
-   REFERENCE PREVIEW BOX (before save)
------------------------------------------------------------------- */
-.finance-page .cash-ref-preview {
-  background: #EFF6FF;
-  border: 1px dashed #93C5FD;
-  border-radius: 10px;
+.finance-page.finance-pending-page .btn-subject-impound:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==================================================================
+   DANGER BUTTON (impound modal)
+================================================================== */
+.finance-page.finance-pending-page .btn-danger {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #DC2626;
+  color: #FFFFFF;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.finance-page.finance-pending-page .btn-danger:hover:not(:disabled) {
+  background: #B91C1C;
+}
+
+.finance-page.finance-pending-page .btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ==================================================================
+   IMPOUND WARNING BOX (impound modal)
+================================================================== */
+.finance-page.finance-pending-page .impound-warning {
+  background: #FEF3C7;
+  border: 1px solid #F59E0B;
+  border-radius: 8px;
   padding: 14px 16px;
   margin-bottom: 16px;
 }
 
-.finance-page .cash-ref-preview-label {
-  margin: 0 0 4px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #1D4ED8;
-}
-
-.finance-page .cash-ref-preview-hint {
-  margin: 0;
-  font-size: 12px;
-  color: #64748B;
-  font-style: italic;
-}
-
-/* ------------------------------------------------------------------
-   REFERENCE BOX (after save)
------------------------------------------------------------------- */
-.finance-page .cash-reference-box {
-  background: #DBEAFE;
-  border-radius: 10px;
-  padding: 18px 20px;
-  margin-bottom: 16px;
-}
-
-.finance-page .cash-reference-box.cash-reference-saved {
-  background: #EFF6FF;
-  border: 1px dashed #93C5FD;
-}
-
-.finance-page .cash-reference-label {
-  margin: 0 0 6px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #1D4ED8;
-}
-
-.finance-page .cash-reference-value {
-  margin: 0;
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  color: #1E3A8A;
-  font-family: "Courier New", monospace;
-}
-
-.finance-page .cash-saved-note {
-  margin: 0 0 8px;
+.finance-page.finance-pending-page .impound-warning p {
   font-size: 13px;
+  color: #92400E;
   line-height: 1.5;
-  color: #374151;
+  margin: 0 0 8px;
 }
 
-/* ------------------------------------------------------------------
-   SUMMARY
------------------------------------------------------------------- */
-.finance-page .cash-summary {
-  background: #F3F4F6;
-  border-radius: 10px;
-  padding: 16px 18px;
-  margin-bottom: 20px;
+.finance-page.finance-pending-page .impound-warning p:last-child {
+  margin-bottom: 0;
 }
 
-.finance-page .cash-summary-row {
+.finance-page.finance-pending-page .impound-warning strong {
+  color: #78350F;
+}
+
+/* ==================================================================
+   CASH SUMMARY — Amount in Words
+================================================================== */
+.finance-page.finance-pending-page .cash-summary-words {
+  color: #4B5563 !important;
+  font-size: 12px;
+  font-style: italic;
+  font-weight: 500;
+  text-align: right;
+  max-width: 60%;
+  word-break: break-word;
+}
+
+/* ==================================================================
+   CASH SAVED HINT (success state)
+================================================================== */
+.finance-page.finance-pending-page .cash-saved-hint {
+  background: #EFF6FF;
+  border-left: 3px solid #2563EB;
+  padding: 10px 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #1E40AF;
+  border-radius: 4px;
+  line-height: 1.5;
+}
+
+/* ==================================================================
+   LOADING / EMPTY
+================================================================== */
+.finance-page.finance-pending-page .table-loading,
+.finance-page.finance-pending-page .table-empty {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  font-size: 13px;
+  justify-content: center;
+  padding: 40px 20px;
   color: #6B7280;
-}
-
-.finance-page .cash-summary-row + .cash-summary-row {
-  margin-top: 10px;
-}
-
-.finance-page .cash-summary-row strong {
-  color: #111827;
-  font-weight: 700;
-}
-
-.finance-page .cash-summary-amount {
-  color: #16A34A !important;
-  font-size: 15px;
-}
-
-/* ------------------------------------------------------------------
-   FORM
------------------------------------------------------------------- */
-.finance-page .form-group {
-  margin-bottom: 14px;
-}
-
-.finance-page .form-group label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #374151;
-}
-
-.finance-page .required {
-  color: #DC2626;
-}
-
-.finance-page .form-input {
-  width: 100%;
-  padding: 11px 14px;
-  border: 1px solid #D1D5DB;
-  border-radius: 8px;
   font-size: 14px;
-  font-family: inherit;
-  color: #111827;
-  background: #FFFFFF;
-  outline: none;
-  box-sizing: border-box;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.finance-page .form-input:focus {
-  border-color: #2563EB;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
-}
-
-.finance-page .form-input:disabled {
-  background: #F9FAFB;
-  color: #9CA3AF;
-}
-
-.finance-page .form-hint {
-  display: block;
-  margin-top: 6px;
-  font-size: 12px;
-  color: #6B7280;
-  line-height: 1.4;
-}
-
-.finance-page .form-error {
-  margin: 10px 0 12px;
-  padding: 10px 12px;
-  background: #FEF2F2;
-  border: 1px solid #FECACA;
-  border-radius: 6px;
-  font-size: 13px;
-  line-height: 1.45;
-  color: #B91C1C;
-}
-
-.finance-page .cash-change-line {
-  margin: 0 0 12px;
-  font-size: 14px;
-  color: #374151;
-}
-
-.finance-page .cash-change-line strong {
-  color: #047857;
-  font-weight: 700;
-}
-
-.finance-page .modal-note {
-  margin: 12px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: #6B7280;
-}
-
-/* ------------------------------------------------------------------
-   HIDE NATIVE NUMBER INPUT SPINNERS
------------------------------------------------------------------- */
-.finance-page input[type="number"]::-webkit-outer-spin-button,
-.finance-page input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  appearance: none;
+.finance-page.finance-pending-page .table-loading p,
+.finance-page.finance-pending-page .table-empty p {
   margin: 0;
-}
-
-.finance-page input[type="number"] {
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-/* ------------------------------------------------------------------
-   MODAL BUTTONS
------------------------------------------------------------------- */
-.finance-page .btn-primary,
-.finance-page .btn-secondary {
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.finance-page .btn-primary {
-  background: #1D4ED8;
-  color: #FFFFFF;
-  border: none;
-}
-
-.finance-page .btn-primary:hover:not(:disabled) {
-  background: #1E40AF;
-}
-
-.finance-page .btn-secondary {
-  background: #FFFFFF;
-  color: #374151;
-  border: 1px solid #D1D5DB;
-}
-
-.finance-page .btn-secondary:hover:not(:disabled) {
-  background: #F9FAFB;
-  border-color: #9CA3AF;
-}
-
-.finance-page .btn-primary:disabled,
-.finance-page .btn-secondary:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 /* ==================================================================
    PAGINATION
 ================================================================== */
-.finance-page .pagination {
+.finance-page.finance-pending-page .pagination {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -452,7 +533,7 @@
   border-top: 1px solid #F3F4F6;
 }
 
-.finance-page .pagination-btn {
+.finance-page.finance-pending-page .pagination-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -468,22 +549,18 @@
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.finance-page .pagination-btn:hover:not(:disabled) {
+.finance-page.finance-pending-page .pagination-btn:hover:not(:disabled) {
   background: #F9FAFB;
   border-color: #9CA3AF;
 }
 
-.finance-page .pagination-btn:disabled {
+.finance-page.finance-pending-page .pagination-btn:disabled {
   color: #9CA3AF;
   cursor: not-allowed;
   opacity: 0.6;
 }
 
-.finance-page .pagination-btn svg {
-  flex-shrink: 0;
-}
-
-.finance-page .pagination-info {
+.finance-page.finance-pending-page .pagination-info {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -491,7 +568,7 @@
   color: #6B7280;
 }
 
-.finance-page .pagination-page {
+.finance-page.finance-pending-page .pagination-page {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -505,46 +582,374 @@
   font-size: 13px;
 }
 
-.finance-page .pagination-sep {
+.finance-page.finance-pending-page .pagination-sep {
   color: #6B7280;
   font-weight: 500;
   white-space: nowrap;
 }
 
 /* ==================================================================
+   CASH PAYMENT MODAL
+================================================================== */
+.finance-page.finance-pending-page .modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.finance-page.finance-pending-page .modal-content {
+  background: #FFFFFF;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.finance-page.finance-pending-page .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #F3F4F6;
+  flex-shrink: 0;
+}
+
+.finance-page.finance-pending-page .modal-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.finance-page.finance-pending-page .modal-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: #6B7280;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+
+.finance-page.finance-pending-page .modal-close-btn:hover {
+  background: #F3F4F6;
+  color: #111827;
+}
+
+.finance-page.finance-pending-page .modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.finance-page.finance-pending-page .modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid #F3F4F6;
+  background: #FAFAFA;
+  flex-shrink: 0;
+}
+
+/* ==================================================================
+   CASH PAYMENT MODAL — Reference Preview Box (before save)
+================================================================== */
+.finance-page.finance-pending-page .cash-ref-preview {
+  background: #EFF6FF;
+  border: 1px dashed #93C5FD;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.finance-page.finance-pending-page .cash-ref-preview-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #1D4ED8;
+  text-transform: uppercase;
+  margin: 0 0 4px;
+}
+
+.finance-page.finance-pending-page .cash-ref-preview-hint {
+  font-size: 12px;
+  color: #64748B;
+  font-style: italic;
+  margin: 0;
+}
+
+/* ==================================================================
+   CASH PAYMENT MODAL — Details Summary Box
+================================================================== */
+.finance-page.finance-pending-page .cash-summary {
+  background: #F3F4F6;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.finance-page.finance-pending-page .cash-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.finance-page.finance-pending-page .cash-summary-row strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.finance-page.finance-pending-page .cash-summary-amount {
+  color: #16A34A !important;
+  font-size: 15px;
+}
+
+/* ==================================================================
+   CASH PAYMENT MODAL — Form Fields
+================================================================== */
+.finance-page.finance-pending-page .form-group {
+  margin-bottom: 12px;
+}
+
+.finance-page.finance-pending-page .form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.finance-page.finance-pending-page .required {
+  color: #DC2626;
+}
+
+.finance-page.finance-pending-page .form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #111827;
+  font-family: inherit;
+  background: #FFFFFF;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+
+.finance-page.finance-pending-page .form-input:focus {
+  outline: none;
+  border-color: #0035A9;
+  box-shadow: 0 0 0 3px rgba(0, 53, 169, 0.1);
+}
+
+.finance-page.finance-pending-page .form-input:disabled {
+  background: #F3F4F6;
+  cursor: not-allowed;
+}
+
+/* ==================================================================
+   READ-ONLY FIELD (Auto-generated values)
+================================================================== */
+.finance-page.finance-pending-page .read-only-field {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #6B7280;
+  background: #F9FAFB;
+  cursor: not-allowed;
+  font-style: italic;
+  box-sizing: border-box;
+}
+
+/* ==================================================================
+   HIDE NATIVE NUMBER INPUT SPINNERS
+================================================================== */
+.finance-page.finance-pending-page input[type="number"]::-webkit-outer-spin-button,
+.finance-page.finance-pending-page input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+.finance-page.finance-pending-page input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.finance-page.finance-pending-page .form-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6B7280;
+  line-height: 1.4;
+}
+
+.finance-page.finance-pending-page .cash-change-line {
+  font-size: 13px;
+  color: #374151;
+  margin: 8px 0 0;
+}
+
+.finance-page.finance-pending-page .cash-change-line strong {
+  color: #16A34A;
+}
+
+.finance-page.finance-pending-page .form-error {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 6px;
+  color: #991B1B;
+  font-size: 12px;
+}
+
+.finance-page.finance-pending-page .modal-note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #6B7280;
+  line-height: 1.5;
+}
+
+/* ==================================================================
+   CASH PAYMENT MODAL — Success Reference Box (after save)
+================================================================== */
+.finance-page.finance-pending-page .cash-reference-box {
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.finance-page.finance-pending-page .cash-reference-label {
+  font-size: 12px;
+  color: #16A34A;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 4px;
+}
+
+.finance-page.finance-pending-page .cash-reference-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+  font-family: "Courier New", monospace;
+}
+
+.finance-page.finance-pending-page .cash-saved-note {
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ==================================================================
+   MODAL BUTTONS
+================================================================== */
+.finance-page.finance-pending-page .btn-primary {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #1D4ED8;
+  color: #FFFFFF;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.finance-page.finance-pending-page .btn-primary:hover:not(:disabled) {
+  background: #1E40AF;
+}
+
+.finance-page.finance-pending-page .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.finance-page.finance-pending-page .btn-secondary {
+  padding: 10px 20px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  background: #FFFFFF;
+  color: #374151;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.finance-page.finance-pending-page .btn-secondary:hover:not(:disabled) {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.finance-page.finance-pending-page .btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ==================================================================
    RESPONSIVE
 ================================================================== */
 @media (max-width: 1024px) {
-  .finance-page .metric-grid-three {
+  .finance-page.finance-pending-page .metric-grid-three {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 640px) {
-  .finance-page .metric-grid-three {
+  .finance-page.finance-pending-page .metric-grid-three {
     grid-template-columns: 1fr;
   }
 
-  .finance-page .pagination {
+  .finance-page.finance-pending-page .main-content {
+    padding: 16px;
+  }
+
+  .finance-page.finance-pending-page .pagination {
     flex-wrap: wrap;
     justify-content: center;
-    gap: 12px;
   }
 
-  .finance-page .btn-cash-payment {
-    padding: 6px 12px;
-    font-size: 12px;
+  .finance-page.finance-pending-page .table-toolbar {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .finance-page .modal-content {
-    max-width: 100%;
+  .finance-page.finance-pending-page .toolbar-search {
+    min-width: 0;
   }
 
-  .finance-page .modal-footer {
-    flex-direction: column-reverse;
-  }
-
-  .finance-page .modal-footer button {
+  .finance-page.finance-pending-page .toolbar-select {
     width: 100%;
   }
 }

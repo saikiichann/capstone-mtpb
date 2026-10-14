@@ -18,7 +18,7 @@ import { NotificationBell } from "../../components/NotificationBell";
 import {
   buildQueue,
   getQueueStatusClass,
-  QUEUE_PAYMENT_STATUSES,
+  RELEASE_QUEUE_STATUS,
   type QueueRow,
 } from "../../lib/release";
 import "./Homepage.css";
@@ -143,6 +143,7 @@ export default function ReleaseOfficerHomepage() {
   const [queueLoading, setQueueLoading] = useState(true);
   const [logLoading, setLogLoading] = useState(true);
 
+  /* Fetch current user */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
       if (!loggedUser) {
@@ -167,12 +168,13 @@ export default function ReleaseOfficerHomepage() {
     return () => unsubscribe();
   }, []);
 
- 
+  /* Queue — only OIC-approved violations reach the release officer */
   useEffect(() => {
     const q = query(
       collection(db, "violations"),
-      where("paymentStatus", "in", QUEUE_PAYMENT_STATUSES)
+      where("releaseStatus", "==", RELEASE_QUEUE_STATUS)
     );
+
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
@@ -187,13 +189,14 @@ export default function ReleaseOfficerHomepage() {
     return () => unsubscribe();
   }, []);
 
- 
+  /* Release log — recent history */
   useEffect(() => {
     const q = query(
       collection(db, "releaseLog"),
       orderBy("releasedAt", "desc"),
       limit(RECENT_LOG_LIMIT)
     );
+
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
@@ -223,6 +226,7 @@ export default function ReleaseOfficerHomepage() {
     return () => unsubscribe();
   }, []);
 
+  /* Click outside para isara ang profile dropdown */
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -251,6 +255,7 @@ export default function ReleaseOfficerHomepage() {
     }
   };
 
+  /* Metrics */
   const metrics = useMemo(() => {
     const readyForRelease = queueRows.filter((r) => r.canRelease).length;
     const inQueue = queueRows.filter((r) => !r.canRelease).length;
@@ -268,6 +273,7 @@ export default function ReleaseOfficerHomepage() {
     const durations = logRows
       .map((r) => r.durationMinutes)
       .filter((d): d is number => typeof d === "number" && d > 0);
+
     const avg =
       durations.length > 0
         ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
@@ -302,6 +308,7 @@ export default function ReleaseOfficerHomepage() {
   return (
     <div className="release-page">
       <div className="dashboard">
+        {/* SIDEBAR */}
         <aside className="sidebar">
           <div className="sidebar-brand">
             <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
@@ -335,6 +342,7 @@ export default function ReleaseOfficerHomepage() {
           </nav>
         </aside>
 
+        {/* MAIN */}
         <div className="main">
           <header className="main-header">
             <div>
@@ -385,6 +393,7 @@ export default function ReleaseOfficerHomepage() {
           </header>
 
           <main className="main-content">
+            {/* METRIC CARDS */}
             <div className="metric-grid-four">
               {metricCards.map((card) => (
                 <div key={card.title} className="card metric-card">
@@ -397,6 +406,7 @@ export default function ReleaseOfficerHomepage() {
               ))}
             </div>
 
+            {/* RELEASE QUEUE */}
             <div className="card">
               <div className="card-header-row">
                 <div>
@@ -410,6 +420,7 @@ export default function ReleaseOfficerHomepage() {
                   View All
                 </button>
               </div>
+
               {queueLoading ? (
                 <div className="table-loading">
                   <p>Loading queue...</p>
@@ -462,6 +473,7 @@ export default function ReleaseOfficerHomepage() {
               )}
             </div>
 
+            {/* RELEASE LOG */}
             <div className="card">
               <div className="card-header-row">
                 <div>
@@ -475,6 +487,7 @@ export default function ReleaseOfficerHomepage() {
                   View All
                 </button>
               </div>
+
               {logLoading ? (
                 <div className="table-loading">
                   <p>Loading release log...</p>
