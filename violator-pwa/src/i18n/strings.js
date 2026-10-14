@@ -121,7 +121,12 @@ const en = {
   'pay.details.mobileError': 'Use an 11-digit number like 09171234567.',
   'pay.details.email': 'Email (Optional)',
   'pay.details.emailError': 'Enter a valid email or leave it blank.',
-  'pay.details.emailNote': 'You will receive the payment receipt in this email.',
+  // Optional for guests (checklist P1).
+  'pay.details.emailGuestNote':
+    'Want to keep this in your violation and payment history? Enter your email: the receipt is sent there, and the payment shows in the MTPB account with that email. Without it, download the receipt after paying.',
+  'pay.details.emailAccountNote':
+    'The receipt and this payment go to the account with this email. Paying for someone else? Enter their email.',
+  'pay.details.emailOtherNote': 'This payment will go to the account with this email, not to yours.',
   'pay.details.redirect': 'You will be redirected to {method} to complete the payment.',
   'pay.details.proceed': 'Proceed to {method}',
 
@@ -161,7 +166,7 @@ const en = {
   'success.summary': 'Payment summary',
   'success.total': 'Total Amount',
   'success.guest':
-    'You paid as a guest. If you entered your email, the receipt was sent there too. Open the receipt and download a copy before you leave.',
+    'You paid as a guest. If you entered your email, the receipt was sent there too, and this payment will appear in the MTPB account with that email. Open the receipt and download a copy before you leave.',
   'success.seeReceipt': 'See Receipt',
 
   // Payment rows (success screen)
@@ -227,6 +232,34 @@ const en = {
   'check.notFound.title': 'No payment found',
   'check.notFound.text': 'This code doesn’t match any MTPB payment. The slip may not be genuine. Please contact the MTPB office.',
   'check.error': 'We couldn’t check this payment. Check your connection and try again.',
+  'check.badge.verified': 'verified',
+  // "Add to My Account" on a cash slip's page (checklist P1)
+  'claim.wait.title': 'Add it to your account after verification',
+  'claim.wait.text': 'Once MTPB verifies this payment, you can add it to your MTPB account here. Scan this QR again later.',
+  'claim.wait.note': 'You’ll have 7 days from verification to add it.',
+  'claim.keep.title': 'Keep this payment in your account',
+  'claim.keep.text':
+    'Add it to your MTPB account so the payment, violation and vehicle are in one place. You can do this until {date}.',
+  'claim.login': 'Log In',
+  'claim.signup': 'Create an Account',
+  'claim.confirm.title': 'Add to your account?',
+  'claim.confirm.text':
+    'The payment, violation {cin} and plate {plate} will show in your account. Only add it if you paid it.',
+  'claim.add': 'Add to My Account',
+  'claim.adding': 'Adding…',
+  'claim.signedInAs': 'Signed in as {email}',
+  'claim.done.title': '✓ In your account',
+  'claim.done.text':
+    'You’ll find it in Payment History and Violation History. {plate} is in My Vehicles as “Added from your payment”.',
+  'claim.viewPayments': 'View Payment History',
+  'claim.taken.title': 'Already in another account',
+  'claim.taken.text':
+    'This payment was added to a different MTPB account. If you paid it, visit the MTPB office with your receipt and a valid ID.',
+  'claim.expired.title': 'Can’t be added online anymore',
+  'claim.expired.text':
+    'This payment can no longer be added online. Visit the MTPB office with your receipt and a valid ID.',
+  'claim.rejected.title': 'Can’t be added to an account',
+  'claim.rejected.text': 'This payment wasn’t accepted by MTPB, so it can’t be added. Please visit the MTPB office.',
 }
 
 const fil = {
@@ -341,7 +374,11 @@ const fil = {
   'pay.details.mobileError': 'Gumamit ng 11-digit na numero, halimbawa 09171234567.',
   'pay.details.email': 'Email (Opsyonal)',
   'pay.details.emailError': 'Maglagay ng tamang email o iwanang blangko.',
-  'pay.details.emailNote': 'Dito mo matatanggap ang resibo ng iyong bayad.',
+  'pay.details.emailGuestNote':
+    'Gusto mo bang itago ito sa iyong violation at payment history? Ilagay ang iyong email: doon ipapadala ang resibo, at lalabas ang bayad sa MTPB account na may ganitong email. Kung wala, i-download ang resibo pagkatapos magbayad.',
+  'pay.details.emailAccountNote':
+    'Mapupunta ang resibo at ang bayad na ito sa account na may ganitong email. Nagbabayad para sa iba? Ilagay ang kanilang email.',
+  'pay.details.emailOtherNote': 'Mapupunta ang bayad na ito sa account na may ganitong email, hindi sa iyo.',
   'pay.details.redirect': 'Ililipat ka sa {method} para tapusin ang pagbabayad.',
   'pay.details.proceed': 'Magpatuloy sa {method}',
 
@@ -381,7 +418,7 @@ const fil = {
   'success.summary': 'Buod ng bayad',
   'success.total': 'Kabuuang Halaga',
   'success.guest':
-    'Nagbayad ka bilang guest. Kung naglagay ka ng email, ipinadala rin doon ang resibo. Buksan ang resibo at mag-download ng kopya bago umalis.',
+    'Nagbayad ka bilang guest. Kung naglagay ka ng email, ipinadala rin doon ang resibo, at lalabas ang bayad na ito sa MTPB account na may ganitong email. Buksan ang resibo at mag-download ng kopya bago umalis.',
   'success.seeReceipt': 'Tingnan ang Resibo',
 
   // Payment rows (success screen)
@@ -447,6 +484,34 @@ const fil = {
   'check.notFound.title': 'Walang nahanap na bayad',
   'check.notFound.text': 'Walang bayad sa MTPB na tumutugma sa code na ito. Maaaring hindi tunay ang slip. Makipag-ugnayan sa opisina ng MTPB.',
   'check.error': 'Hindi masuri ang bayad na ito. Tingnan ang iyong koneksyon at subukang muli.',
+  'check.badge.verified': 'beripikado',
+  'claim.wait.title': 'Idagdag sa account pagkatapos ng beripikasyon',
+  'claim.wait.text':
+    'Kapag naberipika na ng MTPB ang bayad na ito, maaari mo itong idagdag sa iyong MTPB account dito. I-scan muli ang QR na ito mamaya.',
+  'claim.wait.note': 'May 7 araw ka mula sa beripikasyon para idagdag ito.',
+  'claim.keep.title': 'Itago ang bayad na ito sa iyong account',
+  'claim.keep.text':
+    'Idagdag ito sa iyong MTPB account para magkakasama ang bayad, paglabag at sasakyan. Magagawa mo ito hanggang {date}.',
+  'claim.login': 'Mag-login',
+  'claim.signup': 'Gumawa ng Account',
+  'claim.confirm.title': 'Idagdag sa iyong account?',
+  'claim.confirm.text':
+    'Lalabas sa iyong account ang bayad, ang paglabag na {cin} at ang plakang {plate}. Idagdag lang kung ikaw ang nagbayad.',
+  'claim.add': 'Idagdag sa Aking Account',
+  'claim.adding': 'Idinadagdag…',
+  'claim.signedInAs': 'Naka-sign in bilang {email}',
+  'claim.done.title': '✓ Nasa iyong account na',
+  'claim.done.text':
+    'Makikita mo ito sa Payment History at Violation History. Nasa My Vehicles ang {plate} bilang “Added from your payment”.',
+  'claim.viewPayments': 'Tingnan ang Payment History',
+  'claim.taken.title': 'Nasa ibang account na',
+  'claim.taken.text':
+    'Naidagdag na ang bayad na ito sa ibang MTPB account. Kung ikaw ang nagbayad, pumunta sa opisina ng MTPB dala ang resibo at isang valid ID.',
+  'claim.expired.title': 'Hindi na maidaragdag online',
+  'claim.expired.text':
+    'Hindi na maidaragdag online ang bayad na ito. Pumunta sa opisina ng MTPB dala ang resibo at isang valid ID.',
+  'claim.rejected.title': 'Hindi maidaragdag sa account',
+  'claim.rejected.text': 'Hindi tinanggap ng MTPB ang bayad na ito, kaya hindi ito maidaragdag. Pumunta sa opisina ng MTPB.',
 }
 
 export const STRINGS = { en, fil }

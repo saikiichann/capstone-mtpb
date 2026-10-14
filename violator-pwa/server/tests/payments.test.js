@@ -191,6 +191,27 @@ describe('payment service', () => {
     assert.equal(store.counter.lastValue, 7)
   })
 
+  it('a guest may skip the email; one given is kept in lower case for finding their account later', async () => {
+    const skipped = await service.startCheckout({ ...baseInput, isGuest: true, email: '' })
+    assert.equal(store.attempts.get(skipped.attemptId).email, '')
+    const { attemptId } = await service.startCheckout({ ...baseInput, isGuest: true, email: 'Juan@Gmail.com' })
+    const saved = store.attempts.get(attemptId)
+    assert.equal(saved.isGuest, true)
+    assert.equal(saved.emailLower, 'juan@gmail.com')
+    assert.equal(saved.forOther, false)
+  })
+
+  it('a signed-in payer who types someone else’s email is paying for them', async () => {
+    const own = await service.startCheckout({ ...baseInput, payerEmail: 'Pedro@Gmail.com', email: 'pedro@gmail.com' })
+    assert.equal(store.attempts.get(own.attemptId).forOther, false)
+    const other = await service.startCheckout({ ...baseInput, payerEmail: 'pedro@gmail.com', email: 'juan@gmail.com' })
+    assert.equal(store.attempts.get(other.attemptId).forOther, true)
+    // Left blank: the receipt goes to the registered email, and it's theirs.
+    const blank = await service.startCheckout({ ...baseInput, payerEmail: 'pedro@gmail.com', email: '' })
+    assert.equal(store.attempts.get(blank.attemptId).email, 'pedro@gmail.com')
+    assert.equal(store.attempts.get(blank.attemptId).forOther, false)
+  })
+
   it('accepts GCash only', async () => {
     await assert.rejects(service.startCheckout({ ...baseInput, method: 'maya' }), (e) => e.status === 400)
     assert.equal(calls.length, 0)

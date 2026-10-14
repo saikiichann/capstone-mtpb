@@ -1,13 +1,12 @@
 import { useAuth } from '../auth/auth-context'
 import PageHeader from '../components/PageHeader'
 import QuickAccessItem from '../components/QuickAccessItem'
-import VehicleCard, { VehicleCardPlaceholder } from '../components/VehicleCard'
+import HomeCar from '../components/HomeCar'
 import { CarIcon, FaqIcon, NotebookIcon, WalletIcon } from '../components/icons'
 import useMyViolations from '../hooks/useMyViolations'
-import useVehicles from '../hooks/useVehicles'
 
-// Figma "DASHBOARD" (546:619): greeting, first registered vehicle,
-// Quick Access list.
+// Figma "DASHBOARD" (546:619): greeting, a decorative car (it used to be
+// the first registered vehicle's card), Quick Access list.
 //
 // The amount due deliberately isn't here — it lives on History, and showing
 // the same figure twice makes neither one feel authoritative. What this page
@@ -35,7 +34,7 @@ const QUICK_ACCESS = [
     description: 'View your violations',
     tone: 'amber',
     icon: <NotebookIcon width={32} height={32} />,
-    key: 'violations',
+    showsUnpaid: true,
   },
   {
     to: '/payments',
@@ -56,9 +55,7 @@ const QUICK_ACCESS = [
 export default function Home() {
   const { profile, user } = useAuth()
   const name = profile?.full_name || user?.displayName || 'Vehicle Owner'
-  const { status, vehicles } = useVehicles(user?.uid)
   const { status: violationsStatus, violations } = useMyViolations(user?.uid)
-  const primaryVehicle = vehicles[0]
 
   const unpaid = violationsStatus === 'ready' ? violations.filter((v) => v.paymentStatus !== 'paid') : []
 
@@ -67,11 +64,7 @@ export default function Home() {
       <PageHeader greeting={greetingFor()} name={name} />
 
       <main className="page__body home-body">
-        {status === 'ready' && primaryVehicle ? (
-          <VehicleCard vehicle={primaryVehicle} />
-        ) : (
-          <VehicleCardPlaceholder state={status === 'ready' ? 'empty' : status} />
-        )}
+        <HomeCar />
 
         <h2 className="section-title">Quick Access</h2>
         <ul className="quick-access-list">
@@ -81,7 +74,7 @@ export default function Home() {
                 {...item}
                 // The only badge on this screen, so it goes where action is
                 // needed rather than on every row.
-                badge={item.key === 'violations' && unpaid.length > 0 ? unpaid.length : null}
+                badge={item.showsUnpaid && unpaid.length > 0 ? unpaid.length : null}
               />
             </li>
           ))}

@@ -52,16 +52,6 @@ export function PinIcon(props) {
   )
 }
 
-export function LicenseIcon(props) {
-  return (
-    <Icon {...props}>
-      <rect x="2.6" y="5" width="18.8" height="14" rx="2.4" />
-      <circle cx="8.4" cy="11.2" r="2.1" />
-      <path d="M5.2 16.2c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14.6 10h4.2M14.6 13.6h4.2" />
-    </Icon>
-  )
-}
-
 export function CalendarIcon(props) {
   return (
     <Icon {...props}>
@@ -106,31 +96,6 @@ export function BugIcon(props) {
       <path d="M12 3.4 21 19.6H3Z" />
       <path d="M12 9.6v4" />
       <path d="M12 16.6h.01" strokeWidth="2.4" />
-    </Icon>
-  )
-}
-
-export function ChatIcon(props) {
-  return (
-    <Icon {...props}>
-      <path d="M20.4 14.2c0 1.6-1.3 2.9-2.9 2.9H9.3L4.6 20.6v-4.2A2.9 2.9 0 0 1 3.6 14V6.8c0-1.6 1.3-2.9 2.9-2.9h11c1.6 0 2.9 1.3 2.9 2.9Z" />
-    </Icon>
-  )
-}
-
-export function CameraIcon(props) {
-  return (
-    <Icon {...props}>
-      <path d="M3.4 8.6h3.2l1.6-2.6h7.6l1.6 2.6h3.2v10.2H3.4Z" />
-      <circle cx="12" cy="13.4" r="3.2" />
-    </Icon>
-  )
-}
-
-export function FolderIcon(props) {
-  return (
-    <Icon {...props}>
-      <path d="M3.2 6.6h6l2 2.4h9.6v10.4H3.2Z" />
     </Icon>
   )
 }

@@ -31,6 +31,12 @@ export default function PayDetails() {
   )
   const [email, setEmail] = useState(saved.email ?? user?.email ?? '')
   const [errors, setErrors] = useState({})
+  // The email decides whose account the payment goes to (checklist P1). It's
+  // optional for guests: without it they keep only the downloaded receipt.
+  // A signed-in payer who types someone else's is paying for that person.
+  const isGuest = Boolean(user?.isGuest)
+  const forSomeoneElse =
+    !isGuest && Boolean(email.trim()) && email.trim().toLowerCase() !== (user?.email ?? '').toLowerCase()
 
   if (!method) return <Navigate to={base} replace />
 
@@ -106,7 +112,13 @@ export default function PayDetails() {
             />
             {errors.email && <p className="field__error">{errors.email}</p>}
             <p id="pay-email-note" className="pay-field__note">
-              {t('pay.details.emailNote')}
+              {t(
+                isGuest
+                  ? 'pay.details.emailGuestNote'
+                  : forSomeoneElse
+                    ? 'pay.details.emailOtherNote'
+                    : 'pay.details.emailAccountNote',
+              )}
             </p>
           </div>
 

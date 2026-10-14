@@ -1,5 +1,6 @@
+import { createAccountLinks } from '../server/account-links.js'
 import { config } from '../server/config.js'
-import { createFirestoreStore } from '../server/firestore-store.js'
+import { adminAuth, createFirestoreStore } from '../server/firestore-store.js'
 import { json } from '../server/http.js'
 import { createMailer } from '../server/mailer.js'
 import { paymongo, verifyWebhookSignature } from '../server/paymongo.js'
@@ -29,7 +30,9 @@ export async function POST(request) {
   if (!valid) return json(401, { error: 'Invalid signature' })
 
   try {
-    const service = createPaymentService({ store: createFirestoreStore(), paymongo, mailer: createMailer() })
+    const store = createFirestoreStore()
+    const accountLinks = createAccountLinks({ store, auth: adminAuth() })
+    const service = createPaymentService({ store, paymongo, mailer: createMailer(), onPaid: accountLinks.linkPaidAttempt })
     const result = await service.handleWebhookEvent(event)
     return json(200, { received: true, ...result })
   } catch (err) {

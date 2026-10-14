@@ -15,8 +15,6 @@ export const IMPOUND_LOTS = [
   },
 ]
 
-export const MANILA_CENTER = [14.5995, 120.9842]
-
 export function directionsUrl([lat, lng]) {
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
 }

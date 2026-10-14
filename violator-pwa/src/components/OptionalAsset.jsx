@@ -8,7 +8,6 @@
 //   download.svg         → Receipt header, save button (white icon)
 //   pay-onsite.svg       → Pay Now step 1, the store icon (70 x 70)
 //   payment-receipt.svg  → Pay Now step 3, the big receipt icon (184 x 184)
-//   payment-success.svg  → Payment Successful, the green check (124 x 124)
 const files = import.meta.glob('../assets/icons/*.{svg,png,webp}', {
   eager: true,
   query: '?url',

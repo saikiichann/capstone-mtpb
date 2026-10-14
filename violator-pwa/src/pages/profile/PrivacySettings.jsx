@@ -7,6 +7,13 @@ import { SUPPORT_EMAIL } from '../../data/contact'
 // "How long we keep it" and "Your rights" (checklist N2) use general wording
 // until MTPB confirms the exact retention period and its Data Protection
 // Officer; add those here once they do.
+//
+// Updated 2026-10-14 for how payments now reach accounts (checklist P1,
+// server/account-links.js): the email typed when paying decides the account,
+// cash payments are added from the slip's QR, vehicles come from payments,
+// and new unpaid violations on those plates show to every account that has
+// the plate. Keep this page in step with CLAUDE.md "Payments follow the
+// person into their account".
 export default function PrivacySettings() {
   return (
     <div className="page">
@@ -17,13 +24,36 @@ export default function PrivacySettings() {
         <div className="card privacy-card">
           <ul className="privacy-list">
             <li>Your name, email, mobile number and (if you add it) address.</li>
-            <li>Your registered vehicles, added by MTPB when a violation is recorded against their plates.</li>
-            <li>Violations recorded against your plates, and the payments you make for them.</li>
+            <li>
+              The payments made to your account, and the violations they paid. A payment reaches your account when
+              your email is entered while paying with GCash, or when you add a cash payment by scanning the QR on
+              its payment slip.
+            </li>
+            <li>
+              The vehicles on your account. A plate is added when a payment on it reaches your account. It groups
+              your violations and payments by vehicle.
+            </li>
+            <li>
+              New unpaid violations recorded on those plates after they joined your account, so you can pay them
+              in the app.
+            </li>
+            <li>
+              For a GCash payment: the mobile number and email entered for it. For a cash payment you added: a
+              record that you added it, so we can tell you when the vehicle is released.
+            </li>
+            <li>
+              If the app crashes: a technical error report, with email addresses, mobile numbers and QR codes
+              removed.
+            </li>
             <li>
               Payments are processed by MTPB's payment provider. The app never sees your GCash password, and
               card or wallet credentials are never stored here.
             </li>
           </ul>
+          <p className="privacy-card__note">
+            Paying as a guest? The email is optional. Without it, nothing is kept in an account: download your
+            receipt after paying.
+          </p>
           <p className="privacy-card__note">
             To correct or remove your details, contact the MTPB office through Help &amp; Support.
           </p>
@@ -32,9 +62,15 @@ export default function PrivacySettings() {
         <h2 className="settings-group__title settings-group__title--lg">Why we collect it</h2>
         <div className="card privacy-card">
           <ul className="privacy-list">
-            <li>To show you the violations recorded against your vehicles.</li>
+            <li>To show you the violations on your vehicles, and to let you pay new ones in the app.</li>
             <li>To process your payments and give you a receipt.</li>
             <li>So MTPB can verify your payment and release your vehicle.</li>
+            <li>
+              To email you the receipt, whether MTPB verified or didn’t accept your payment, and when your
+              vehicle is released. These go only to the email entered when paying, or to your account’s email.
+              Cash payments get only the release email, once added to your account.
+            </li>
+            <li>To find and fix problems in the app.</li>
           </ul>
         </div>
 
@@ -43,9 +79,25 @@ export default function PrivacySettings() {
           <ul className="privacy-list">
             <li>MTPB personnel handling your violation, its payment and the release of your vehicle.</li>
             <li>
+              The account with the email entered when paying. If someone pays for your vehicle and enters your
+              email, the payment shows in your account, not theirs. If you pay for someone else and enter their
+              email, it goes to their account, not yours.
+            </li>
+            <li>
+              Anyone who has a plate on their account from an earlier payment sees new <strong>unpaid</strong>{' '}
+              violations on that plate, so they can pay them. Once paid, a violation shows only to the account it
+              was paid to.
+            </li>
+            <li>
+              Anyone holding a cash payment slip can scan its QR to check the payment: reference number, amount,
+              date, status, violation number and plate. No names or contact details. Once MTPB verifies it, the
+              first account to add it within 7 days keeps it.
+            </li>
+            <li>
               MTPB's payment provider, only for a GCash payment: the amount, and the mobile number and email
               you enter for it.
             </li>
+            <li>The email service that sends MTPB’s emails, and the error-reporting service that receives crash reports.</li>
           </ul>
         </div>
 
@@ -57,6 +109,7 @@ export default function PrivacySettings() {
               government record-keeping rules require, then disposes of them securely.
             </li>
             <li>Your account details are kept while you have an account.</li>
+            <li>Crash reports are kept by the error-reporting service for a limited time, then deleted.</li>
           </ul>
         </div>
 

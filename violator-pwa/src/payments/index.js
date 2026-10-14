@@ -172,7 +172,3 @@ export function withLocalPaymentStatus(uid, violation) {
   return paymentsMode === 'demo' ? demo.withPaymentStatus(uid, violation) : violation
 }
 
-// Test-mode / demo payments get the "not valid as an official receipt" note.
-export function isTestPayment(payment) {
-  return Boolean(payment?.sandbox) || payment?.livemode === false
-}

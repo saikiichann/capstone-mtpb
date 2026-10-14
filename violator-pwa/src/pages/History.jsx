@@ -45,9 +45,16 @@ export default function History() {
               </Link>
             </section>
           ) : (
-            <section className="card due-card due-card--clear" aria-label="Amount due">
-              <p className="due-card__clear-title">You’re all clear</p>
-              <p className="due-card__meta">No unpaid violations on your vehicles.</p>
+            // No card around it: it's a message, not something to tap (only
+            // the cards below open anything).
+            <section className="all-clear" aria-label="Amount due">
+              <span className="all-clear__icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12.5l4.5 4.5L19 7.5" />
+                </svg>
+              </span>
+              <p className="all-clear__title">You’re all clear</p>
+              <p className="all-clear__meta">No unpaid violations on your vehicles.</p>
             </section>
           ))}
 

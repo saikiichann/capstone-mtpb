@@ -99,6 +99,16 @@ export function createFirestoreStore() {
         .map((v) => v.plateNumber)
     },
 
+    // Plates added to this account by a payment (checklist P1), with when.
+    // New unpaid violations on them show in the account (violation-access.js).
+    async listPaymentPlates(ownerUid) {
+      const snap = await db.collection(COLLECTIONS.vehicles).where('ownerUid', '==', ownerUid).get()
+      return snap.docs
+        .map((doc) => doc.data())
+        .filter((v) => v.source === 'payment' && (v.verificationStatus ?? 'pending') === 'pending' && v.plateNumber)
+        .map((v) => ({ plate: v.plateNumber, since: v.createdAt ?? null }))
+    },
+
     // Violations on any of these plates, however the enforcer app spelled
     // them. One "in" query (max 30 values) per plate field name, merged.
     async listViolationsForPlates(plates) {
@@ -113,6 +123,102 @@ export function createFirestoreStore() {
       const byId = new Map()
       for (const snap of snaps) for (const doc of snap.docs) byId.set(doc.id, normalizeViolation(doc.id, doc.data()))
       return [...byId.values()]
+    },
+
+    // Violations linked to this account (server/account-links.js): the ones
+    // they paid, guest or cash payments included.
+    async listViolationsByViolator(uid) {
+      const snap = await db.collection(COLLECTIONS.violations).where('violatorUid', '==', uid).get()
+      return snap.docs.map((doc) => normalizeViolation(doc.id, doc.data()))
+    },
+
+    // ---- For server/account-links.js (checklist P1)
+
+    async listOwnerVehicles(ownerUid) {
+      const snap = await db.collection(COLLECTIONS.vehicles).where('ownerUid', '==', ownerUid).get()
+      return snap.docs.map((doc) => ({ ...doc.data(), id: doc.id }))
+    },
+
+    async createVehicle(data) {
+      const ref = await db.collection(COLLECTIONS.vehicles).add(data)
+      return ref.id
+    },
+
+    // Paid checkout attempts made with this email. New attempts carry
+    // `emailLower`; older ones only the email as typed.
+    async listPaidAttemptsByEmail(email) {
+      const lower = String(email).trim().toLowerCase()
+      const queries = [
+        attempts.where('emailLower', '==', lower),
+        attempts.where('email', '==', lower),
+        attempts.where('email', '==', String(email).trim()),
+      ]
+      const byId = new Map()
+      for (const snap of await Promise.all(queries.map((q) => q.get()))) {
+        for (const doc of snap.docs) byId.set(doc.id, { ...doc.data(), id: doc.id })
+      }
+      return [...byId.values()].filter((a) => a.status === 'paid')
+    },
+
+    // Links a payment (and its violation, and our checkout attempt) to an
+    // account, in one transaction. Fills the team's `violatorUid` and
+    // `violatorName` and our `uid`; never takes a payment or violation that
+    // already names another account. `fromUid` is the guest the payment
+    // belongs to now (null for cash, which has no uid).
+    // Returns { status: 'linked' | 'already' | 'taken' | 'missing', violationId }.
+    async linkPaymentToAccount({ paymentId, attemptId, uid, fromUid, name, linkedAt }) {
+      return db.runTransaction(async (tx) => {
+        const paymentRef = payments.doc(paymentId)
+        const paymentDoc = await tx.get(paymentRef)
+        if (!paymentDoc.exists) return { status: 'missing' }
+        const payment = paymentDoc.data()
+        const violationRef = payment.violationId
+          ? db.collection(COLLECTIONS.violations).doc(payment.violationId)
+          : null
+        const violationDoc = violationRef ? await tx.get(violationRef) : null
+        const attemptRef = attemptId ? attempts.doc(attemptId) : null
+        const attemptDoc = attemptRef ? await tx.get(attemptRef) : null
+        const violation = violationDoc?.exists ? violationDoc.data() : null
+
+        const taken =
+          (payment.violatorUid && payment.violatorUid !== uid) ||
+          (payment.uid && payment.uid !== uid && payment.uid !== fromUid) ||
+          (violation?.violatorUid && violation.violatorUid !== uid)
+        if (taken) return { status: 'taken' }
+        if (payment.violatorUid === uid && payment.uid === uid) {
+          return { status: 'already', violationId: payment.violationId }
+        }
+
+        tx.update(paymentRef, {
+          violatorUid: uid,
+          violatorName: name || payment.violatorName || null,
+          uid,
+          linkedAt,
+          ...(payment.uid && payment.uid !== uid ? { linkedFromGuestUid: payment.uid } : {}),
+        })
+        if (violation) {
+          tx.update(violationRef, { violatorUid: uid, violatorName: name || violation.violatorName || null })
+        }
+        if (attemptDoc?.exists && attemptDoc.data().uid !== uid) {
+          tx.update(attemptRef, { uid, linkedFromGuestUid: attemptDoc.data().uid, linkedAt })
+        }
+        return { status: 'linked', violationId: payment.violationId }
+      })
+    },
+
+    // ---- Cash payments added to an account (cashClaims, backend only)
+
+    async recordCashClaim(paymentId, data) {
+      await db.collection(COLLECTIONS.cashClaims).doc(paymentId).set(data, { merge: true })
+    },
+
+    async listCashClaimsFor(violationId) {
+      const snap = await db.collection(COLLECTIONS.cashClaims).where('violationId', '==', violationId).get()
+      return snap.docs.map((doc) => ({ ...doc.data(), id: doc.id }))
+    },
+
+    async updateCashClaim(id, patch) {
+      await db.collection(COLLECTIONS.cashClaims).doc(id).update({ ...patch, updatedAt: FieldValue.serverTimestamp() })
     },
 
     // Whether this person started a payment for this violation (so they can
@@ -240,7 +346,9 @@ export function createFirestoreStore() {
           // own payments; the PayMongo ids let finance staff match this
           // record against the PayMongo dashboard; `livemode: false` puts
           // "not valid as an official receipt" on test-mode receipts.
-          uid: attempt.uid,
+          // Paid for someone else: no owner until that email's account
+          // takes it (server/account-links.js).
+          uid: attempt.forOther ? null : attempt.uid,
           checkoutAttemptId: attemptId,
           paymongoPaymentId: patch.paymongoPaymentId,
           livemode: patch.livemode,

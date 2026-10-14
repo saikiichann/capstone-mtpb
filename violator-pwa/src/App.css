@@ -753,23 +753,9 @@ a.btn--primary {
   color: #a0101a;
 }
 
-.demo-banner {
-  margin: 16px 0 0;
-  padding: 8px 12px;
-  border: 1px dashed var(--color-border-muted);
-  border-radius: var(--radius-button);
-  color: var(--color-placeholder);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
 /* Login screen spacing (536:424) */
 .auth-body .auth-form {
   padding-top: 56px;
-}
-
-.auth-body .demo-banner + .auth-form {
-  padding-top: 24px;
 }
 
 .auth-form__forgot {
@@ -957,73 +943,6 @@ a.btn--primary {
 
 .home-body .section-title {
   margin-top: 21px;
-}
-
-.vehicle-card {
-  display: flex;
-  align-items: center;
-  gap: 21px;
-  min-height: 137px; /* 418 */
-  padding: 0 12px 0 14px;
-  color: var(--color-ink);
-  text-decoration: none;
-}
-
-.vehicle-card--empty {
-  padding: 16px 20px;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.vehicle-card__photo-box {
-  position: relative;
-  flex: none;
-  width: 122px; /* 372 */
-  height: 122px;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.vehicle-card__photo {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* Stock photos: mirrored like the design, but kept a little smaller and
-   centered in the box so the whole vehicle shows. */
-.vehicle-card__photo-box--stock {
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  transform: scaleX(-1);
-}
-
-.vehicle-card__photo-box--stock .vehicle-card__photo {
-  width: 112px;
-  height: 112px;
-  max-width: none;
-  object-fit: contain;
-}
-
-.vehicle-card__text {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.vehicle-card__plate {
-  display: block;
-  font-size: 21px; /* 65 */
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.vehicle-card__model {
-  display: block;
-  font-size: 15px; /* 45 */
-  line-height: 1.4;
 }
 
 /* ---------- Map ---------- */
@@ -1605,10 +1524,6 @@ a.btn--primary {
   text-align: center;
 }
 
-.success-body__icon {
-  display: block;
-}
-
 .success-body__title {
   margin-top: 27px;
   font-size: 20px;
@@ -1658,18 +1573,6 @@ a.btn--primary {
 
 .summary-list__row--total strong {
   font-size: 15px;
-}
-
-.success-body__email {
-  align-self: stretch;
-  margin-top: 25px;
-  padding: 6px 18px 10px;
-  background: var(--color-success-bg);
-  border: 1px solid var(--color-success-border);
-  border-radius: 4px;
-  font-size: 11px;
-  line-height: 1.5;
-  text-align: left;
 }
 
 .success-body__cta {
@@ -1889,18 +1792,6 @@ a.btn--primary {
 
 /* ---------- Shared helpers ---------- */
 
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 .info-note {
   padding: 10px 14px;
   background: var(--color-info-bg);
@@ -1964,10 +1855,6 @@ a.btn--primary {
   font-weight: 400;
   opacity: 1;
   text-transform: none;
-}
-
-.compact-field input.is-uppercase {
-  text-transform: uppercase;
 }
 
 .compact-field input:focus,
@@ -2106,12 +1993,6 @@ a.btn--primary {
   flex: none;
 }
 
-.vehicle-card__badge {
-  align-self: flex-start;
-  min-width: 72px;
-  margin-top: 6px;
-}
-
 .vehicles-empty {
   margin-top: 24px;
   padding: 24px 20px;
@@ -2128,16 +2009,6 @@ a.btn--primary {
   font-weight: 700;
 }
 
-/* The button sits at the bottom of the screen, just above the tab bar
-   (the tab bar is 72.5px plus its bottom padding). */
-.vehicles-body__footer {
-  position: sticky;
-  bottom: calc(72.5px + max(22px, env(safe-area-inset-bottom)));
-  margin: auto 0 -20px;
-  padding: 12px 0 10px;
-  background: linear-gradient(to bottom, transparent, var(--color-bg) 12px);
-}
-
 /* ---------- Add Vehicle ---------- */
 
 .vehicle-form-body {
@@ -2152,13 +2023,6 @@ a.btn--primary {
   flex-direction: column;
   gap: 18px;
   margin-top: 18px;
-}
-
-.vehicle-form__row {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr;
-  gap: 12px;
-  align-items: start;
 }
 
 .vehicle-form__actions {
@@ -2179,129 +2043,7 @@ a.btn--primary {
   font-size: 15px;
 }
 
-.upload-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  min-height: 132px;
-  padding: 16px;
-  background: var(--color-surface);
-  border: 1.5px dashed #c9c9d1;
-  border-radius: 6px;
-  color: var(--color-placeholder);
-  text-align: center;
-  cursor: pointer;
-}
-
-.upload-box:hover {
-  border-color: var(--color-border-strong);
-}
-
-.compact-field:has(.visually-hidden:focus-visible) .upload-box {
-  outline: 2px solid var(--color-ink);
-  outline-offset: 2px;
-}
-
-.compact-field:has([aria-invalid='true']) .upload-box {
-  border-color: var(--color-danger);
-}
-
-.upload-box__icon {
-  margin-bottom: 6px;
-  color: #8a8a94;
-}
-
-.upload-box__title {
-  font-size: 12px;
-}
-
-.upload-box__meta {
-  font-size: 11px;
-  color: var(--color-placeholder);
-}
-
-.upload-box--filled {
-  flex-direction: row;
-  justify-content: flex-start;
-  gap: 12px;
-  min-height: 80px;
-  border-style: solid;
-  color: var(--color-ink);
-  text-align: left;
-  cursor: default;
-}
-
-.upload-box__thumb,
-.upload-box__pdf {
-  flex: none;
-  width: 56px;
-  height: 56px;
-  border-radius: 4px;
-  object-fit: cover;
-}
-
-.upload-box__pdf {
-  display: grid;
-  place-items: center;
-  background: var(--color-badge-danger-bg);
-  color: var(--color-badge-danger-text);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.upload-box__file {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.upload-box__name {
-  font-size: 13px;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.upload-box__remove {
-  flex: none;
-  color: var(--color-danger);
-}
-
-/* ---------- Vehicle Added ---------- */
-
-.vehicle-added .success-body__title {
-  margin-top: 24px;
-}
-
-.vehicle-added .success-body__text {
-  margin-top: 28px;
-}
-
-.vehicle-added__note {
-  align-self: stretch;
-  margin-top: 24px;
-  text-align: left;
-}
-
-.vehicle-added__actions {
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin-top: 40px;
-}
-
 /* ---------- Danger buttons, confirm dialog ---------- */
-
-.btn--danger {
-  background: var(--color-danger);
-  color: #fff;
-  border: none;
-}
 
 .btn--danger-outline {
   background: var(--color-surface);
@@ -2494,28 +2236,7 @@ a.btn--primary {
   cursor: not-allowed;
 }
 
-.vehicle-form__heading {
-  margin-top: 6px;
-  padding-top: 14px;
-  border-top: 1px solid var(--color-hairline);
-  font-size: 15px;
-  font-weight: 700;
-}
-
 /* ---------- Violation History: Paid tab, plate filter ---------- */
-
-.segmented--4 {
-  grid-template-columns: repeat(4, 1fr);
-}
-
-.segmented--4 .segmented__option {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 0 2px;
-  font-size: 12px;
-}
 
 .segmented__count {
   min-width: 17px;
@@ -2564,11 +2285,6 @@ a.btn--primary {
   flex-direction: column;
   gap: 18px;
   padding: 16px 18px 24px;
-}
-
-.history-home__intro {
-  font-size: 13px;
-  text-align: center;
 }
 
 .history-home__list {
@@ -2644,11 +2360,6 @@ a.btn--primary {
   background: linear-gradient(180deg, #fff6f6 0%, var(--color-surface) 62%);
 }
 
-.due-card--clear {
-  background: linear-gradient(180deg, #f1fff5 0%, var(--color-surface) 70%);
-  padding: 20px 18px;
-}
-
 .due-card__label {
   font-size: 12px;
   letter-spacing: 0.02em;
@@ -2660,12 +2371,6 @@ a.btn--primary {
   font-size: 32px;
   font-weight: 700;
   line-height: 1.2;
-}
-
-.due-card__clear-title {
-  color: var(--color-success-text);
-  font-size: 20px;
-  font-weight: 700;
 }
 
 .due-card__meta {
@@ -2686,8 +2391,7 @@ a.btn--primary {
   font-weight: 700;
 }
 
-.recent__title,
-.section-heading {
+.recent__title {
   font-size: 15px;
   font-weight: 700;
 }
@@ -2766,25 +2470,6 @@ a.btn--primary {
   justify-self: end;
 }
 
-.year-summary {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: auto;
-  padding-top: 8px;
-  text-align: center;
-}
-
-.year-summary__value {
-  font-size: 17px;
-  font-weight: 700;
-}
-
-.year-summary__label {
-  color: var(--color-placeholder);
-  font-size: 11px;
-}
-
 /* ---------- Profile / settings screens ---------- */
 
 .settings-body {
@@ -2792,38 +2477,6 @@ a.btn--primary {
   flex-direction: column;
   gap: 16px;
   padding: 14px 18px 28px;
-}
-
-.account-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border-color: #dcdce2;
-  box-shadow: var(--shadow-card);
-}
-
-.account-card__text {
-  min-width: 0;
-}
-
-.account-card__name {
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.account-card__line {
-  font-size: 12px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.account-card__since {
-  margin-top: 4px;
-  color: var(--color-placeholder);
-  font-size: 11px;
 }
 
 .profile-avatar {
@@ -2835,13 +2488,6 @@ a.btn--primary {
   color: var(--color-on-ink);
   font-weight: 700;
   letter-spacing: 0.02em;
-}
-
-.profile-head {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 2px 2px 4px;
 }
 
 .settings-group {
@@ -2907,19 +2553,8 @@ div.settings-row {
   background: #f4f4f8;
 }
 
-.settings-row--stacked {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: start;
-  gap: 6px 12px;
-}
-
 /* The status chip sits under the text, so the description keeps the full
    width of the card. */
-.settings-row--stacked .permission-chip {
-  grid-column: 2;
-  justify-self: start;
-}
 
 .settings-row__icon {
   flex: none;
@@ -3072,29 +2707,6 @@ div.settings-row {
 
 /* ---------- Privacy ---------- */
 
-.permission-chip {
-  flex: none;
-  align-self: center;
-  padding: 2px 8px;
-  border: 1px solid var(--color-hairline);
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.permission-chip--success {
-  background: var(--color-success-bg);
-  border-color: var(--color-success-border);
-  color: var(--color-success-text);
-}
-
-.permission-chip--danger {
-  background: var(--color-badge-danger-bg);
-  border-color: var(--color-badge-danger-border);
-  color: var(--color-badge-danger-text);
-}
-
 .privacy-card {
   padding: 14px 16px 16px;
   border-color: #dcdce2;
@@ -3149,12 +2761,6 @@ div.settings-row {
   font-weight: 700;
   text-align: right;
   overflow-wrap: anywhere;
-}
-
-.support-card__map {
-  display: inline-block;
-  margin-top: 14px;
-  font-size: 12px;
 }
 
 .app-version {
@@ -3232,12 +2838,6 @@ div.settings-row {
 }
 
 /* The raw code is reference material, not something to read first. */
-.scan-landing__code {
-  display: block;
-  margin-top: 3px;
-  font-size: 11px;
-  word-break: break-all;
-}
 
 .notice--paid {
   background: var(--color-success-bg);
@@ -3425,7 +3025,6 @@ div.settings-row {
 .history-card,
 .category-card,
 .settings-row,
-.vehicle-card,
 .faq-item__question {
   transition:
     transform 140ms var(--ease-out),
@@ -3444,8 +3043,7 @@ div.settings-row {
 /* Tappable cards move less — they're big, so a large scale looks wrong. */
 .history-card:active,
 .category-card:active,
-.settings-row:active,
-.vehicle-card:active {
+.settings-row:active {
   transform: scale(0.988);
 }
 
@@ -3542,14 +3140,6 @@ div.settings-row {
   border-radius: var(--radius-card);
 }
 
-.skeleton-line {
-  height: 12px;
-}
-
-.skeleton-line + .skeleton-line {
-  margin-top: 8px;
-}
-
 /* ---------- Motion off ----------
    Honours the phone's "reduce motion" setting, which people with vestibular
    conditions switch on. Content still appears; it just doesn't move. */
@@ -3577,8 +3167,7 @@ div.settings-row {
   .faq-item__question:active,
   .history-card:active,
   .category-card:active,
-  .settings-row:active,
-  .vehicle-card:active {
+  .settings-row:active {
     transform: none;
   }
 
@@ -3852,7 +3441,6 @@ div.settings-row {
 
 /* The photo lags a fraction behind the card, like the body settling after
    the wheels have stopped. */
-.vehicle-list > li .vehicle-card__photo,
 .vehicle-list > li .vehicle-row__photo img {
   animation: photo-settle 640ms cubic-bezier(0.16, 0.84, 0.44, 1) 60ms both;
 }
@@ -3871,7 +3459,6 @@ div.settings-row {
 
 @media (prefers-reduced-motion: reduce) {
   .vehicle-list > li,
-  .vehicle-list > li .vehicle-card__photo,
   .vehicle-list > li .vehicle-row__photo img {
     animation: none;
   }
@@ -4183,163 +3770,8 @@ div.settings-row {
   color: #fff;
 }
 
-/* ---------- Home vehicle card ----------
-   A wallet-pass style card: soft gradient, the plate in a plate-shaped
-   chip, and the car parked on the right running off the card's edge. It
-   isn't a link, so it has no press state at all. */
-
-.vehicle-hero {
-  position: relative;
-  isolation: isolate;
-  display: flex;
-  align-items: center;
-  min-height: 156px;
-  padding: 20px 20px 20px 22px;
-  border: 1px solid #e3e5ee;
-  border-radius: 22px;
-  background:
-    radial-gradient(110% 130% at 100% 100%, #dfe4f0 0%, rgba(223, 228, 240, 0) 62%),
-    linear-gradient(160deg, #ffffff 0%, #f1f3f9 100%);
-  box-shadow:
-    0 1px 2px rgba(16, 24, 40, 0.04),
-    0 14px 30px -14px rgba(16, 24, 40, 0.22);
-  overflow: hidden;
-  color: var(--color-ink);
-}
-
-.vehicle-hero__text {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  max-width: 55%;
-  min-width: 0;
-}
-
-.vehicle-hero__text p {
-  margin: 0;
-}
-
-.vehicle-hero__eyebrow {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--color-placeholder);
-}
-
-/* Shaped like a plate rather than set as a heading: thick border, square-ish
-   corners, wide letter spacing. */
-.vehicle-hero__plate {
-  margin: 8px 0 6px !important;
-  padding: 3px 10px 4px;
-  border: 2px solid var(--color-ink);
-  border-radius: 7px;
-  background: #fff;
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.06);
-  font-size: 20px;
-  font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.vehicle-hero__model {
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-.vehicle-hero__meta {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--color-placeholder);
-}
-
-.vehicle-hero__badge {
-  margin-top: 8px;
-}
-
-.vehicle-hero__art {
-  position: absolute;
-  z-index: 1;
-  right: -26px;
-  bottom: -40px;
-  width: 200px;
-  height: 200px;
-  pointer-events: none;
-  animation: hero-park 720ms var(--ease-out) 140ms both;
-}
-
-.vehicle-hero__photo {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.vehicle-hero__photo--stock {
-  transform: scaleX(-1);
-}
-
-/* A soft contact shadow under the tyres, so the car sits on something. */
-.vehicle-hero__shadow {
-  position: absolute;
-  left: 50%;
-  bottom: 62px;
-  width: 150px;
-  height: 18px;
-  transform: translateX(-50%);
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0));
-}
-
-/* The car rolls in a short way and settles — once, on arrival. */
-@keyframes hero-park {
-  from {
-    opacity: 0;
-    transform: translateX(34px);
-  }
-  70% {
-    opacity: 1;
-    transform: translateX(-3px);
-  }
-}
-
-.vehicle-hero--empty {
-  min-height: 112px;
-}
-
-.vehicle-hero--empty .vehicle-hero__text {
-  max-width: 100%;
-}
-
-.vehicle-hero--loading {
-  min-height: 156px;
-  background: linear-gradient(90deg, #f1f3f9 0%, #e7eaf2 50%, #f1f3f9 100%);
-  background-size: 200% 100%;
-  animation: hero-shimmer 1.4s linear infinite;
-}
-
-@keyframes hero-shimmer {
-  to {
-    background-position: -200% 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .vehicle-hero__art,
-  .vehicle-hero--loading {
-    animation: none;
-  }
-}
-
 /* ---------- Profile Information ----------
-   Same visual language as Home's vehicle card and the Quick Access icons:
+   Same visual language as the Quick Access icons:
    a soft gradient hero, then coloured icon tiles. */
 
 .profile-hero {
@@ -4494,13 +3926,6 @@ div.settings-row {
    multiplied away on the tinted background. The list and details keep them
    unmirrored so badges and plates read the right way round; their cards are
    white already. */
-.vehicle-hero__art--type {
-  mix-blend-mode: multiply;
-}
-
-.vehicle-hero__art--type .vehicle-hero__photo {
-  transform: scaleX(-1);
-}
 
 .vehicle-row__photo--type img,
 .vehicle-details__photo--type img {
@@ -4617,4 +4042,310 @@ div.settings-row {
   max-width: calc(100% - 80px);
   font-size: clamp(18px, 5.4vw, 23px);
   text-wrap: balance;
+}
+
+/* ---------- Payment Check: "Add to My Account" (checklist P1) ---------- */
+
+/* Long badges ("NOT ACCEPTED") were squeezed by the title and cut off. */
+.violation-card__title-row .status-badge {
+  flex: none;
+}
+
+.claim-card {
+  margin-top: 14px;
+  padding: 16px 18px;
+}
+
+.claim-card__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.claim-card p {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.claim-card .btn-stack {
+  margin-top: 4px;
+}
+
+.claim-card .claim-card__small {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--color-placeholder);
+}
+
+.claim-card--done {
+  border: 1.5px solid #17a05a;
+}
+
+.claim-card--done .claim-card__title {
+  color: #0f7a43;
+}
+
+.claim-card--stop {
+  border: 1.5px solid var(--color-danger);
+}
+
+.claim-card--stop .claim-card__title {
+  color: #c4121d;
+}
+
+/* ---------- Home car (HomeCar.jsx) ----------
+   Decorative, no card around it: the car slides in from the right and
+   stops, leaving two skid marks behind its tyres. */
+
+.home-car {
+  position: relative;
+  height: 190px;
+  /* Edge to edge, past the page gutter. */
+  margin: 0 calc(-1 * var(--page-gutter)) 4px;
+  overflow: hidden;
+  /* Its own backdrop, so the photo's white background can blend into it. */
+  isolation: isolate;
+  background: var(--color-bg);
+}
+
+.home-car__art {
+  position: absolute;
+  left: 18px;
+  bottom: 10px;
+  width: 300px;
+  /* The photo's white background melts into the page colour. */
+  mix-blend-mode: multiply;
+  animation: home-car-slide 900ms cubic-bezier(0.2, 0.75, 0.25, 1) 120ms both;
+}
+
+.home-car__photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* Faces left, the way it drives in. */
+  transform: scaleX(-1);
+}
+
+.home-car__shadow {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: 4px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0));
+}
+
+/* Rubber streaks from the right edge to the tyres, drawn as the car slides. */
+.home-car__skid {
+  position: absolute;
+  right: 0;
+  height: 7px;
+  border-radius: 7px 0 0 7px;
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0) 0 3px, rgba(0, 0, 0, 0.18) 3px 5px),
+    linear-gradient(90deg, rgba(20, 20, 24, 0.78) 0%, rgba(20, 20, 24, 0.45) 45%, rgba(20, 20, 24, 0) 100%);
+  transform-origin: right center;
+}
+
+.home-car__skid--rear {
+  bottom: 36px;
+  left: 262px;
+  transform: skewX(-8deg);
+  animation:
+    home-car-skid-rear 900ms cubic-bezier(0.2, 0.75, 0.25, 1) 120ms both,
+    home-car-skid-fade 2.6s ease-out 1.1s both;
+}
+
+.home-car__skid--front {
+  bottom: 24px;
+  left: 132px;
+  height: 8px;
+  animation:
+    home-car-skid-front 900ms cubic-bezier(0.2, 0.75, 0.25, 1) 120ms both,
+    home-car-skid-fade 2.6s ease-out 1.1s both;
+}
+
+@keyframes home-car-slide {
+  from {
+    opacity: 0;
+    transform: translateX(260px) rotate(-1.2deg);
+  }
+  70% {
+    opacity: 1;
+    transform: translateX(-6px) rotate(0.6deg);
+  }
+  85% {
+    transform: translateX(2px) rotate(-0.2deg);
+  }
+  to {
+    transform: translateX(0) rotate(0);
+  }
+}
+
+@keyframes home-car-skid-front {
+  from {
+    transform: scaleX(0);
+    opacity: 0.9;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 0.9;
+  }
+}
+
+@keyframes home-car-skid-rear {
+  from {
+    transform: skewX(-8deg) scaleX(0);
+    opacity: 0.9;
+  }
+  to {
+    transform: skewX(-8deg) scaleX(1);
+    opacity: 0.9;
+  }
+}
+
+@keyframes home-car-skid-fade {
+  from {
+    opacity: 0.9;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-car__art,
+  .home-car__skid {
+    animation: none;
+  }
+  .home-car__skid {
+    opacity: 0.45;
+  }
+}
+
+/* ---------- History: "You're all clear" (no card) ----------
+   A message, not a button: no border or background, so it doesn't look
+   tappable like the category cards under it. */
+
+.all-clear {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0 6px;
+  text-align: center;
+}
+
+.all-clear__icon {
+  width: 44px;
+  height: 44px;
+  margin-bottom: 8px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.all-clear__title {
+  margin: 0;
+  color: var(--color-success-text);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.all-clear__meta {
+  margin: 2px 0 0;
+  color: var(--color-placeholder);
+  font-size: 12px;
+}
+
+/* ---------- My Vehicles: latest activity under each vehicle ----------
+   Marco's option F (vehicle-card-options.html). The card holds two links:
+   the vehicle row (Vehicle Details) and the latest-activity panel (the
+   violation, or the payment's receipt). */
+
+.vehicle-entry {
+  padding: 0 0 12px;
+  box-shadow: var(--shadow-card);
+  border-color: #d6d6dc;
+  overflow: hidden;
+}
+
+.vehicle-entry .vehicle-row {
+  min-height: 96px;
+  border: 0;
+  box-shadow: none;
+  background: none;
+}
+
+.vehicle-latest {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f4f5f9;
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.vehicle-latest:active {
+  transform: translateY(1px);
+}
+
+.vehicle-latest__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vehicle-latest__title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.vehicle-latest__line {
+  overflow: hidden;
+  color: var(--color-placeholder);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vehicle-latest__chip {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.vehicle-latest__chip--due {
+  background: #fde8e9;
+  color: #c4121d;
+}
+
+.vehicle-latest__chip--ok {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.vehicle-latest__chip--wait {
+  background: #fdf0d8;
+  color: #94600c;
+}
+
+/* Vehicle Details, minimal: the note for a vehicle from a payment is a
+   plain line, not a box. */
+.vehicle-details__caption {
+  margin: 2px 4px 0;
+  color: var(--color-placeholder);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
 }

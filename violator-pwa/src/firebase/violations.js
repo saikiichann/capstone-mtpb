@@ -50,7 +50,8 @@ export async function listMyViolations(plateNumbers) {
       .filter((v) => plateNumbers.some((p) => samePlate(p, v.plateNumber)))
       .map(normalizeSampleViolation)
   }
-  if (plateNumbers.length === 0) return []
+  // Asked even with no verified vehicles: the server also returns the
+  // violations this account paid itself (checklist P1).
   const { violations } = await callApi('violations', { action: 'mine' })
   return violations
 }

@@ -1,5 +1,6 @@
 import { onAuthStateChanged } from 'firebase/auth'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { callApi } from '../api'
 import { sampleUser } from '../data/sample'
 import { auth, isFirebaseConfigured } from '../firebase/config'
 import {
@@ -36,6 +37,25 @@ function writeGuestChoice(chosen) {
   } catch {
     // Private mode: the choice just won't survive a reload.
   }
+}
+
+const LINKED_KEY = 'mtpb-guest-payments-linked'
+
+function linkGuestPaymentsOnce(uid) {
+  try {
+    if (sessionStorage.getItem(LINKED_KEY) === uid) return
+  } catch {
+    // Private mode: just ask again. The server makes that harmless.
+  }
+  callApi('account-links', { action: 'link-guest' })
+    .then(() => {
+      try {
+        sessionStorage.setItem(LINKED_KEY, uid)
+      } catch {
+        // See above.
+      }
+    })
+    .catch((err) => console.warn('Could not link guest payments yet', err))
 }
 
 // A plain snapshot of the Firebase user, so React re-renders when
@@ -91,6 +111,14 @@ function FirebaseAuthProvider({ children }) {
       }
     })
   }, [])
+
+  // Checklist P1: once a verified account is signed in, the GCash payments
+  // its email made as a guest move into it (server/account-links.js). Once
+  // per account per tab; a failure just waits for the next sign-in.
+  const verifiedUid = state.user && !state.user.isGuest && state.user.emailVerified ? state.user.uid : null
+  useEffect(() => {
+    if (verifiedUid) linkGuestPaymentsOnce(verifiedUid)
+  }, [verifiedUid])
 
   const signIn = useCallback(async (credentials) => {
     busyRef.current = true

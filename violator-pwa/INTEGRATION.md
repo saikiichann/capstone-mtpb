@@ -85,12 +85,28 @@ In the same transaction the backend:
 
 Verification, the clamp, release status and release belong to the admin app.
 
+**Linking a payment to an account** (`server/account-links.js`): when a
+payment is added to a violator's account (a guest's GCash payment by its
+verified email, a cash payment from its slip QR once verified, or a GCash
+payment made while signed in), one transaction sets on the **payment**
+`violatorUid`, `violatorName`, `uid`, `linkedAt` (and `linkedFromGuestUid`
+when it moves from a guest), and on the **violation** `violatorUid` and
+`violatorName`, the fields the enforcer app creates as null. A payment or
+violation that already names another account is never changed.
+
 ## 4. `checkoutAttempts` (this app's backend only)
 
 One document per Pay Now press, paid or not, so abandoned checkouts never
 reach the admin app's verification queue. Holds the PayMongo session, the
-amounts, the contact number and email, and, once paid, the REF number. The
-browser can't read it; the success page asks `/api/confirm-payment`.
+amounts, the contact number and email (also `emailLower`), `isGuest`, and,
+once paid, the REF number. The browser can't read it; the success page asks
+`/api/confirm-payment`.
+
+`cashClaims` (also backend only): one document per cash payment added to an
+account from its slip QR (document id = the payment's id): `uid`,
+`violationId`, `cin`, `plateNo`, `referenceNumber`, `claimedAt`, and
+`releaseEmailFor` / `releaseEmailSentAt` once the "vehicle released" email
+went to that account's registered email.
 
 ## 5. Violator accounts
 
@@ -107,6 +123,13 @@ browser can't read it; the success page asks `/api/confirm-payment`.
 Read by this app: `ownerUid`, `plateNumber`, `verificationStatus`, and the
 vehicle's details. Owners can't add or edit vehicles; they're attached by the
 MTPB side.
+
+When a payment is linked to an account (section 3), the backend also adds the
+plate if the account doesn't have it: `ownerUid`, `plateNumber`,
+`vehicleType`, `make`, `color` (from the violation), `verificationStatus:
+"pending"`, `source: "payment"`, `linkedViolationId`, `linkedCin`,
+`createdAt`, `createdBy: "Violator app (payment)"`. The app shows only that
+account's own violations on it.
 
 ## 7. Still to agree
 

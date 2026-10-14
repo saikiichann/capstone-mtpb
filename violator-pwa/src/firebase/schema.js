@@ -38,6 +38,10 @@ export const COLLECTIONS = {
   // Our own record of every Pay Now press, paid or not. Backend only, so
   // abandoned checkouts never reach the admin app's verification queue.
   checkoutAttempts: 'checkoutAttempts',
+  // Our own record of each cash payment added to an account from its slip QR
+  // (server/account-links.js), so the "vehicle released" email reaches that
+  // account. Backend only. Document id = the payment's id.
+  cashClaims: 'cashClaims',
   // The admin app's counters. Reference numbers come from PAYMENT_COUNTER_ID,
   // shared with its cash payments so the two never hand out the same number.
   counters: 'counters',

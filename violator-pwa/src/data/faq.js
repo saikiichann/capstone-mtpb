@@ -15,8 +15,6 @@ export const FAQ_CATEGORIES = [
   { id: 'release', label: 'Release' },
 ]
 
-export const MTPB_ADDRESS = 'Central Market, Santa Cruz, Manila, 1008 Metro Manila'
-
 export const FAQ_ENTRIES = [
   // ---- Payment ----
   {

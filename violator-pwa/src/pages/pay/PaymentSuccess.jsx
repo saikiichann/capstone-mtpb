@@ -14,10 +14,6 @@ import { ProcessingPayment } from './PayConfirm'
 // "pending" for a few seconds until PayMongo confirms, so this page asks the
 // backend every few seconds. Once paid, the backend has recorded it in the
 // admin app with a REF number, waiting for MTPB staff to verify it.
-//
-// The green "A receipt has been sent to …" note stays hidden until sending
-// emails is set up on the backend (flip SHOW_EMAIL_NOTE then).
-const SHOW_EMAIL_NOTE = false
 const CHECK_EVERY_MS = 4000
 const MAX_CHECKS = 10
 
@@ -137,14 +133,6 @@ export default function PaymentSuccess() {
             <strong className="detail-list__value--danger">{formatPeso(total)}</strong>
           </div>
         </section>
-
-        {SHOW_EMAIL_NOTE && payment.email && (
-          <p className="success-body__email">
-            A receipt has been sent to
-            <br />
-            <strong>{payment.email}</strong>
-          </p>
-        )}
 
         {isGuest && (
           <p className="info-note success-body__guest">

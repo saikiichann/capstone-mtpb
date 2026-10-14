@@ -6,7 +6,8 @@ import { createRateLimiter } from '../server/rate-limit.js'
 // POST /api/payment-check
 // Header: Authorization: Bearer <Firebase ID token> (guests: anonymous)
 // Body: { id }  the payment id from a cash slip's QR (/r/<id>)
-// Returns: { payment: { referenceNumber, method, amount, paidAt, status, violationCin, plateNumber } }
+// Returns: { payment: { referenceNumber, method, amount, paidAt, status, violationCin, plateNumber,
+//                       claim: { state, deadline } } }   (claim: server/account-links.js)
 //          or 404 "No payment found for this code."
 // See server/payment-check.js.
 
@@ -21,9 +22,9 @@ export async function POST(request) {
   const headers = corsHeaders(request)
   try {
     enforceRateLimit(limiter, request)
-    await requireUser(request, adminAuth())
+    const user = await requireUser(request, adminAuth())
     const body = await readJson(request)
-    const payment = await createPaymentCheck({ store: createFirestoreStore() }).check(body.id)
+    const payment = await createPaymentCheck({ store: createFirestoreStore() }).check(body.id, { user })
     return json(200, { payment }, headers)
   } catch (err) {
     return errorResponse(err, headers)
