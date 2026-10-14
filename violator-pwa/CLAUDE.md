@@ -99,8 +99,8 @@ edit by exact unique strings. Never cut between comment markers.** Check the lin
   - Signed-in GCash payers (own email) are linked straight away.
   - **Emails** (receipt, verified/rejected, vehicle released) go **only** to the typed email, or the payer's
     registered email if a signed-in payer left it blank. Never to anyone else.
-  - **Cash** gets no emails (the printed slip is the receipt), except "vehicle released" to the registered email of
-    the account that added it from the slip QR (`cashClaims`, backend only).
+  - **Cash** gets no emails until someone adds it from the slip QR. Then the account's registered email gets a
+    **receipt** (once, marked verified) and later "vehicle released" (`cashClaims`, backend only).
   - Linking fills the team's `violatorUid` / `violatorName` on the payment and violation (Mira's Release pages then
     show "Registered"), plus our `uid` on the payment. Never overwrites another account.
   - The plate goes on the account as `pending`, `source: 'payment'`, shown with **no badge** (they all come from payments). It works

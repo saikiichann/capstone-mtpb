@@ -39,7 +39,7 @@ export default function PrivacySettings() {
             </li>
             <li>
               For a GCash payment: the mobile number and email entered for it. For a cash payment you added: a
-              record that you added it, so we can tell you when the vehicle is released.
+              record that you added it, so we can email you its receipt and tell you when the vehicle is released.
             </li>
             <li>
               If the app crashes: a technical error report, with email addresses, mobile numbers and QR codes
@@ -68,7 +68,7 @@ export default function PrivacySettings() {
             <li>
               To email you the receipt, whether MTPB verified or didn’t accept your payment, and when your
               vehicle is released. These go only to the email entered when paying, or to your account’s email.
-              Cash payments get only the release email, once added to your account.
+              Cash payments get a receipt and the release email once you add them to your account.
             </li>
             <li>To find and fix problems in the app.</li>
           </ul>

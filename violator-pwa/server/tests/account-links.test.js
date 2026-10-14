@@ -19,7 +19,7 @@ function memoryStore() {
     ['v-other', { cin: 'CLMP-2026-0017', plateNo: 'XYZ 9999', violatorUid: null }],
   ])
   const payments = new Map([
-    ['cashVerified00000001', { violationId: 'v-cash', method: 'Cash', status: 'Verified', verifiedAt: daysAgo(2), violatorUid: null }],
+    ['cashVerified00000001', { violationId: 'v-cash', cin: 'CLMP-2026-0015', plateNo: 'GHL 9012', referenceNumber: 'REF-2026-00022', orNumber: 'OR-2026-00007', totalAmount: 900, method: 'Cash', status: 'Verified', verifiedAt: daysAgo(2), createdAt: daysAgo(3), violatorUid: null }],
     ['cashPending000000001', { violationId: 'v-cash', method: 'Cash', status: 'Pending Verification', violatorUid: null }],
     ['cashOld0000000000001', { violationId: 'v-cash', method: 'Cash', status: 'Verified', verifiedAt: daysAgo(8), violatorUid: null }],
     ['cashRejected00000001', { violationId: 'v-cash', method: 'Cash', status: 'Rejected', violatorUid: null }],
@@ -41,6 +41,9 @@ function memoryStore() {
     cashClaims,
     async recordCashClaim(id, data) {
       cashClaims.set(id, { ...cashClaims.get(id), ...data })
+    },
+    async updateCashClaim(id, patch) {
+      cashClaims.set(id, { ...cashClaims.get(id), ...patch })
     },
     async getViolationById(id) {
       return violations.has(id) ? normalizeViolation(id, violations.get(id)) : null
@@ -184,6 +187,40 @@ describe('adding a cash payment from the slip', () => {
       (e) => e.status === 403,
     )
     await assert.rejects(links.claimCash({ user: juan, paymentId: 'ZZZZZZZZZZZZZZZZZZZZ' }), (e) => e.status === 404)
+  })
+})
+
+describe('cash receipt email when the payment is added', () => {
+  function fakeMailer({ fail = false } = {}) {
+    const sent = []
+    return { sent, async send(message) { if (fail) throw new Error('SMTP down'); sent.push(message) } }
+  }
+
+  it("goes once to the account's registered email, marked verified", async () => {
+    const store = memoryStore()
+    const mailer = fakeMailer()
+    const links = createAccountLinks({ store, auth, mailer, now: () => NOW })
+    await links.claimCash({ user: juan, paymentId: 'cashVerified00000001' })
+    assert.equal(mailer.sent.length, 1)
+    const mail = mailer.sent[0]
+    assert.equal(mail.to, 'juan@gmail.com')
+    assert.equal(mail.subject, 'MTPB cash payment receipt – REF-2026-00022')
+    for (const part of ['PAYMENT RECEIPT', 'REF-2026-00022', 'OR-2026-00007', 'CLMP-2026-0015', 'GHL 9012', 'Cash', 'Verified']) {
+      assert.ok(mail.text.includes(part), `has ${part}`)
+    }
+    assert.ok(store.cashClaims.get('cashVerified00000001').receiptEmailSentAt)
+
+    // Opening the slip again and tapping Add sends nothing new.
+    await links.claimCash({ user: juan, paymentId: 'cashVerified00000001' })
+    assert.equal(mailer.sent.length, 1)
+  })
+
+  it('a mail problem never stops the payment being added', async () => {
+    const store = memoryStore()
+    const links = createAccountLinks({ store, auth, mailer: fakeMailer({ fail: true }), now: () => NOW })
+    assert.deepEqual(await links.claimCash({ user: juan, paymentId: 'cashVerified00000001' }), { status: 'yours' })
+    assert.equal(store.payments.get('cashVerified00000001').violatorUid, 'juan')
+    assert.match(store.cashClaims.get('cashVerified00000001').receiptEmailError, /SMTP down/)
   })
 })
 

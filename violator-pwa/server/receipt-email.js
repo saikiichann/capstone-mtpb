@@ -33,3 +33,34 @@ export function buildReceiptEmail(attempt) {
   })
   return { subject: `MTPB payment received – ${attempt.referenceNumber}`, ...email }
 }
+
+// Sent to the account's registered email when someone adds a cash payment
+// from its slip's QR (server/account-links.js). Cash can only be added once
+// MTPB has verified it, so this one says verified. `payment` is Mira's
+// payment document; `violation` the mapped violation, for its details.
+export function buildCashReceiptEmail({ payment, violation }) {
+  const total = payment.totalAmount ?? payment.amount
+  const email = renderEmail({
+    heading: 'PAYMENT RECEIPT',
+    message:
+      'Your cash payment is verified by MTPB and is now in your MTPB account, where you can also open this receipt.',
+    rows: [
+      ['Reference Number', payment.referenceNumber],
+      ['OR Number', payment.orNumber],
+      ['Date Paid', formatDateTime(payment.paidAt ?? payment.createdAt)],
+      ['Violation Number', payment.cin || violation?.cin],
+      ['Plate Number', payment.plateNo || violation?.plateNumber],
+      ['Violation Type', violation?.violationType],
+      ['Location', violation?.location],
+      ['Payment Method', 'Cash'],
+      ['Status', 'Verified'],
+      ['Total Paid', formatPeso(total)],
+    ],
+    emphasizeLast: true,
+    closing: [
+      'Keep this email with your printed slip. Show the reference number at the MTPB office if you are asked for proof of payment.',
+      CONTACT_LINE,
+    ],
+  })
+  return { subject: `MTPB cash payment receipt – ${payment.referenceNumber}`, ...email }
+}
