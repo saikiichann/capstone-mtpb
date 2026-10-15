@@ -260,6 +260,13 @@ export default function ClampingLog() {
 
   const [rows, setRows] = useState<ClampLogRow[]>([]);
   const [loading, setLoading] = useState(true);
+  /** True kapag na-load na ang role — hindi tatakbo ang auto-flag bago nito. */
+  const [userLoaded, setUserLoaded] = useState(false);
+  /** IDs ng violations na may impoundRecords na; null habang naglo-load. */
+  const [impoundRecordIds, setImpoundRecordIds] = useState<Set<string> | null>(null);
+  const autoFlagRunning = useRef(false);
+  /** Mga violation na naproseso na sa session na ito — iwas doble. */
+  const autoFlagHandled = useRef<Set<string>>(new Set());
 
   const [searchQuery, setSearchQuery] = useState("");
   const [violationFilter, setViolationFilter] = useState(ALL_VIOLATIONS);
@@ -280,6 +287,7 @@ export default function ClampingLog() {
             name: data.name ?? "Unknown",
             role: (data.role ?? "oic") as RoleSlug,
           });
+          setUserLoaded(true);
         }
       } catch (err) {
         console.error("Failed to load current user:", err);
@@ -337,12 +345,39 @@ export default function ClampingLog() {
     return () => unsubscribe();
   }, []);
 
+  /* Which violations already have an impoundRecords entry */
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, "impoundRecords"),
+      (snap) => {
+        const ids = new Set<string>();
+        snap.docs.forEach((d) => {
+          ids.add(d.id);
+          const source = d.data().sourceViolationId;
+          if (typeof source === "string" && source) ids.add(source);
+        });
+        setImpoundRecordIds(ids);
+      },
+      (err) => console.warn("impoundRecords fetch failed:", err.code)
+    );
+    return () => unsubscribe();
+  }, []);
+
   /* ------------------------------------------------------------------
      AUTO-FLAG OVERDUE VIOLATIONS (Client-Side)
 
-     Runs on every page load. Finds clamped violations that have exceeded
-     the 24-hour grace period and auto-flags them as "Subject to Impound"
-     with a fixed impound fee of ₱2,000.
+     Runs whenever the OIC opens this page. Two jobs:
+
+     1. Clamped violations past the 24-hour grace period are flagged
+        "Subject to Impound" with a fixed impound fee of ₱2,000.
+     2. Every flagged violation gets an impoundRecords entry (doc id =
+        violation id). That collection is what Active Impounding, the
+        Impounding Staff pages and the Impounding Log read, so without it
+        a flagged vehicle never reaches the impounding side. This also
+        backfills violations that were auto-flagged before this fix.
+
+     OIC only: Firestore rules allow only the OIC to set impoundStatus and
+     to create impoundRecords, so for a Supervisor the batch would fail.
 
      This is a client-side alternative to a scheduled Cloud Function,
      used because the thesis project does not have access to a Blaze
@@ -350,68 +385,114 @@ export default function ClampingLog() {
   ------------------------------------------------------------------ */
   useEffect(() => {
     if (loading || rows.length === 0) return;
+    if (!userLoaded || currentUser.role !== "oic") return;
+    if (impoundRecordIds === null) return;
+    if (autoFlagRunning.current) return;
+
+    const handled = autoFlagHandled.current;
+    const isActiveClamp = (row: ClampLogRow) =>
+      row.status === "Clamped" &&
+      row.impoundStatus !== "Impounded" &&
+      !handled.has(row.id);
+
+    // 1. Past the grace period and not yet flagged
+    const overdueRows = rows.filter(
+      (row) =>
+        isActiveClamp(row) &&
+        row.hoursSinceClamp >= GRACE_PERIOD_HOURS &&
+        row.impoundStatus !== "Subject to Impound"
+    );
+
+    // 2. Already flagged but missing its impoundRecords entry
+    const missingRecordRows = rows.filter(
+      (row) =>
+        isActiveClamp(row) &&
+        row.impoundStatus === "Subject to Impound" &&
+        !impoundRecordIds.has(row.id)
+    );
+
+    if (overdueRows.length === 0 && missingRecordRows.length === 0) return;
+
+    const work = [
+      ...overdueRows.map((row) => ({ row, flag: true })),
+      ...missingRecordRows.map((row) => ({ row, flag: false })),
+    ];
 
     const autoFlagOverdue = async () => {
-      const overdueRows = rows.filter(
-        (row) =>
-          row.status === "Clamped" &&
-          row.hoursSinceClamp >= GRACE_PERIOD_HOURS &&
-          row.impoundStatus !== "Subject to Impound" &&
-          row.impoundStatus !== "Impounded"
-      );
-
-      if (overdueRows.length === 0) return;
-
+      autoFlagRunning.current = true;
       console.log(
-        `[auto-flag] Found ${overdueRows.length} overdue clamped violation(s) to flag`
+        `[auto-flag] Flagging ${overdueRows.length}, adding impound records for ${missingRecordRows.length}`
       );
 
+      // A batch holds up to 500 writes; each row uses at most 3.
+      const CHUNK = 150;
       try {
-        const batch = writeBatch(db);
+        for (let i = 0; i < work.length; i += CHUNK) {
+          const chunk = work.slice(i, i + CHUNK);
+          const batch = writeBatch(db);
 
-        overdueRows.forEach((row) => {
-          const violationRef = doc(db, "violations", row.id);
-          const auditRef = doc(collection(db, "auditLogs"));
+          chunk.forEach(({ row, flag }) => {
+            if (flag) {
+              batch.update(doc(db, "violations", row.id), {
+                impoundStatus: "Subject to Impound",
+                impoundFlaggedAt: serverTimestamp(),
+                impoundFlaggedBy: "system",
+                impoundFlaggedByRole: "system",
+                impoundAutoFlagged: true,
+                impoundFee: IMPOUND_FEE,
+                updatedAt: serverTimestamp(),
+                updatedBy: "system",
+              });
 
-          batch.update(violationRef, {
-            impoundStatus: "Subject to Impound",
-            impoundFlaggedAt: serverTimestamp(),
-            impoundFlaggedBy: "system",
-            impoundFlaggedByRole: "system",
-            impoundAutoFlagged: true,
-            impoundFee: IMPOUND_FEE,
-            updatedAt: serverTimestamp(),
-            updatedBy: "system",
+              batch.set(doc(collection(db, "auditLogs")), {
+                userName: "System",
+                userRole: "system",
+                action: `auto-flagged violation ${row.cin} as Subject to Impound (24hr grace period expired)`,
+                record: row.cin,
+                type: "impound-flag-auto",
+                metadata: {
+                  cin: row.cin,
+                  plateNo: row.plateNo,
+                  hoursSinceClamp: Math.round(row.hoursSinceClamp),
+                  impoundFee: IMPOUND_FEE,
+                  method: "client-side",
+                },
+                timestamp: serverTimestamp(),
+              });
+            }
+
+            if (!impoundRecordIds.has(row.id)) {
+              batch.set(doc(db, "impoundRecords", row.id), {
+                sourceViolationId: row.id,
+                referenceNumber: row.reference,
+                cin: row.cin,
+                plateNo: row.plateNo,
+                location: row.location,
+                initialViolation: row.violation,
+                clampedBy: row.officer,
+                clampedAt: row.recordedAt,
+                status: "Subject to Impound",
+                impoundFee: IMPOUND_FEE,
+                autoFlagged: flag || row.autoFlagged,
+                createdBy: "system",
+                createdAt: serverTimestamp(),
+              });
+            }
           });
 
-          batch.set(auditRef, {
-            userName: "System",
-            userRole: "system",
-            action: `auto-flagged violation ${row.cin} as Subject to Impound (24hr grace period expired)`,
-            record: row.cin,
-            type: "impound-flag-auto",
-            metadata: {
-              cin: row.cin,
-              plateNo: row.plateNo,
-              hoursSinceClamp: Math.round(row.hoursSinceClamp),
-              impoundFee: IMPOUND_FEE,
-              method: "client-side",
-            },
-            timestamp: serverTimestamp(),
-          });
-        });
-
-        await batch.commit();
-        console.log(
-          `[auto-flag] Successfully flagged ${overdueRows.length} violation(s)`
-        );
+          await batch.commit();
+          chunk.forEach(({ row }) => handled.add(row.id));
+        }
+        console.log("[auto-flag] Done");
       } catch (err) {
         console.error("[auto-flag] Failed to flag overdue violations:", err);
+      } finally {
+        autoFlagRunning.current = false;
       }
     };
 
     autoFlagOverdue();
-  }, [loading, rows]);
+  }, [loading, rows, userLoaded, currentUser.role, impoundRecordIds]);
 
   /* Click outside */
   useEffect(() => {

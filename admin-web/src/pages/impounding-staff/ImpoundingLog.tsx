@@ -245,9 +245,17 @@ export default function ImpoundingLog() {
   useEffect(() => {
     let recordsRows: ImpoundLogRow[] = [];
     let violationsRows: ImpoundLogRow[] = [];
+    // Violation ids that already have an impoundRecords entry (doc id or
+    // sourceViolationId). Those violations are shown through the record,
+    // whose status Impounding Staff keeps up to date, so they are not
+    // listed a second time.
+    let recordLinkedIds = new Set<string>();
 
     const merge = () => {
-      const merged = [...recordsRows, ...violationsRows].sort(
+      const merged = [
+        ...recordsRows,
+        ...violationsRows.filter((r) => !recordLinkedIds.has(r.id.slice(2))),
+      ].sort(
         (a, b) => millis(b.recordedAt) - millis(a.recordedAt)
       );
       setLogs(merged);
@@ -258,6 +266,12 @@ export default function ImpoundingLog() {
     const unsubRecords = onSnapshot(
       collection(db, "impoundRecords"),
       (snap) => {
+        recordLinkedIds = new Set<string>();
+        snap.docs.forEach((d) => {
+          recordLinkedIds.add(d.id);
+          const source = d.data().sourceViolationId;
+          if (typeof source === "string" && source) recordLinkedIds.add(source);
+        });
         recordsRows = snap.docs.map((d) => {
           const data = d.data();
           return {
