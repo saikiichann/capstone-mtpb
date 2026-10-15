@@ -20,7 +20,7 @@ export default function History() {
   const loading = violationsStatus === 'loading' || paymentsStatus === 'loading'
 
   const unpaid = violations.filter((v) => v.paymentStatus !== 'paid')
-  const amountDue = unpaid.reduce((sum, v) => sum + (Number(v.fineAmount) || 0), 0)
+  const amountDue = unpaid.reduce((sum, v) => sum + (Number(v.amountDue ?? v.fineAmount) || 0), 0)
   const paidPayments = payments.filter((p) => p.isPaid)
   const paidTotal = paidPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
   const recent = recentActivity(violations, paidPayments)
@@ -137,7 +137,7 @@ function recentActivity(violations, paidPayments) {
         key: `vio-${v.id ?? v.cin}`,
         label: v.cin,
         at: v.clampedAt,
-        amount: v.fineAmount,
+        amount: v.amountDue ?? v.fineAmount,
         badge: v.status,
         tone: v.status === 'impounded' ? 'red' : 'amber',
         to: `/v/${encodeURIComponent(v.id ?? v.cin)}`,

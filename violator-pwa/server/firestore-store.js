@@ -336,6 +336,10 @@ export function createFirestoreStore() {
           amount: attempt.fineAmount,
           convenienceFee: attempt.convenienceFee,
           totalAmount: attempt.totalAmount,
+          // Same fields as the admin app's counter payments: once impounded
+          // the impound fee is what was charged, not the clamp fine.
+          chargeType: attempt.chargeType ?? 'Clamp',
+          impoundFee: attempt.impoundFee ?? 0,
           referenceNumber,
           method: 'GCash',
           status: 'pending',

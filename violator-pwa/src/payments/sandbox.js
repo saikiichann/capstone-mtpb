@@ -66,7 +66,7 @@ export async function submitSandboxPayment({ uid, violation, method, mobileNumbe
   if (existing) return existing // never charge the same violation twice
 
   const now = new Date()
-  const charges = computeCharges(violation.fineAmount, method)
+  const charges = computeCharges(violation.amountDue ?? violation.fineAmount, method)
   const payment = {
     referenceNumber: makeReferenceNumber(now),
     status: 'paid',

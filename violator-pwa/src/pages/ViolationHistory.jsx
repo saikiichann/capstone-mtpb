@@ -99,7 +99,7 @@ export default function ViolationHistory() {
                     <span className="history-card__type">{v.violationType}</span>
                   </span>
                   <span className="history-card__side">
-                    <span className="history-card__amount">{formatPeso(v.fineAmount)}</span>
+                    <span className="history-card__amount">{formatPeso(v.amountDue ?? v.fineAmount)}</span>
                     <StatusBadge status={isPaid(v) ? (v.awaitingVerification ? 'verifying' : 'paid') : v.status} />
                   </span>
                   <span className="history-card__chevron" aria-hidden="true">

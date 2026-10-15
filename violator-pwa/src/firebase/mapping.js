@@ -42,6 +42,9 @@ const FIELDS = {
   vehicleType: ['vehicleType', 'type', 'clampType'],
   vehicleColor: ['vehicleColor', 'color'],
   evidencePhotos: ['evidencePhotos', 'photos', 'evidence', 'images'],
+  // Set by the admin app's impound flow (admin-web/src/lib/impoundFlag.ts).
+  impoundStatus: ['impoundStatus'],
+  impoundFee: ['impoundFee'],
 }
 
 // Field names a violation's plate might be stored under. Firestore can't
@@ -94,10 +97,45 @@ export function normalizeViolationStatus(value) {
 
 // ------------------------------------------------------------- violations
 
+// ------------------------------------------------------------ impounding
+//
+// A clamped vehicle left unpaid past 24 hours is flagged "Subject to Impound"
+// by the admin app, then "Impounded" once the impounding staff tow it. From
+// then on MTPB charges a flat impound fee that REPLACES the clamp fine
+// (₱2,000, not ₱900 + ₱2,000). Same rule as the admin app's
+// impoundFeeDue / amountDue in admin-web/src/lib/impoundFlag.ts.
+export const IMPOUND_FEE = 2000
+
+const IMPOUND_WORDS = {
+  subject_to_impound: ['subject_to_impound'],
+  scheduled: ['scheduled_for_impounding', 'scheduled'],
+  impounded: ['impounded'],
+  released: ['released'],
+}
+
+// 'none' | 'subject_to_impound' | 'scheduled' | 'impounded' | 'released'
+export function normalizeImpoundStatus(value) {
+  const w = word(value)
+  for (const [status, words] of Object.entries(IMPOUND_WORDS)) {
+    if (words.includes(w)) return status
+  }
+  return 'none'
+}
+
+// The impound fee owed once the vehicle is impounded; 0 before that.
+export function impoundFeeDue(impoundStatus, storedFee) {
+  if (impoundStatus !== 'impounded' && impoundStatus !== 'released') return 0
+  const fee = Number(storedFee)
+  return Number.isFinite(fee) && fee > 0 ? fee : IMPOUND_FEE
+}
+
 export function normalizeViolation(id, data) {
   if (!data) return null
 
   const fine = Number(pick(data, FIELDS.fineAmount, 0))
+  const fineAmount = Number.isFinite(fine) ? fine : 0
+  const impoundStatus = normalizeImpoundStatus(pick(data, FIELDS.impoundStatus))
+  const impoundFee = impoundFeeDue(impoundStatus, pick(data, FIELDS.impoundFee))
 
   return {
     id,
@@ -107,7 +145,12 @@ export function normalizeViolation(id, data) {
     plateNumber: pick(data, FIELDS.plateNumber, ''),
     officerName: pick(data, FIELDS.officerName, ''),
     clampedAt: pick(data, FIELDS.clampedAt, null),
-    fineAmount: Number.isFinite(fine) ? fine : 0,
+    fineAmount,
+    impoundStatus,
+    impoundFee,
+    // What the violator pays: the clamp fine, or the impound fee instead of
+    // it once impounded. Pay Now, History and the checkout all use this.
+    amountDue: impoundFee > 0 ? impoundFee : fineAmount,
     violationType: pick(data, FIELDS.violationType, ''),
     location: pick(data, FIELDS.location, ''),
     paymentStatus: normalizePaymentStatus(pick(data, FIELDS.paymentStatus)),
@@ -119,7 +162,12 @@ export function normalizeViolation(id, data) {
     referenceNumber: pick(data, FIELDS.referenceNumber, ''),
     paymentMethod: pick(data, FIELDS.paymentMethod, ''),
     paidAt: pick(data, FIELDS.paidAt, null),
-    status: normalizeViolationStatus(pick(data, FIELDS.enforcementType) ?? pick(data, FIELDS.status)),
+    // A clamped vehicle that the impounding staff have since towed reads as
+    // impounded, like one the enforcer impounded directly.
+    status:
+      impoundStatus === 'impounded'
+        ? 'impounded'
+        : normalizeViolationStatus(pick(data, FIELDS.enforcementType) ?? pick(data, FIELDS.status)),
     // Kept as written by the admin app ("Clamping", "Impounding"), since it's
     // shown to the violator as a label rather than used for logic.
     enforcementType: pick(data, FIELDS.enforcementType, ''),

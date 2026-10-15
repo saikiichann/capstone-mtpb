@@ -33,7 +33,7 @@ export default function PayConfirm() {
     return <Navigate to={method ? `${base}/${method.id}` : base} replace />
   }
 
-  const charges = computeCharges(violation.fineAmount, method.id)
+  const charges = computeCharges(violation.amountDue ?? violation.fineAmount, method.id)
 
   async function handleConfirm() {
     if (submittedRef.current) return
@@ -84,7 +84,11 @@ export default function PayConfirm() {
         <p className="confirm-body__amount">{formatPeso(charges.total)}</p>
         {charges.fee > 0 && (
           <p className="confirm-body__breakdown">
-            {t('pay.confirm.breakdown', { fine: formatPeso(charges.fine), method: method.label, fee: formatPeso(charges.fee) })}
+            {t(violation.impoundFee > 0 ? 'pay.confirm.breakdownImpound' : 'pay.confirm.breakdown', {
+              fine: formatPeso(charges.fine),
+              method: method.label,
+              fee: formatPeso(charges.fee),
+            })}
           </p>
         )}
 

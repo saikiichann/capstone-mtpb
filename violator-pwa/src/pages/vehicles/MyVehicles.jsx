@@ -84,7 +84,7 @@ function latestFor(plate, violations, payments) {
         at: toMillis(v.clampedAt),
         title: v.cin,
         line: [`Clamped ${shortDate(v.clampedAt)}`, v.location].filter(Boolean).join(' · '),
-        chip: `Pay ${formatPeso(v.fineAmount)}`,
+        chip: `Pay ${formatPeso(v.amountDue ?? v.fineAmount)}`,
         tone: 'due',
         to: `/v/${encodeURIComponent(v.id ?? v.cin)}`,
       })),
