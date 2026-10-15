@@ -7,8 +7,10 @@ import "./CashPaymentSlip.css";
 /* ------------------------------------------------------------------
    Cash payment slip (80 mm thermal printer).
 
-   Shown after a cash payment is recorded. "Print slip" prints only the
-   slip; the violator keeps it. The QR holds a link to the payment's
+   Shown after a cash payment is recorded. "Print slip" prints TWO copies,
+   one after the other: the VIOLATOR'S COPY (the violator keeps it and
+   presents it when claiming the vehicle) and the MTPB COPY (kept by the
+   office with the day's collections, signed by the payer). The QR holds a link to the payment's
    random document id (never the REF number, which counts up and could be
    guessed):
      https://mtpb-violators-pwa.vercel.app/r/<paymentId>
@@ -49,8 +51,15 @@ const peso = (value: number) =>
 const slipDate = (date: Date) =>
   `${date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" })} · ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Manila" })}`;
 
-function Slip(props: CashPaymentSlipProps) {
-  const { paymentId, referenceNumber, cin, plateNo, amount, totalAmount, orNumber, recordedBy, createdAt, cashReceived, impoundFee, method } = props;
+type SlipCopy = "violator" | "mtpb";
+
+const COPY_LABEL: Record<SlipCopy, string> = {
+  violator: "VIOLATOR'S COPY",
+  mtpb: "MTPB COPY",
+};
+
+function Slip(props: CashPaymentSlipProps & { copy: SlipCopy }) {
+  const { copy, paymentId, referenceNumber, cin, plateNo, amount, totalAmount, orNumber, recordedBy, createdAt, cashReceived, impoundFee, method } = props;
   const showChange = typeof cashReceived === "number" && cashReceived !== totalAmount;
 
   return (
@@ -60,6 +69,7 @@ function Slip(props: CashPaymentSlipProps) {
         <p className="cash-slip__org">MTPB</p>
         <p className="cash-slip__org-full">MANILA TRAFFIC AND PARKING BUREAU</p>
         <p className="cash-slip__title">PAYMENT ACKNOWLEDGMENT</p>
+        <p className="cash-slip__copy">{COPY_LABEL[copy]}</p>
       </header>
 
       <div className="cash-slip__qr">
@@ -132,11 +142,23 @@ function Slip(props: CashPaymentSlipProps) {
 
       <hr className="cash-slip__rule" />
 
-      <p className="cash-slip__footer">
-        <strong>Keep this slip.</strong> Present it when claiming your vehicle.
-        <br />
-        For concerns: mtpbovrdivision@gmail.com
-      </p>
+      {copy === "violator" ? (
+        <p className="cash-slip__footer">
+          <strong>Keep this slip.</strong> Present it when claiming your vehicle.
+          <br />
+          For concerns: mtpbovrdivision@gmail.com
+        </p>
+      ) : (
+        <>
+          <div className="cash-slip__sign">
+            <div className="cash-slip__sign-line" />
+            <p>Payer's signature over printed name</p>
+          </div>
+          <p className="cash-slip__footer">
+            <strong>For MTPB records.</strong> File with the day's collections.
+          </p>
+        </>
+      )}
     </article>
   );
 }
@@ -159,10 +181,13 @@ export default function CashPaymentSlip(props: CashPaymentSlipProps) {
             Print payment slip
           </h2>
           <p className="cash-slip-panel__hint">
-            Give this slip to the violator. The QR is scanned at Payment Verification.
+            Two copies print: give the <strong>Violator's Copy</strong> to the payer and
+            keep the <strong>MTPB Copy</strong> (have the payer sign it). The QR is scanned
+            at Payment Verification.
           </p>
           <div className="cash-slip-panel__preview">
-            <Slip {...props} />
+            <Slip {...props} copy="violator" />
+            <Slip {...props} copy="mtpb" />
           </div>
           <div className="cash-slip-panel__actions">
             <button type="button" className="btn-secondary" onClick={onClose}>
@@ -174,10 +199,14 @@ export default function CashPaymentSlip(props: CashPaymentSlipProps) {
           </div>
         </div>
       </div>
-      {/* Only this copy prints: everything else is hidden while printing. */}
+      {/* Only these print: everything else is hidden while printing. Each
+          copy is its own page, so a thermal printer with auto-cut cuts
+          between them; the dashed line is the guide when it doesn't. */}
       {createPortal(
         <div className="cash-slip-print">
-          <Slip {...props} />
+          <Slip {...props} copy="violator" />
+          <div className="cash-slip-cut" aria-hidden="true">✂ - - - - - - - - - - - - - - - -</div>
+          <Slip {...props} copy="mtpb" />
         </div>,
         document.body
       )}

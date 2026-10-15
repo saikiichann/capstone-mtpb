@@ -32,6 +32,14 @@
   font-weight: 700;
   letter-spacing: 0.08em;
 }
+.cash-slip__copy {
+  margin-top: 1.5mm !important;
+  font-size: 8.5pt;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+.cash-slip__sign { margin: 6mm 4mm 2.5mm; text-align: center; font-size: 7pt; }
+.cash-slip__sign-line { border-top: 1px solid #000; margin-bottom: 1mm; }
 .cash-slip__qr { width: 36mm; height: 36mm; margin: 3mm auto 1mm; }
 .cash-slip__qr svg { display: block; width: 100%; height: 100%; }
 .cash-slip__qr-caption { font-size: 7pt; text-align: center; }
@@ -69,7 +77,7 @@
   overflow-y: auto;
 }
 .cash-slip-panel {
-  max-width: 420px;
+  max-width: 760px;
   width: 100%;
   padding: 20px;
   border-radius: 12px;
@@ -81,8 +89,11 @@
 .cash-slip-panel__hint { margin: 0 0 14px; font-size: 13px; color: #555; }
 .cash-slip-panel__preview {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  padding: 12px 0;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px;
   background: #eceef2;
   border-radius: 8px;
 }
@@ -91,16 +102,23 @@
 
 /* ---- Printing: only the slip ---- */
 .cash-slip-print { display: none; }
+.cash-slip-cut {
+  width: 80mm;
+  padding: 2mm 0;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 8pt;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
 
 @media print {
   @page { size: 80mm auto; margin: 0; }
-  body * { visibility: hidden !important; }
-  .cash-slip-print,
-  .cash-slip-print * { visibility: visible !important; }
-  .cash-slip-print {
-    display: block;
-    position: absolute;
-    top: 0;
-    left: 0;
-  }
+  /* The print copy is portalled straight into <body>: hide every other
+     top-level element so the slips print from the top, in normal flow
+     (page breaks don't work inside an absolutely positioned box). */
+  body > *:not(.cash-slip-print) { display: none !important; }
+  .cash-slip-print { display: block; }
+  /* Each copy on its own page (auto-cut between them on thermal printers) */
+  .cash-slip-print .cash-slip-cut { break-after: page; page-break-after: always; }
 }
