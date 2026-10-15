@@ -1,0 +1,6 @@
+// Supervisor — /supervisor/release-log
+//
+// Same content as the OIC page (pages/oic/ReleaseLog.tsx), on the Supervisor's own
+// route. lib/roleNav.ts keeps the sidebar on /supervisor/... and hides
+// Payment/Finance. Fixes to the OIC page apply here too.
+export { default } from "../oic/ReleaseLog";

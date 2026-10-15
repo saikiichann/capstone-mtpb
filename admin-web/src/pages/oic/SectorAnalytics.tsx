@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useRoleNav } from "../../lib/roleNav";
 import { KeyRound } from "lucide-react";
 import {
   PieChart,
@@ -281,6 +282,7 @@ export default function SectorAnalytics() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const roleNav = useRoleNav();
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
@@ -475,12 +477,12 @@ export default function SectorAnalytics() {
             <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
             <div>
               <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Officer in Charge</p>
+              <p className="sidebar-brand-role">{roleNav.roleLabel}</p>
             </div>
           </div>
 
           <nav className="sidebar-nav">
-            {navGroups.map((group) => (
+            {roleNav.filterGroups(navGroups).map((group) => (
               <div key={group.label} className="nav-group">
                 <p className="nav-group-label">{group.label}</p>
                 <ul className="nav-list">
@@ -491,7 +493,7 @@ export default function SectorAnalytics() {
                         className={`nav-item ${
                           item.active ? "nav-item-active" : ""
                         }`}
-                        onClick={() => navigate(item.path)}
+                        onClick={() => navigate(roleNav.toPath(item.path))}
                       >
                         <img src={item.icon} alt="" className="nav-icon" />
                         {item.label}

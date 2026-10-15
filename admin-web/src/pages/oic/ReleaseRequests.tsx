@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useRoleNav } from "../../lib/roleNav";
 import { KeyRound, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
@@ -246,6 +247,7 @@ const formatWaiting = (minutes: number): string => {
 ------------------------------------------------------------------ */
 export default function ReleaseRequests() {
   const navigate = useNavigate();
+  const roleNav = useRoleNav();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
@@ -499,12 +501,12 @@ export default function ReleaseRequests() {
             <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
             <div>
               <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Officer in Charge</p>
+              <p className="sidebar-brand-role">{roleNav.roleLabel}</p>
             </div>
           </div>
 
           <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
+            {roleNav.filterGroups(NAV_GROUPS).map((group) => (
               <div key={group.label} className="nav-group">
                 <p className="nav-group-label">{group.label}</p>
                 <ul className="nav-list">
@@ -515,7 +517,7 @@ export default function ReleaseRequests() {
                         className={`nav-item ${
                           item.active ? "nav-item-active" : ""
                         }`}
-                        onClick={() => navigate(item.path)}
+                        onClick={() => navigate(roleNav.toPath(item.path))}
                       >
                         <img src={item.icon} alt="" className="nav-icon" />
                         <span>{item.label}</span>

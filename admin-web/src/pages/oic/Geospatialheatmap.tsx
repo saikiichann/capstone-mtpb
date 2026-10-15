@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useRoleNav } from "../../lib/roleNav";
 import { KeyRound } from "lucide-react";
 import {
   MapContainer,
@@ -366,6 +367,7 @@ const HOTSPOT_TONES = ["red", "yellow", "blue"] as const;
 ------------------------------------------------------------------ */
 export default function GeospatialHeatmap() {
   const navigate = useNavigate();
+  const roleNav = useRoleNav();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
@@ -564,7 +566,7 @@ export default function GeospatialHeatmap() {
           </div>
 
           <nav className="sidebar-nav">
-            {navGroups.map((group) => (
+            {roleNav.filterGroups(navGroups).map((group) => (
               <div key={group.label} className="nav-group">
                 <p className="nav-group-label">{group.label}</p>
                 <ul className="nav-list">
@@ -575,7 +577,7 @@ export default function GeospatialHeatmap() {
                         className={`nav-item ${
                           item.active ? "nav-item-active" : ""
                         }`}
-                        onClick={() => navigate(item.path)}
+                        onClick={() => navigate(roleNav.toPath(item.path))}
                       >
                         <img src={item.icon} alt="" className="nav-icon" />
                         <span>{item.label}</span>
