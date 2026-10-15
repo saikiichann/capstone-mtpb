@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useRoleNav } from "../../lib/roleNav";
 import {
   KeyRound,
   Search,
@@ -213,7 +212,6 @@ const queueLabel = (position: number): string =>
 ------------------------------------------------------------------ */
 export default function ReleaseQueue() {
   const navigate = useNavigate();
-  const roleNav = useRoleNav();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
@@ -382,7 +380,7 @@ export default function ReleaseQueue() {
           </div>
 
           <nav className="sidebar-nav">
-            {roleNav.filterGroups(navGroups).map((group) => (
+            {navGroups.map((group) => (
               <div key={group.label} className="nav-group">
                 <p className="nav-group-label">{group.label}</p>
                 <ul className="nav-list">
@@ -393,7 +391,7 @@ export default function ReleaseQueue() {
                         className={`nav-item ${
                           item.active ? "nav-item-active" : ""
                         }`}
-                        onClick={() => navigate(roleNav.toPath(item.path))}
+                        onClick={() => navigate(item.path)}
                       >
                         <img src={item.icon} alt="" className="nav-icon" />
                         <span>{item.label}</span>

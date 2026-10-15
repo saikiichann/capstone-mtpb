@@ -23,7 +23,7 @@
   import OICFieldUpdates from "./pages/oic/FieldUpdates";
   import OICOperationScheduler from "./pages/oic/OperationScheduler";
 
-  // Supervisor — same content as OIC, own routes (/supervisor/...)
+  // Supervisor — its own pages (pages/supervisor/), own routes (/supervisor/...)
   import SupervisorHomepage from "./pages/supervisor/Homepage";
   import SupervisorSectorAnalytics from "./pages/supervisor/SectorAnalytics";
   import SupervisorGeospatialHeatmap from "./pages/supervisor/GeospatialHeatmap";
@@ -255,8 +255,8 @@
 
           {/* ================================================================
               SUPERVISOR — monitoring + release approval, no Payment/Finance.
-              Same content as the OIC pages (pages/supervisor re-exports them);
-              lib/roleNav.ts keeps the sidebar on /supervisor/... .
+              Its own pages in pages/supervisor/ (same content as the OIC's,
+              with the Supervisor's sidebar and its own CSS files).
               Can: approve/reject release requests, Release Queue actions,
               Operation Scheduler, Active Clamping Teams. Cannot: payments,
               or flag "Subject to Impound" (OIC-only, also in Firestore rules).
