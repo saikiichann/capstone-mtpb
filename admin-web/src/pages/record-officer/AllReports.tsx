@@ -20,9 +20,6 @@ import {
   FileText,
   FileSpreadsheet,
   Printer,
-  BarChart3,
-  Table2,
-  ImageDown,
 } from "lucide-react";
 import {
   BarChart,
@@ -65,12 +62,6 @@ import {
   type ReportKind,
   type ReportPeriod,
 } from "../../lib/enforcementReport";
-import {
-  chartFileName,
-  downloadCanvasPng,
-  renderBreakdownChart,
-  renderDayChart,
-} from "../../lib/reportCharts";
 import "./AllReports.css";
 
 // Asset imports
@@ -153,22 +144,6 @@ const REPORT_ORDER: ReportKind[] = ["daily", "weekly", "monthly"];
 /** Chart series — validated categorical pair (blue / orange). */
 const SERIES = { recorded: "#2a78d6", released: "#eb6834" };
 
-/** Download-as-PNG button shown beside a chart's title. */
-function PngButton({ onClick, label }: { onClick: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      className="rp-png-btn rp-no-print"
-      onClick={onClick}
-      title={`Download "${label}" as an image (PNG)`}
-      aria-label={`Download ${label} chart as PNG`}
-    >
-      <ImageDown size={14} />
-      PNG
-    </button>
-  );
-}
-
 const RECORDS_PREVIEW = 8;
 
 // ---------------------------------------------------------------------------
@@ -202,77 +177,15 @@ const paymentClass = (status: string): string => {
 // ---------------------------------------------------------------------------
 // SMALL PIECES
 // ---------------------------------------------------------------------------
-function Breakdown({
-  title,
-  label,
-  rows,
-  limit,
-  onDownload,
-}: {
-  title: string;
-  label: string;
-  rows: CountRow[];
-  limit?: number;
-  onDownload?: () => void;
-}) {
-  const shown = limit ? rows.slice(0, limit) : rows;
-  const max = shown[0]?.count ?? 0;
-  return (
-    <div className="rp-breakdown">
-      <div className="rp-breakdown-head">
-        <h3 className="rp-section-title">{title}</h3>
-        {onDownload && shown.length > 0 && <PngButton onClick={onDownload} label={title} />}
-      </div>
-      {shown.length === 0 ? (
-        <p className="rp-muted">No records for this period.</p>
-      ) : (
-        <table className="rp-mini-table">
-          <thead>
-            <tr>
-              <th>{label}</th>
-              <th className="rp-num">Count</th>
-              <th className="rp-num">Share</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((row) => (
-              <tr key={row.name}>
-                <td>
-                  <span className="rp-bar-label">{row.name}</span>
-                  <span className="rp-bar-track" aria-hidden="true">
-                    <span
-                      className="rp-bar-fill"
-                      style={{ width: `${max ? (row.count / max) * 100 : 0}%` }}
-                    />
-                  </span>
-                </td>
-                <td className="rp-num">{row.count}</td>
-                <td className="rp-num rp-muted">{Math.round(row.share * 100)}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {limit && rows.length > limit && (
-        <p className="rp-muted rp-more-note">
-          +{rows.length - limit} more in the PDF / Excel
-        </p>
-      )}
-    </div>
-  );
-}
-
 /** Horizontal bar chart card for a breakdown (count + share at the bar end). */
 function TopBars({
   title,
   rows,
   limit = 6,
-  onDownload,
 }: {
   title: string;
   rows: CountRow[];
   limit?: number;
-  onDownload: () => void;
 }) {
   const shown = rows.slice(0, limit).map((r) => ({
     ...r,
@@ -282,7 +195,6 @@ function TopBars({
     <div className="card rp-chart-card">
       <div className="rp-section-head">
         <h3 className="rp-section-title">{title}</h3>
-        {shown.length > 0 && <PngButton onClick={onDownload} label={title} />}
       </div>
       {shown.length === 0 ? (
         <p className="rp-muted">No records for this period.</p>
@@ -350,7 +262,6 @@ export default function AllReports() {
   const [lastGenerated, setLastGenerated] = useState<Partial<Record<ReportKind, LastGenerated>>>({});
 
   const [period, setPeriod] = useState<ReportPeriod>(() => periodFor("daily", new Date()));
-  const [trendView, setTrendView] = useState<"chart" | "table">("chart");
   const [showAllRecords, setShowAllRecords] = useState(false);
   const [busy, setBusy] = useState<"" | "pdf" | "excel">("");
 
@@ -528,23 +439,6 @@ export default function AllReports() {
     // Let the full list render before the print dialog opens.
     setTimeout(() => window.print(), 150);
   };
-
-  /** Saves one chart as a PNG, titled with the report and period. */
-  const downloadChart = (chart: string, draw: (heading: { title: string; subtitle: string }) => HTMLCanvasElement) => {
-    try {
-      const canvas = draw({
-        title: chart,
-        subtitle: `${def.title} · ${period.label} · MTPB Sector 3`,
-      });
-      downloadCanvasPng(canvas, chartFileName(chart, period.fileTag));
-    } catch (err) {
-      console.error("Chart download failed:", err);
-      alert("Couldn't create the chart image. Please try again.");
-    }
-  };
-
-  const breakdownDownload = (chart: string, rows: CountRow[], limit = 10) => () =>
-    downloadChart(chart, (heading) => renderBreakdownChart(rows, { ...heading, limit }));
 
   const shownRecords = showAllRecords
     ? report.records
@@ -799,36 +693,9 @@ export default function AllReports() {
                       <h3 className="rp-section-title">{trendTitle}</h3>
                       <p className="rp-chart-sub">Violations recorded vs vehicles released</p>
                     </div>
-                    <div className="rp-section-tools">
-                      <PngButton
-                        label={trendTitle}
-                        onClick={() =>
-                          downloadChart(trendTitle, (heading) => renderDayChart(trend, heading))
-                        }
-                      />
-                      <div className="rp-toggle rp-no-print" role="group" aria-label="View">
-                        <button
-                          type="button"
-                          className={trendView === "chart" ? "is-active" : ""}
-                          onClick={() => setTrendView("chart")}
-                          aria-pressed={trendView === "chart"}
-                        >
-                          <BarChart3 size={14} /> Chart
-                        </button>
-                        <button
-                          type="button"
-                          className={trendView === "table" ? "is-active" : ""}
-                          onClick={() => setTrendView("table")}
-                          aria-pressed={trendView === "table"}
-                        >
-                          <Table2 size={14} /> Table
-                        </button>
-                      </div>
-                    </div>
                   </div>
 
-                  {trendView === "chart" && (
-                    <div className="rp-chart">
+                  <div className="rp-chart">
                       <ResponsiveContainer width="100%" height={260}>
                         <BarChart
                           data={trend}
@@ -860,46 +727,13 @@ export default function AllReports() {
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
-                  )}
-
-                  <table
-                    className={`rp-mini-table rp-day-table ${
-                      trendView === "chart" ? "rp-print-only" : ""
-                    }`}
-                  >
-                    <thead>
-                      <tr>
-                        <th>{period.kind === "daily" ? "Hour" : "Date"}</th>
-                        <th className="rp-num">Recorded</th>
-                        <th className="rp-num">Settled</th>
-                        <th className="rp-num">Released</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {trend.map((d) => (
-                        <tr key={d.label}>
-                          <td>{d.label}</td>
-                          <td className="rp-num">{d.recorded}</td>
-                          <td className="rp-num">{d.settled}</td>
-                          <td className="rp-num">{d.released}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
                 </div>
 
                 <div className="rp-chart-grid">
-                  <TopBars
-                    title="Violations by type"
-                    rows={report.byViolation}
-                    onDownload={breakdownDownload("Violations by type", report.byViolation)}
-                  />
-                  <TopBars
-                    title="Top locations"
-                    rows={report.byLocation}
-                    limit={8}
-                    onDownload={breakdownDownload("Top locations", report.byLocation)}
-                  />
+                  <TopBars title="Violations by type" rows={report.byViolation} />
+                  <TopBars title="Top locations" rows={report.byLocation} limit={8} />
+                  <TopBars title="By enforcer" rows={report.byOfficer} />
+                  <TopBars title="By vehicle type" rows={report.byVehicleType} />
                 </div>
 
                 {/* KEY FIGURES */}
@@ -943,24 +777,6 @@ export default function AllReports() {
                     <span>
                       <strong>{report.wentToImpound}</strong> went to impound
                     </span>
-                  </div>
-                </div>
-
-                {/* MORE BREAKDOWNS */}
-                <div className="card">
-                  <div className="rp-breakdown-grid rp-breakdown-grid-top">
-                    <Breakdown
-                      title="By enforcer"
-                      label="Enforcer"
-                      rows={report.byOfficer}
-                      onDownload={breakdownDownload("Violations by enforcer", report.byOfficer)}
-                    />
-                    <Breakdown
-                      title="By vehicle type"
-                      label="Vehicle"
-                      rows={report.byVehicleType}
-                      onDownload={breakdownDownload("Violations by vehicle type", report.byVehicleType)}
-                    />
                   </div>
                 </div>
 
