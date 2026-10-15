@@ -23,6 +23,11 @@ export type PrefillData = {
   initialViolation?: string;
   clampedAt?: Timestamp | null;
   clampedBy?: string;
+  /** Saved impound details — when opening an existing record */
+  impoundViolations?: string[];
+  receivedBy?: string;
+  orNumber?: string;
+  status?: string;
 };
 
 type AddImpoundModalProps = {
@@ -142,18 +147,38 @@ export default function AddImpoundModal({
     violatorName: prefill?.violatorName ?? "",
     contactNo: prefill?.contactNo ?? "",
     initialViolation: prefill?.initialViolation ?? "",
-    impoundViolations: [],
+    impoundViolations: prefill?.impoundViolations ?? [],
     plateNo: prefill?.plateNo ?? "",
     color: prefill?.color ?? "",
     vehicleType: prefill?.vehicleType ?? "",
     place: prefill?.location ?? "",
     ticketDate: timestampToLocalInput(prefill?.clampedAt),
     turnOverBy: prefill?.clampedBy ?? "",
-    receivedBy: currentUserName || "",
-    orNumber: "",
+    receivedBy: prefill?.receivedBy ?? (currentUserName || ""),
+    orNumber: prefill?.orNumber ?? "",
     cin: prefill?.cin ?? "",
-    status: "Impounded",
+    status:
+      prefill?.status && STATUS_OPTIONS.includes(prefill.status)
+        ? prefill.status
+        : "Impounded",
   });
+
+  /**
+   * Galing sa clamp record ang Vehicle, Location & Time, Turn-over By at
+   * CIN — naka-lock kapag may laman na. Ang walang laman ay puwede pang
+   * punan ng staff.
+   */
+  const [locked] = useState(() => ({
+    plateNo: fromClamp && Boolean(prefill?.plateNo),
+    color: fromClamp && Boolean(prefill?.color),
+    vehicleType: fromClamp && Boolean(prefill?.vehicleType),
+    place: fromClamp && Boolean(prefill?.location),
+    ticketDate: fromClamp && Boolean(prefill?.clampedAt),
+    turnOverBy: fromClamp && Boolean(prefill?.clampedBy),
+    cin: fromClamp && Boolean(prefill?.cin),
+  }));
+  const alreadyRecorded =
+    prefill?.status === "Impounded" || prefill?.status === "Released";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -217,7 +242,9 @@ export default function AddImpoundModal({
         receivedBy: form.receivedBy.trim() || currentUserName,
         orNumber: form.orNumber.trim() || "—",
         status: form.status,
-        ...(form.status === "Impounded" ? { impoundedAt: serverTimestamp() } : {}),
+        ...(form.status === "Impounded" && prefill?.status !== "Impounded"
+          ? { impoundedAt: serverTimestamp() }
+          : {}),
         updatedBy: currentUserName,
         updatedAt: serverTimestamp(),
       };
@@ -300,7 +327,7 @@ export default function AddImpoundModal({
       >
         <div className="modal-header">
           <h3 className="modal-title">
-            {fromClamp ? "Record Impound" : "Add Impound Record"}
+            {alreadyRecorded ? "Impound Record" : "Add Impound Record"}
           </h3>
           <button
             type="button"
@@ -315,7 +342,7 @@ export default function AddImpoundModal({
 
         <p className="modal-subtitle">
           {fromClamp
-            ? "Details from the clamp record are already filled in. Check them and complete the rest from the paper ticket."
+            ? "Fill in the driver and impound details from the paper ticket. Vehicle, place, time and CIN come from the clamp record."
             : "Copy the details from the MTPB paper ticket issued on-site."}
         </p>
 
@@ -398,7 +425,7 @@ export default function AddImpoundModal({
               placeholder="ABC 1234"
               value={form.plateNo}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.plateNo}
             />
           </div>
           <div className="form-group">
@@ -409,7 +436,7 @@ export default function AddImpoundModal({
               className="form-select"
               value={form.color}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.color}
             >
               <option value="">Select color...</option>
               {colorOptions.map((c) => (
@@ -427,7 +454,7 @@ export default function AddImpoundModal({
               className="form-select"
               value={form.vehicleType}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.vehicleType}
             >
               <option value="">Select type...</option>
               {vehicleTypeOptions.map((t) => (
@@ -451,7 +478,7 @@ export default function AddImpoundModal({
               placeholder="Recto Ave. Manila"
               value={form.place}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.place}
             />
           </div>
           <div className="form-group form-group-full">
@@ -465,7 +492,7 @@ export default function AddImpoundModal({
               className="form-input"
               value={form.ticketDate}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.ticketDate}
             />
           </div>
         </div>
@@ -482,7 +509,7 @@ export default function AddImpoundModal({
               placeholder="Enforcer name"
               value={form.turnOverBy}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.turnOverBy}
             />
           </div>
           <div className="form-group">
@@ -527,7 +554,7 @@ export default function AddImpoundModal({
               placeholder="e.g. CLMP-2026-101"
               value={form.cin}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.cin}
             />
           </div>
           <div className="form-group">

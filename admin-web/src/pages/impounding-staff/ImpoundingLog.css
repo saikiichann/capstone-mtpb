@@ -197,6 +197,39 @@
   color: #9CA3AF;
 }
 
+/* Status pill + icon na nagbubukas ng impound record */
+.impounding-page .status-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.impounding-page .btn-status-details {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: #FFFFFF;
+  color: #6B7280;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.impounding-page .btn-status-details:hover:not(:disabled) {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border-color: #BFDBFE;
+}
+
+.impounding-page .btn-status-details:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ==================================================================
    LOG TABLE
 ================================================================== */

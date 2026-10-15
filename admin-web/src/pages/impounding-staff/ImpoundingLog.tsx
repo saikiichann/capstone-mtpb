@@ -5,8 +5,10 @@
 //   2. `violations`     — flagged entries where impoundStatus is
 //                         "Subject to Impound" or "Scheduled for Impounding"
 //
-// Includes an "Add Record" button that opens the AddImpoundModal so
-// impounding staff can manually encode paper tickets into the system.
+// Each "Subject to Impound" row has an "Add Record" button that opens the
+// AddImpoundModal prefilled from the clamp details; staff add the driver
+// and impound details from the paper ticket. The icon beside each status
+// reopens that record.
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -16,7 +18,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Plus,
+  FileText,
 } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
@@ -201,7 +203,6 @@ const getStatusClass = (status: LogStatus): string => {
 ------------------------------------------------------------------ */
 export default function ImpoundingLog() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [impoundTarget, setImpoundTarget] = useState<ImpoundTarget | null>(null);
   const [preparingRowId, setPreparingRowId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -402,7 +403,7 @@ export default function ImpoundingLog() {
    * enforcer app) at sa impound record, para ang kulang lang ang ilalagay
    * ng staff mula sa paper ticket.
    */
-  const openRecordImpound = async (row: ImpoundLogRow) => {
+  const openImpoundRecord = async (row: ImpoundLogRow) => {
     setPreparingRowId(row.id);
     try {
       const recordData = row.recordId
@@ -448,6 +449,15 @@ export default function ImpoundingLog() {
           (violationData.recordedAt as Timestamp | undefined) ??
           row.recordedAt,
         clampedBy: pick(recordData.clampedBy, violationData.officer),
+        impoundViolations: Array.isArray(recordData.impoundViolations)
+          ? (recordData.impoundViolations as string[])
+          : undefined,
+        receivedBy: pick(recordData.receivedBy),
+        orNumber: pick(recordData.orNumber),
+        status:
+          recordData.status === "Impounded" || recordData.status === "Released"
+            ? (recordData.status as string)
+            : undefined,
       };
 
       setImpoundTarget({ prefill, recordId: row.recordId });
@@ -666,14 +676,6 @@ export default function ImpoundingLog() {
                     {" · "}
                     Subject to Impound: <strong>{subjectCount}</strong>
                   </p>
-                  <button
-                    type="button"
-                    className="btn-add-record"
-                    onClick={() => setIsAddModalOpen(true)}
-                  >
-                    <Plus size={16} />
-                    Add Record
-                  </button>
                 </div>
               </div>
 
@@ -723,25 +725,37 @@ export default function ImpoundingLog() {
                               {formatDateTime(row.recordedAt)}
                             </td>
                             <td>
-                              <span
-                                className={`status-pill ${getStatusClass(
-                                  row.status
-                                )}`}
-                              >
-                                {row.status}
-                              </span>
+                              <div className="status-cell">
+                                <span
+                                  className={`status-pill ${getStatusClass(
+                                    row.status
+                                  )}`}
+                                >
+                                  {row.status}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="btn-status-details"
+                                  onClick={() => openImpoundRecord(row)}
+                                  disabled={preparingRowId !== null}
+                                  title="View impound record"
+                                  aria-label={`View impound record for ${row.cin}`}
+                                >
+                                  <FileText size={15} />
+                                </button>
+                              </div>
                             </td>
                             <td>
                               {row.status === "Subject to Impound" ? (
                                 <button
                                   type="button"
                                   className="btn-record-impound"
-                                  onClick={() => openRecordImpound(row)}
+                                  onClick={() => openImpoundRecord(row)}
                                   disabled={preparingRowId !== null}
                                 >
                                   {preparingRowId === row.id
                                     ? "Loading..."
-                                    : "Record Impound"}
+                                    : "Add Record"}
                                 </button>
                               ) : (
                                 <span className="cell-muted">—</span>
@@ -791,18 +805,8 @@ export default function ImpoundingLog() {
         </div>
       </div>
 
-      {/* ADD IMPOUND RECORD MODAL */}
-      {isAddModalOpen && (
-        <AddImpoundModal
-          onClose={() => setIsAddModalOpen(false)}
-          onSaved={() => {
-            // onSnapshot handles the refresh automatically
-          }}
-          currentUserName={currentUser.name}
-        />
-      )}
 
-      {/* RECORD IMPOUND — prefilled from the clamp details */}
+      {/* IMPOUND RECORD — prefilled from the clamp details */}
       {impoundTarget && (
         <AddImpoundModal
           key={impoundTarget.recordId ?? impoundTarget.prefill.sourceViolationId}
