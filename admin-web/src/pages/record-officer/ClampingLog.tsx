@@ -20,6 +20,12 @@ import {
 import { auth, db } from "../../firebase";
 import ChangePasswordModal from "../../components/ChangePasswordModal";
 import "./ClampingLog.css";
+import {
+  CLAMP_OVERDUE_FEE,
+  amountDueFor,
+  graceHoursLeft,
+  isClampOverdue,
+} from "../../lib/clampFee";
 
 // Asset imports
 import mtpbLogo from "../../assets/mtpb-logo.png";
@@ -71,6 +77,14 @@ type ClampingRow = {
   impoundStatus: string | null;
   /** Hours since clamping. */
   hoursSinceClamp: number;
+  /** What the owner pays now: ₱900, or ₱2,000 past 24 hours (lib/clampFee.ts) */
+  amountDue: number;
+  /** Past 24 hours and not yet paid */
+  overdue: boolean;
+  /** Payment recorded (pending verification or verified) */
+  paid: boolean;
+  /** Hours left in the 24-hour grace period */
+  graceLeft: number;
 };
 
 type NavItem = {
@@ -90,7 +104,6 @@ type NavGroup = {
 // ---------------------------------------------------------------------------
 const ITEMS_PER_PAGE = 10;
 const ALL_VIOLATIONS = "All Violations";
-const GRACE_PERIOD_HOURS = 24;
 
 const MASTER_VIOLATIONS = [
   "Illegal Parking",
@@ -250,46 +263,34 @@ const deriveStatus = (releaseStatus: unknown): ClampStatus =>
 const getStatusClass = (status: ClampStatus): string =>
   status === "Released" ? "status-released-clamp" : "status-active-clamp";
 
-/** Where the clamp stands in the 24-hour grace → impound flow. */
-function ImpoundCell({ row }: { row: ClampingRow }) {
-  const impound = String(row.impoundStatus ?? "").toLowerCase();
-  if (impound === "impounded") {
-    return <span className="badge-impounded">Impounded</span>;
-  }
+/**
+ * The fee as it stands: ₱900 within 24 hours, a fixed ₱2,000 after
+ * (lib/clampFee.ts). A clamp stays clamped — it is not sent to impound.
+ */
+function FeeCell({ row }: { row: ClampingRow }) {
   if (row.status === "Released") {
     return <span className="action-placeholder">—</span>;
   }
-  if (impound === "scheduled for impounding") {
-    return <span className="badge-impound">Scheduled for impounding</span>;
-  }
-  if (impound === "subject to impound") {
+  if (row.paid) {
     return (
-      <span
-        className={`badge-impound ${row.autoFlagged ? "badge-impound-auto" : ""}`}
-        title={
-          row.autoFlagged
-            ? "Flagged automatically when the 24-hour grace period ended"
-            : "Flagged by the OIC"
-        }
-      >
-        Subject to Impound{row.autoFlagged ? " · auto" : ""}
+      <span className="badge-impounded" title="Payment recorded">
+        Paid · ₱{row.amountDue.toLocaleString()}
       </span>
     );
   }
-  if (row.hoursSinceClamp < GRACE_PERIOD_HOURS) {
-    const left = Math.max(1, Math.ceil(GRACE_PERIOD_HOURS - row.hoursSinceClamp));
+  if (row.overdue) {
     return (
-      <span className="impound-pending" title="Within the 24-hour grace period">
-        Grace · {left}h left
+      <span
+        className="badge-grace-ended"
+        title="Past the 24-hour grace period: the fee is now a fixed ₱2,000 (replaces the fine). The vehicle stays clamped."
+      >
+        Overdue · ₱{CLAMP_OVERDUE_FEE.toLocaleString()}
       </span>
     );
   }
   return (
-    <span
-      className="badge-grace-ended"
-      title="The 24-hour grace period has ended. The OIC flags it as Subject to Impound."
-    >
-      Grace ended
+    <span className="impound-pending" title="Within the 24-hour grace period">
+      ₱{row.amountDue.toLocaleString()} · {Math.max(1, Math.ceil(row.graceLeft))}h left
     </span>
   );
 }
@@ -381,6 +382,12 @@ export default function ClampingLog() {
               autoFlagged: data.impoundAutoFlagged ?? false,
               impoundStatus: data.impoundStatus ?? null,
               hoursSinceClamp,
+              amountDue: amountDueFor(data),
+              overdue: isClampOverdue(data),
+              paid: ["verified", "pending verification"].includes(
+                String(data.paymentStatus ?? "").toLowerCase()
+              ),
+              graceLeft: graceHoursLeft(data),
             };
           })
           .sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
@@ -396,10 +403,9 @@ export default function ClampingLog() {
     return () => unsubscribe();
   }, []);
 
-  // Flagging overdue clamps as "Subject to Impound" is done by the OIC's
-  // Clamping Log (it also creates the impound record). The Record Officer
-  // only views records — the Firestore rules don't allow this role to
-  // write impoundStatus — so this page just shows where each clamp is.
+  // Clamps are not sent to impound: past 24 hours an unpaid clamp stays
+  // clamped and is charged a fixed ₱2,000 (lib/clampFee.ts). The Fee
+  // column shows where each clamp stands.
 
   // -----------------------------------------------------------------------
   // EFFECT: Click-outside for dropdown
@@ -625,7 +631,7 @@ export default function ClampingLog() {
                         <th>Clamped by</th>
                         <th>Time</th>
                         <th>Status</th>
-                        <th>Impound</th>
+                        <th>Fee</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -654,7 +660,7 @@ export default function ClampingLog() {
                             </span>
                           </td>
                           <td>
-                            <ImpoundCell row={row} />
+                            <FeeCell row={row} />
                           </td>
                         </tr>
                       ))}

@@ -10,8 +10,9 @@
      - Recorded: violations whose recordedAt falls in the period.
      - Settled: payments verified in the period (verifiedAt, else paidAt).
      - Released: vehicles released in the period (releasedAt).
-   Fines assessed / settled use the impound fee when the vehicle was
-   impounded (₱2,000 replaces the clamp fine), same as everywhere else.
+   Fines assessed / settled use the ₱2,000 overdue clamp fee once a
+   clamp is past 24 hours (it replaces the fine), else the fine —
+   see lib/clampFee.ts.
 
    Export Center exports raw rows; these are the summarized reports.
 ------------------------------------------------------------------ */
@@ -19,7 +20,7 @@ import type { DocumentData } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { amountDue, impoundFeeDue } from "./impoundFlag";
+import { amountDueFor, isClampOverdue } from "./clampFee";
 import { renderBreakdownChart, renderDayChart } from "./reportCharts";
 
 export type ReportKind = "daily" | "weekly" | "monthly";
@@ -143,7 +144,8 @@ export type RecordRow = {
   amount: number;
   payment: string;
   release: string;
-  impound: string;
+  /** "Yes" when the clamp went past 24 hours unpaid (₱2,000) */
+  overdue: string;
 };
 
 export type ReportData = {
@@ -157,7 +159,8 @@ export type ReportData = {
   settledAmount: number;
   awaitingVerification: number;
   unpaid: number;
-  wentToImpound: number;
+  /** Clamps that went past 24 hours unpaid (charged ₱2,000) */
+  overdueClamps: number;
   releasedCount: number;
   avgReleaseMinutes: number | null;
   byViolation: CountRow[];
@@ -196,15 +199,11 @@ const text = (value: unknown, fallback = "—"): string => {
   return s && s !== "null" && s !== "undefined" ? s : fallback;
 };
 
-const IMPOUND_STATES = new Set([
-  "subject to impound",
-  "scheduled for impounding",
-  "impounded",
-  "released",
-]);
+/** Past 24 hours unpaid now, or already paid at the ₱2,000 overdue rate. */
+const wentOverdue = (v: Violation): boolean =>
+  isClampOverdue(v) || Number(v.overdueFeePaid) > 0;
 
-const amountOf = (v: Violation): number =>
-  amountDue(Number(v.fineAmount) || 0, impoundFeeDue(v.impoundStatus, v.impoundFee));
+const amountOf = (v: Violation): number => amountDueFor(v);
 
 const countBy = (items: Violation[], key: (v: Violation) => string): CountRow[] => {
   const map = new Map<string, number>();
@@ -298,9 +297,7 @@ export const buildReport = (violations: Violation[], period: ReportPeriod): Repo
       (v) => String(v.paymentStatus) === "Pending Verification"
     ).length,
     unpaid: recorded.filter((v) => String(v.paymentStatus ?? "Unpaid") === "Unpaid").length,
-    wentToImpound: recorded.filter((v) =>
-      IMPOUND_STATES.has(String(v.impoundStatus ?? "").toLowerCase().trim())
-    ).length,
+    overdueClamps: recorded.filter(wentOverdue).length,
     releasedCount: released.length,
     avgReleaseMinutes: durations.length
       ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
@@ -323,10 +320,7 @@ export const buildReport = (violations: Violation[], period: ReportPeriod): Repo
         amount: amountOf(v),
         payment: text(v.paymentStatus, "Unpaid"),
         release: text(v.releaseStatus, "Pending"),
-        impound:
-          IMPOUND_STATES.has(String(v.impoundStatus ?? "").toLowerCase().trim())
-            ? text(v.impoundStatus)
-            : "—",
+        overdue: wentOverdue(v) ? "Yes" : "—",
       }))
       .sort((a, b) => (a.recordedAt?.getTime() ?? 0) - (b.recordedAt?.getTime() ?? 0)),
   };
@@ -385,7 +379,7 @@ export const summaryRows = (data: ReportData, money: (n: number) => string = pes
   ["Payments settled", `${data.settledCount} (${money(data.settledAmount)})`],
   ["Awaiting payment verification", String(data.awaitingVerification)],
   ["Still unpaid", String(data.unpaid)],
-  ["Went to impound (Subject to Impound or later)", String(data.wentToImpound)],
+  ["Overdue clamps (past 24 hrs, ₱2,000)", String(data.overdueClamps)],
   ["Vehicles released", String(data.releasedCount)],
   ["Average time from payment to release", formatMinutes(data.avgReleaseMinutes)],
 ];
@@ -690,7 +684,7 @@ export const downloadReportExcel = (data: ReportData, preparedBy: string): void 
     wb,
     sheet(
       [
-        ["CIN", "Plate No.", "Violation", "Type", "Location", "Enforcer", "Recorded", "Amount (₱)", "Payment", "Impound", "Release"],
+        ["CIN", "Plate No.", "Violation", "Type", "Location", "Enforcer", "Recorded", "Amount (₱)", "Payment", "Overdue", "Release"],
         ...data.records.map((r) => [
           r.cin,
           r.plateNo,
@@ -701,7 +695,7 @@ export const downloadReportExcel = (data: ReportData, preparedBy: string): void 
           formatDateTime(r.recordedAt),
           r.amount,
           r.payment,
-          r.impound,
+          r.overdue,
           r.release,
         ]),
       ],

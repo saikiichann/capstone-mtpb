@@ -8,24 +8,12 @@ import {
   getDoc,
   onSnapshot,
   query,
-  runTransaction,
-  serverTimestamp,
   where,
-  writeBatch,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./PendingPayments.css";
-import {
-  IMPOUND_FEE,
-  amountDue,
-  impoundFeeDue,
-  setImpoundRecord,
-  setImpoundRecordInTransaction,
-  syncClampImpound,
-  useImpoundRecordIds,
-  type ImpoundRecordSource,
-} from "../../lib/impoundFlag";
+import { amountDueFor, overdueFeeFor } from "../../lib/clampFee";
 import CashPaymentSlip from "../../components/CashPaymentSlip";
 import { recordOnsitePayment } from "../../lib/onsitePayment";
 
@@ -65,21 +53,16 @@ type PendingRow = {
   violationNo: string;
   cin: string;
   plateNo: string;
-  /** babayaran: clamp fine, o ₱2,000 impound fee kapag Impounded na */
+  /** babayaran: ₱900 fine sa loob ng 24 oras, ₱2,000 kapag lumagpas (lib/clampFee.ts) */
   amount: number;
   fineAmount: number;
-  impoundFee: number;
+  /** ₱2,000 once the clamp is past 24 hours (replaces the fine), else 0 */
+  overdueFee: number;
   recordedAt: Timestamp | null;
   dueDate: Timestamp | null;
   daysLeft: number;
   status: PendingStatus;
-  impoundStatus: string | null;
-  impoundAutoFlagged: boolean;
-  impoundFlaggedBy: string | null;
-  /** "clamped" | "impounded" — direct tows are never flagged. */
   enforcementType: string;
-  /** For the impoundRecords entry */
-  impoundSource: ImpoundRecordSource;
   // ⚠️ ADDED: violator identity fields
   violatorUid: string | null;
   guestId: string | null;
@@ -89,7 +72,7 @@ type PendingRow = {
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
-type StatusFilter = "All" | "Unpaid" | "Overdue" | "Subject to Impound" | "Impounded";
+type StatusFilter = "All" | "Unpaid" | "Overdue";
 type SortOption = "oldest" | "newest" | "amount-high" | "amount-low" | "plate-asc";
 
 /* ------------------------------------------------------------------
@@ -115,8 +98,6 @@ const STATUS_FILTERS: StatusFilter[] = [
   "All",
   "Unpaid",
   "Overdue",
-  "Subject to Impound",
-  "Impounded",
 ];
 
 /* ------------------------------------------------------------------
@@ -326,13 +307,6 @@ export default function PendingPaymentsOIC() {
   /** Cash received as saved, for the printed slip */
   const [savedCashReceived, setSavedCashReceived] = useState<number | null>(null);
 
-  /* Subject-to-Impound modal state */
-  const [impoundRow, setImpoundRow] = useState<PendingRow | null>(null);
-  const [impoundNotes, setImpoundNotes] = useState("");
-  const [impoundSaving, setImpoundSaving] = useState(false);
-  const impoundRecordIds = useImpoundRecordIds();
-  const autoFlagRunning = useRef(false);
-  const autoFlagHandled = useRef<Set<string>>(new Set());
 
   /* Effect: Fetch current user profile */
   useEffect(() => {
@@ -400,32 +374,13 @@ export default function PendingPaymentsOIC() {
               cin,
               plateNo: data.plateNo ?? "—",
               fineAmount: Number(data.fineAmount ?? 0),
-              impoundFee: impoundFeeDue(data.impoundStatus, data.impoundFee),
-              amount: amountDue(
-                Number(data.fineAmount ?? 0),
-                impoundFeeDue(data.impoundStatus, data.impoundFee)
-              ),
+              overdueFee: overdueFeeFor(data),
+              amount: amountDueFor(data),
               recordedAt,
               dueDate,
               daysLeft,
               status: (daysLeft < 0 ? "Overdue" : "Unpaid") as PendingStatus,
-              impoundStatus: data.impoundStatus ?? null,
-              impoundAutoFlagged: data.impoundAutoFlagged ?? false,
-              impoundFlaggedBy: data.impoundFlaggedBy ?? null,
               enforcementType: String(data.enforcementType ?? "clamped").toLowerCase(),
-              impoundSource: {
-                id: d.id,
-                reference:
-                  (data.referenceNumber as string) ??
-                  (data.paymentReference as string) ??
-                  null,
-                cin,
-                plateNo: data.plateNo ?? "—",
-                location: data.location ?? "—",
-                violation: data.violationType ?? "—",
-                officer: data.officer ?? "—",
-                recordedAt,
-              },
               // ⚠️ ADDED: violator identity (with null-safe fallbacks)
               violatorUid: data.violatorUid ?? null,
               guestId: data.guestId ?? null,
@@ -449,106 +404,6 @@ export default function PendingPaymentsOIC() {
     return () => unsubscribe();
   }, []);
 
-  /* AUTO-FLAG OVERDUE VIOLATIONS
-     Clamped and unpaid past the 24-hour window → "Subject to Impound",
-     plus an impoundRecords entry so the vehicle reaches the Impounding Log
-     and the Impounding Log. Also adds the record for violations flagged
-     before that was done. Direct tows (enforcementType "impounded") are
-     already impounded, so they are skipped. */
-  useEffect(() => {
-    if (loading || rows.length === 0) return;
-    if (impoundRecordIds === null) return;
-    if (autoFlagRunning.current) return;
-
-    const handled = autoFlagHandled.current;
-    const isActiveClamp = (row: PendingRow) =>
-      row.enforcementType !== "impounded" &&
-      row.impoundStatus !== "Impounded" &&
-      !handled.has(row.id);
-
-    const overdueRows = rows.filter(
-      (row) =>
-        isActiveClamp(row) &&
-        row.daysLeft < 0 &&
-        row.impoundStatus !== "Subject to Impound"
-    );
-    const missingRecordRows = rows.filter(
-      (row) =>
-        isActiveClamp(row) &&
-        row.impoundStatus === "Subject to Impound" &&
-        !impoundRecordIds.has(row.id)
-    );
-
-    if (overdueRows.length === 0 && missingRecordRows.length === 0) return;
-
-    const work = [
-      ...overdueRows.map((row) => ({ row, flag: true })),
-      ...missingRecordRows.map((row) => ({ row, flag: false })),
-    ];
-
-    const autoFlagOverdue = async () => {
-      autoFlagRunning.current = true;
-      // A batch holds up to 500 writes; each row uses at most 3.
-      const CHUNK = 150;
-      try {
-        for (let i = 0; i < work.length; i += CHUNK) {
-          const chunk = work.slice(i, i + CHUNK);
-          const batch = writeBatch(db);
-
-          chunk.forEach(({ row, flag }) => {
-            if (flag) {
-              batch.update(doc(db, "violations", row.id), {
-                impoundStatus: "Subject to Impound",
-                impoundFlaggedAt: serverTimestamp(),
-                impoundFlaggedBy: "system",
-                impoundFlaggedByRole: "system",
-                impoundAutoFlagged: true,
-                impoundFee: IMPOUND_FEE,
-                updatedAt: serverTimestamp(),
-                updatedBy: "system",
-              });
-
-              batch.set(doc(collection(db, "auditLogs")), {
-                userName: "System",
-                userRole: "system",
-                action: `auto-flagged violation ${row.cin} as Subject to Impound (24hr grace period expired)`,
-                record: row.cin,
-                type: "impound-flag-auto",
-                metadata: {
-                  cin: row.cin,
-                  plateNo: row.plateNo,
-                  daysOverdue: Math.abs(row.daysLeft),
-                  impoundFee: IMPOUND_FEE,
-                  method: "client-side",
-                },
-                timestamp: serverTimestamp(),
-              });
-            }
-
-            if (!impoundRecordIds.has(row.id)) {
-              setImpoundRecord(batch, row.impoundSource, {
-                autoFlagged: flag || row.impoundAutoFlagged,
-                createdBy: "system",
-              });
-            }
-          });
-
-          await batch.commit();
-          chunk.forEach(({ row }) => handled.add(row.id));
-          // Pati ang clamp record (QR Management / violator app scan).
-          await Promise.all(
-            chunk.map(({ row }) => syncClampImpound(row.id, "Subject to Impound"))
-          );
-        }
-      } catch (err) {
-        console.error("[auto-flag] Failed to flag overdue violations:", err);
-      } finally {
-        autoFlagRunning.current = false;
-      }
-    };
-
-    autoFlagOverdue();
-  }, [loading, rows, impoundRecordIds]);
 
   /* Click outside */
   useEffect(() => {
@@ -616,7 +471,7 @@ export default function PendingPaymentsOIC() {
         cin: cashRow.cin,
         plateNo: cashRow.plateNo,
         fineAmount: cashRow.fineAmount,
-        impoundFee: cashRow.impoundFee,
+        overdueFee: cashRow.overdueFee,
         amountInWords: numberToWords(cashRow.amount),
         cashReceived: cashReceivedValue,
         counterLocation: paymentLocation,
@@ -639,73 +494,6 @@ export default function PendingPaymentsOIC() {
     }
   };
 
-  /* SUBJECT-TO-IMPOUND MODAL HANDLERS */
-  const openImpoundModal = (row: PendingRow) => {
-    setImpoundRow(row);
-    setImpoundNotes("");
-  };
-
-  const closeImpoundModal = () => {
-    setImpoundRow(null);
-    setImpoundNotes("");
-  };
-
-  const handleMarkSubjectToImpound = async () => {
-    if (!impoundRow) return;
-
-    setImpoundSaving(true);
-    try {
-      const violationRef = doc(db, "violations", impoundRow.id);
-      const auditRef = doc(collection(db, "auditLogs"));
-
-      const needsRecord = !impoundRecordIds?.has(impoundRow.id);
-
-      await runTransaction(db, async (tx) => {
-        if (needsRecord) {
-          setImpoundRecordInTransaction(tx, impoundRow.impoundSource, {
-            autoFlagged: false,
-            createdBy: currentUser.name,
-          });
-        }
-
-        tx.update(violationRef, {
-          impoundStatus: "Subject to Impound",
-          impoundFlaggedAt: serverTimestamp(),
-          impoundFlaggedBy: currentUser.name,
-          impoundFlaggedByRole: "oic",
-          impoundFee: IMPOUND_FEE,
-          impoundNotes: impoundNotes.trim() || null,
-          updatedAt: serverTimestamp(),
-          updatedBy: currentUser.name,
-        });
-
-        tx.set(auditRef, {
-          userName: currentUser.name,
-          userRole: "oic",
-          action: `marked violation ${impoundRow.cin} as Subject to Impound (24hr grace period expired)`,
-          record: impoundRow.cin,
-          type: "impound-flag",
-          metadata: {
-            cin: impoundRow.cin,
-            plateNo: impoundRow.plateNo,
-            daysOverdue: Math.abs(impoundRow.daysLeft),
-            impoundFee: IMPOUND_FEE,
-            notes: impoundNotes.trim() || null,
-          },
-          timestamp: serverTimestamp(),
-        });
-      });
-
-      await syncClampImpound(impoundRow.id, "Subject to Impound");
-      alert(`✅ ${impoundRow.violationNo} marked as Subject to Impound.`);
-      closeImpoundModal();
-    } catch (err: any) {
-      console.error("Failed to mark:", err);
-      alert(err.message || "Failed to mark violation.");
-    } finally {
-      setImpoundSaving(false);
-    }
-  };
 
   /* FILTERED + SORTED ROWS */
   const filteredRows = useMemo(() => {
@@ -725,10 +513,6 @@ export default function PendingPaymentsOIC() {
       result = result.filter((row) => {
         if (statusFilter === "Unpaid") return row.status === "Unpaid";
         if (statusFilter === "Overdue") return row.status === "Overdue";
-        if (statusFilter === "Subject to Impound")
-          return row.impoundStatus === "Subject to Impound";
-        if (statusFilter === "Impounded")
-          return row.impoundStatus === "Impounded";
         return true;
       });
     }
@@ -968,8 +752,8 @@ export default function PendingPaymentsOIC() {
                             <td className="cell-plate">{row.plateNo}</td>
                             <td className="cell-amount">
                               {formatCurrency(row.amount)}
-                              {row.impoundFee > 0 && (
-                                <small className="amount-note">impound fee</small>
+                              {row.overdueFee > 0 && (
+                                <small className="amount-note">overdue clamp fee</small>
                               )}
                             </td>
                             <td className="cell-due-date">{formatDate(row.dueDate)}</td>
@@ -990,37 +774,6 @@ export default function PendingPaymentsOIC() {
                                 Cash Payment
                               </button>
 
-                              {row.status === "Overdue" &&
-                                row.enforcementType !== "impounded" &&
-                                row.impoundStatus !== "Subject to Impound" &&
-                                row.impoundStatus !== "Impounded" && (
-                                  <button
-                                    type="button"
-                                    className="btn-subject-impound"
-                                    onClick={() => openImpoundModal(row)}
-                                  >
-                                    Subject to Impound
-                                  </button>
-                                )}
-
-                              {row.impoundStatus === "Subject to Impound" && (
-                                <span
-                                  className={`badge-impound ${
-                                    row.impoundAutoFlagged ? "badge-impound-auto" : ""
-                                  }`}
-                                  title={
-                                    row.impoundAutoFlagged
-                                      ? "Automatically flagged by system (24hr grace period expired)"
-                                      : `Flagged by ${row.impoundFlaggedBy ?? "OIC"}`
-                                  }
-                                >
-                                  {row.impoundAutoFlagged ? "🤖 Auto-flagged" : "Subject to Impound"}
-                                </span>
-                              )}
-
-                              {row.impoundStatus === "Impounded" && (
-                                <span className="badge-impounded">Impounded</span>
-                              )}
                             </td>
                           </tr>
                         ))}
@@ -1122,15 +875,15 @@ export default function PendingPaymentsOIC() {
                         <strong>{cashRow.violatorName}</strong>
                       </div>
                     )}
-                    {cashRow.impoundFee > 0 ? (
+                    {cashRow.overdueFee > 0 ? (
                       <div className="cash-summary-row">
                         <span>
-                          Impound Fee
+                          Overdue Clamp Fee
                           <small className="amount-note">
-                            Replaces the {formatCurrency(cashRow.fineAmount)} clamp fine
+                            Past 24 hours — replaces the {formatCurrency(cashRow.fineAmount)} fine
                           </small>
                         </span>
-                        <strong>{formatCurrency(cashRow.impoundFee)}</strong>
+                        <strong>{formatCurrency(cashRow.overdueFee)}</strong>
                       </div>
                     ) : (
                       <div className="cash-summary-row">
@@ -1256,102 +1009,6 @@ export default function PendingPaymentsOIC() {
         </div>
       )}
 
-      {/* SUBJECT TO IMPOUND MODAL */}
-      {impoundRow && (
-        <div
-          className="modal-overlay"
-          onClick={impoundSaving ? undefined : closeImpoundModal}
-        >
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">Mark Subject to Impound</h3>
-              <button
-                type="button"
-                className="modal-close-btn"
-                onClick={closeImpoundModal}
-                disabled={impoundSaving}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="impound-warning">
-                <p>
-                  ⚠️ This violation has exceeded the <strong>24-hour grace period</strong>{" "}
-                  and remains unpaid.
-                </p>
-                <p>
-                  Once marked, the vehicle becomes <strong>subject to impound</strong> by
-                  the Impounding Staff.
-                </p>
-              </div>
-
-              <div className="cash-summary">
-                <div className="cash-summary-row">
-                  <span>CIN</span>
-                  <strong>{impoundRow.cin}</strong>
-                </div>
-                <div className="cash-summary-row">
-                  <span>Plate No.</span>
-                  <strong>{impoundRow.plateNo}</strong>
-                </div>
-                <div className="cash-summary-row">
-                  <span>Days Overdue</span>
-                  <strong className="text-red">{Math.abs(impoundRow.daysLeft)} day(s)</strong>
-                </div>
-                <div className="cash-summary-row">
-                  <span>Original Fine</span>
-                  <strong>{formatCurrency(impoundRow.amount)}</strong>
-                </div>
-                <div className="cash-summary-row">
-                  <span>
-                    Impound Fee
-                    <small className="amount-note">Replaces the fine once impounded</small>
-                  </span>
-                  <strong className="cash-summary-amount">{formatCurrency(IMPOUND_FEE)}</strong>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="impoundNotes">Notes (Optional)</label>
-                <textarea
-                  id="impoundNotes"
-                  className="form-input"
-                  rows={3}
-                  placeholder="e.g. Vehicle location, additional remarks..."
-                  value={impoundNotes}
-                  onChange={(e) => setImpoundNotes(e.target.value)}
-                  disabled={impoundSaving}
-                />
-              </div>
-
-              <p className="modal-note">
-                Marked by <strong>{currentUser.name}</strong> (OIC). This action will be
-                logged in the audit trail.
-              </p>
-            </div>
-
-            <div className="modal-footer">
-              <button
-                className="btn-secondary"
-                onClick={closeImpoundModal}
-                disabled={impoundSaving}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn-danger"
-                onClick={handleMarkSubjectToImpound}
-                disabled={impoundSaving}
-              >
-                {impoundSaving ? "Marking..." : "Confirm Subject to Impound"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* PRINT SLIP MODAL */}
       {showPrintSlip && savedPaymentId && cashRow && (
         <CashPaymentSlip
@@ -1359,8 +1016,8 @@ export default function PendingPaymentsOIC() {
           referenceNumber={savedReference || ""}
           cin={cashRow.cin}
           plateNo={cashRow.plateNo}
-          amount={cashRow.impoundFee > 0 ? 0 : cashRow.fineAmount}
-          impoundFee={cashRow.impoundFee}
+          amount={cashRow.overdueFee > 0 ? 0 : cashRow.fineAmount}
+          overdueFee={cashRow.overdueFee}
           totalAmount={cashRow.amount}
           cashReceived={savedCashReceived ?? undefined}
           orNumber={savedOrNumber || ""}

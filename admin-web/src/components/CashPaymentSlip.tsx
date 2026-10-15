@@ -37,8 +37,8 @@ interface CashPaymentSlipProps {
   createdAt: Date;
   /** Optional: when given and different from the total, Cash Received and Change are shown. */
   cashReceived?: number;
-  /** Optional: ₱2,000 when impounded — replaces the clamp fine on the slip. */
-  impoundFee?: number;
+  /** Optional: ₱2,000 when the clamp is past 24 hours — replaces the fine on the slip. */
+  overdueFee?: number;
   /** Optional: "Cash" or "GCash"; shown when given. */
   method?: string;
   onClose: () => void;
@@ -59,7 +59,7 @@ const COPY_LABEL: Record<SlipCopy, string> = {
 };
 
 function Slip(props: CashPaymentSlipProps & { copy: SlipCopy }) {
-  const { copy, paymentId, referenceNumber, cin, plateNo, amount, totalAmount, orNumber, recordedBy, createdAt, cashReceived, impoundFee, method } = props;
+  const { copy, paymentId, referenceNumber, cin, plateNo, amount, totalAmount, orNumber, recordedBy, createdAt, cashReceived, overdueFee, method } = props;
   // Cash: always show Cash Received and Change (₱0.00 when exact).
   const showCash = typeof cashReceived === "number";
   const violation = `${cin}${plateNo ? ` · ${plateNo}` : ""}`;
@@ -96,11 +96,11 @@ function Slip(props: CashPaymentSlipProps & { copy: SlipCopy }) {
 
       <table className="cash-slip__rows">
         <tbody>
-          {typeof impoundFee === "number" && impoundFee > 0 ? (
-            // Impounded: the impound fee replaces the clamp fine.
+          {typeof overdueFee === "number" && overdueFee > 0 ? (
+            // Past 24 hours: the overdue fee replaces the clamp fine.
             <tr>
-              <td>Impound Fee</td>
-              <td>{peso(impoundFee)}</td>
+              <td>Overdue Clamp Fee</td>
+              <td>{peso(overdueFee)}</td>
             </tr>
           ) : (
             <tr>

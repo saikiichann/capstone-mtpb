@@ -239,8 +239,6 @@ const STATUS_CLASS: Record<LogStatus, string> = {
 
 const getStatusClass = (status: LogStatus): string => STATUS_CLASS[status];
 
-/** impoundStatus values that put a clamped vehicle on the impound queue. */
-const FLAGGED_STATUSES = ["Subject to Impound", "Scheduled for Impounding"];
 
 /* ------------------------------------------------------------------
    COMPONENT
@@ -286,7 +284,7 @@ export default function ImpoundingLog() {
   }, []);
 
   /**
-   * Three sources, merged into one log:
+   * Two sources, merged into one log:
    *
    *   A. violations with enforcementType == "impounded" — vehicles towed
    *      directly by the enforcer.
@@ -295,9 +293,8 @@ export default function ImpoundingLog() {
    *      paper tickets encoded by Impounding Staff. Its status (Subject to
    *      Impound → Scheduled → Impounded → Released) is kept up to date by
    *      Impounding Staff, so it wins over the violation's impoundStatus.
-   *   C. violations flagged "Subject to Impound" / "Scheduled for
-   *      Impounding" that have no impoundRecords entry yet, so a flagged
-   *      vehicle shows here right away.
+   *   (Clamped vehicles are no longer flagged for impound: an overdue
+   *   clamp stays clamped and is charged ₱2,000 — see lib/clampFee.ts.)
    *
    * No orderBy() on purpose: Firestore silently drops documents that lack
    * the ordered field, so a record without recordedAt would vanish instead
@@ -306,12 +303,10 @@ export default function ImpoundingLog() {
   useEffect(() => {
     let impoundedRows: ImpoundLogRow[] = [];
     let recordRows: (ImpoundLogRow & { linkedViolationId: string })[] = [];
-    let flaggedRows: ImpoundLogRow[] = [];
-    let pending = 3;
+    let pending = 2;
 
     const merge = () => {
       const impoundedIds = new Set(impoundedRows.map((r) => r.id));
-      const recordLinkedIds = new Set(recordRows.map((r) => r.linkedViolationId));
 
       const merged: ImpoundLogRow[] = [
         ...impoundedRows,
@@ -319,10 +314,6 @@ export default function ImpoundingLog() {
         ...recordRows
           .filter((r) => !impoundedIds.has(r.linkedViolationId))
           .map(({ linkedViolationId: _linked, ...row }) => row),
-        // Flagged violations only until their impoundRecords entry exists.
-        ...flaggedRows.filter(
-          (r) => !recordLinkedIds.has(r.id) && !impoundedIds.has(r.id)
-        ),
       ].sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
 
       setRows(merged);
@@ -401,37 +392,10 @@ export default function ImpoundingLog() {
       onError("records")
     );
 
-    // C. Flagged clamped violations
-    const unsubFlagged = onSnapshot(
-      query(collection(db, "violations"), where("impoundStatus", "in", FLAGGED_STATUSES)),
-      (snap) => {
-        flaggedRows = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            reference:
-              (data.referenceNumber as string) ??
-              (data.paymentReference as string) ??
-              null,
-            cin: data.cin ?? "—",
-            plateNo: data.plateNo ?? "—",
-            violation: data.violationType ?? "—",
-            location: data.location ?? "—",
-            officer: data.officer ?? "—",
-            recordedAt: (data.recordedAt as Timestamp) ?? null,
-            status: normalizeImpoundStatus(data.impoundStatus),
-          };
-        });
-        loaded("flagged");
-        merge();
-      },
-      onError("flagged")
-    );
 
     return () => {
       unsubImpounded();
       unsubRecords();
-      unsubFlagged();
     };
   }, []);
 

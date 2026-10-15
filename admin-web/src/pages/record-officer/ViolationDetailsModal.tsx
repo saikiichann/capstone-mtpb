@@ -9,7 +9,7 @@
 import { useEffect } from "react";
 import { X, ImageOff } from "lucide-react";
 import type { DocumentData } from "firebase/firestore";
-import { amountDue, impoundFeeDue } from "../../lib/impoundFlag";
+import { amountDueFor, graceEndsAt, isPastGrace, overdueFeeFor } from "../../lib/clampFee";
 import "./ViolationDetailsModal.css";
 
 type Props = {
@@ -78,8 +78,8 @@ export default function ViolationDetailsModal({ data, status, statusClass, onClo
   }, [onClose]);
 
   const fine = Number(data.fineAmount) || 0;
-  const impoundFee = impoundFeeDue(data.impoundStatus, data.impoundFee);
-  const due = amountDue(fine, impoundFee);
+  const overdueFee = overdueFeeFor(data);
+  const due = amountDueFor(data);
   const paid = Number(data.totalPaid) > 0 ? Number(data.totalPaid) : null;
   const photo = typeof data.photoUrl === "string" && data.photoUrl ? data.photoUrl : null;
 
@@ -126,7 +126,10 @@ export default function ViolationDetailsModal({ data, status, statusClass, onClo
                 <Field label="Enforcer" value={text(data.officer)} />
                 <Field label="Recorded" value={when(data.recordedAt)} />
                 {data.enforcementType === "clamped" && (
-                  <Field label="Grace period ends" value={when(data.gracePeriodEnd)} />
+                  <Field
+                    label="Grace period ends"
+                    value={`${when(graceEndsAt(data))}${isPastGrace(data) ? " (ended)" : ""}`}
+                  />
                 )}
                 <Field label="Owner" value={text(data.violatorName)} />
               </dl>
@@ -137,10 +140,12 @@ export default function ViolationDetailsModal({ data, status, statusClass, onClo
               <dl className="vd-grid">
                 <Field label="Amount due" value={peso(due)} />
                 <Field
-                  label={impoundFee > 0 ? "Clamp fine (replaced)" : "Fine"}
+                  label={overdueFee > 0 ? "Clamp fine (replaced)" : "Fine"}
                   value={peso(fine)}
                 />
-                {impoundFee > 0 && <Field label="Impound fee" value={peso(impoundFee)} />}
+                {overdueFee > 0 && (
+                  <Field label="Overdue fee (past 24 hrs)" value={peso(overdueFee)} />
+                )}
                 <Field label="Payment status" value={text(data.paymentStatus)} />
                 <Field label="Method" value={text(data.paymentMethod)} />
                 <Field label="Amount paid" value={paid !== null ? peso(paid) : "—"} />
@@ -152,10 +157,8 @@ export default function ViolationDetailsModal({ data, status, statusClass, onClo
             </section>
 
             <section>
-              <h4 className="vd-section-title">Impound &amp; release</h4>
+              <h4 className="vd-section-title">Release</h4>
               <dl className="vd-grid">
-                <Field label="Impound status" value={text(data.impoundStatus)} />
-                <Field label="Flagged" value={when(data.impoundFlaggedAt)} />
                 <Field label="Release status" value={text(data.releaseStatus)} />
                 <Field label="Release order" value={text(data.releaseOrderId)} />
                 <Field label="Released" value={when(data.releasedAt)} />

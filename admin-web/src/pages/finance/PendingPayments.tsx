@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import { useStaffProfile } from "../../lib/useStaffProfile";
-import { amountDue, impoundFeeDue } from "../../lib/impoundFlag";
+import { amountDueFor, overdueFeeFor } from "../../lib/clampFee";
 import "./PendingPayments.css";
 import CashPaymentSlip from "../../components/CashPaymentSlip";
 import { recordOnsitePayment } from "../../lib/onsitePayment";
@@ -52,17 +52,15 @@ type PendingRow = {
   violationNo: string;
   cin: string;
   plateNo: string;
-  /** babayaran: clamp fine, o ₱2,000 impound fee kapag Impounded na */
+  /** babayaran: ₱900 fine sa loob ng 24 oras, ₱2,000 kapag lumagpas (lib/clampFee.ts) */
   amount: number;
   fineAmount: number;
-  impoundFee: number;
+  /** ₱2,000 once the clamp is past 24 hours (replaces the fine), else 0 */
+  overdueFee: number;
   recordedAt: Timestamp | null;
   dueDate: Timestamp | null;
   daysLeft: number;
   status: PendingStatus;
-  impoundStatus: string | null;
-  impoundAutoFlagged: boolean;
-  impoundFlaggedBy: string | null;
   violatorUid: string | null;
   guestId: string | null;
   violatorName: string | null;
@@ -72,7 +70,7 @@ type PendingRow = {
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
-type StatusFilter = "All" | "Unpaid" | "Overdue" | "Subject to Impound" | "Impounded";
+type StatusFilter = "All" | "Unpaid" | "Overdue";
 type SortOption = "oldest" | "newest" | "amount-high" | "amount-low" | "plate-asc";
 
 /* ------------------------------------------------------------------
@@ -102,8 +100,6 @@ const STATUS_FILTERS: StatusFilter[] = [
   "All",
   "Unpaid",
   "Overdue",
-  "Subject to Impound",
-  "Impounded",
 ];
 
 /* ------------------------------------------------------------------
@@ -346,18 +342,12 @@ export default function PendingPaymentsFinance() {
               cin,
               plateNo: data.plateNo ?? "—",
               fineAmount: Number(data.fineAmount ?? 0),
-              impoundFee: impoundFeeDue(data.impoundStatus, data.impoundFee),
-              amount: amountDue(
-                Number(data.fineAmount ?? 0),
-                impoundFeeDue(data.impoundStatus, data.impoundFee)
-              ),
+              overdueFee: overdueFeeFor(data),
+              amount: amountDueFor(data),
               recordedAt,
               dueDate,
               daysLeft,
               status: (daysLeft < 0 ? "Overdue" : "Unpaid") as PendingStatus,
-              impoundStatus: data.impoundStatus ?? null,
-              impoundAutoFlagged: data.impoundAutoFlagged ?? false,
-              impoundFlaggedBy: data.impoundFlaggedBy ?? null,
               violatorUid: data.violatorUid ?? null,
               guestId: data.guestId ?? null,
               violatorName: data.violatorName ?? null,
@@ -470,7 +460,7 @@ export default function PendingPaymentsFinance() {
         cin: cashRow.cin,
         plateNo: cashRow.plateNo,
         fineAmount: cashRow.fineAmount,
-        impoundFee: cashRow.impoundFee,
+        overdueFee: cashRow.overdueFee,
         amountInWords: numberToWords(cashRow.amount),
         cashReceived: cashReceivedValue,
         counterLocation: paymentLocation,
@@ -511,10 +501,6 @@ export default function PendingPaymentsFinance() {
       result = result.filter((row) => {
         if (statusFilter === "Unpaid") return row.status === "Unpaid";
         if (statusFilter === "Overdue") return row.status === "Overdue";
-        if (statusFilter === "Subject to Impound")
-          return row.impoundStatus === "Subject to Impound";
-        if (statusFilter === "Impounded")
-          return row.impoundStatus === "Impounded";
         return true;
       });
     }
@@ -766,8 +752,8 @@ export default function PendingPaymentsFinance() {
                             <td className="cell-plate">{row.plateNo}</td>
                             <td className="cell-amount">
                               {formatCurrency(row.amount)}
-                              {row.impoundFee > 0 && (
-                                <small className="amount-note">impound fee</small>
+                              {row.overdueFee > 0 && (
+                                <small className="amount-note">overdue clamp fee</small>
                               )}
                             </td>
                             <td className="cell-due-date">{formatDate(row.dueDate)}</td>
@@ -788,24 +774,6 @@ export default function PendingPaymentsFinance() {
                                 Cash Payment
                               </button>
 
-                              {row.impoundStatus === "Subject to Impound" && (
-                                <span
-                                  className={`badge-impound ${
-                                    row.impoundAutoFlagged ? "badge-impound-auto" : ""
-                                  }`}
-                                  title={
-                                    row.impoundAutoFlagged
-                                      ? "Automatically flagged by system (24hr grace period expired)"
-                                      : `Flagged by ${row.impoundFlaggedBy ?? "OIC"}`
-                                  }
-                                >
-                                  {row.impoundAutoFlagged ? "🤖 Auto-flagged" : "Subject to Impound"}
-                                </span>
-                              )}
-
-                              {row.impoundStatus === "Impounded" && (
-                                <span className="badge-impounded">Impounded</span>
-                              )}
                             </td>
                           </tr>
                         ))}
@@ -910,15 +878,15 @@ export default function PendingPaymentsFinance() {
                         <strong>{cashRow.violatorName}</strong>
                       </div>
                     )}
-                    {cashRow.impoundFee > 0 ? (
+                    {cashRow.overdueFee > 0 ? (
                       <div className="cash-summary-row">
                         <span>
-                          Impound Fee
+                          Overdue Clamp Fee
                           <small className="amount-note">
-                            Replaces the {formatCurrency(cashRow.fineAmount)} clamp fine
+                            Past 24 hours — replaces the {formatCurrency(cashRow.fineAmount)} fine
                           </small>
                         </span>
-                        <strong>{formatCurrency(cashRow.impoundFee)}</strong>
+                        <strong>{formatCurrency(cashRow.overdueFee)}</strong>
                       </div>
                     ) : (
                       <div className="cash-summary-row">
@@ -1049,8 +1017,8 @@ export default function PendingPaymentsFinance() {
           referenceNumber={savedReference || ""}
           cin={cashRow.cin}
           plateNo={cashRow.plateNo}
-          amount={cashRow.impoundFee > 0 ? 0 : cashRow.fineAmount}
-          impoundFee={cashRow.impoundFee}
+          amount={cashRow.overdueFee > 0 ? 0 : cashRow.fineAmount}
+          overdueFee={cashRow.overdueFee}
           totalAmount={cashRow.amount}
           cashReceived={savedCashReceived ?? undefined}
           orNumber={savedOrNumber || ""}

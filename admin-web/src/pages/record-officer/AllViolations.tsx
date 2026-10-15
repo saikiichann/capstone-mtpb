@@ -11,7 +11,7 @@ import {
   type DocumentData,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
-import { amountDue, impoundFeeDue } from "../../lib/impoundFlag";
+import { amountDueFor, isClampOverdue, overdueFeeFor } from "../../lib/clampFee";
 import ChangePasswordModal from "../../components/ChangePasswordModal";
 import ViolationDetailsModal from "./ViolationDetailsModal";
 import "./AllViolations.css";
@@ -50,8 +50,7 @@ type ViolationStatus =
   | "Approved — For Release"
   | "Released"
   | "Payment Rejected"
-  | "Subject to Impound"
-  | "Impounded";
+  | "Overdue";
 
 type ViolationRow = {
   id: string;
@@ -59,9 +58,9 @@ type ViolationRow = {
   plateNo: string;
   violationType: string;
   location: string;
-  /** Amount due: the ₱2,000 impound fee once impounded, else the fine */
+  /** Amount due: ₱900 fine within 24 hours, ₱2,000 after (lib/clampFee.ts) */
   fine: number;
-  impounded: boolean;
+  overdueFee: boolean;
   status: ViolationStatus;
   recordedAt: Timestamp | null;
   raw: DocumentData & { id: string };
@@ -90,8 +89,7 @@ const STATUS_FILTER_OPTIONS: Array<ViolationStatus | "All Status"> = [
   "Pending Verification",
   "Awaiting OIC Approval",
   "Approved — For Release",
-  "Subject to Impound",
-  "Impounded",
+  "Overdue",
   "Released",
   "Payment Rejected",
 ];
@@ -171,8 +169,7 @@ const getStatusClass = (status: ViolationStatus): string => {
     "Approved — For Release": "status-approved",
     Released: "status-released",
     "Payment Rejected": "status-rejected",
-    "Subject to Impound": "status-subject-impound",
-    Impounded: "status-impounded-violation",
+    Overdue: "status-subject-impound",
   };
   return map[status] ?? "";
 };
@@ -222,12 +219,8 @@ const deriveStatus = (data: any): ViolationStatus => {
     return "Pending Verification";
   }
 
-  // Not paid, and past the 24-hour grace period
-  const impoundStatus = String(data.impoundStatus ?? "").toLowerCase();
-  if (impoundStatus === "impounded") return "Impounded";
-  if (impoundStatus === "subject to impound" || impoundStatus === "scheduled for impounding") {
-    return "Subject to Impound";
-  }
+  // Clamp not paid within 24 hours — now ₱2,000 (still clamped)
+  if (isClampOverdue(data)) return "Overdue";
 
   // Default — Unpaid
   return "Unpaid";
@@ -292,15 +285,14 @@ export default function AllViolations() {
       (snap) => {
         const rows: ViolationRow[] = snap.docs.map((d) => {
           const data = d.data();
-          const impoundFee = impoundFeeDue(data.impoundStatus, data.impoundFee);
           return {
             id: d.id,
             cin: data.cin ?? "—",
             plateNo: data.plateNo ?? "—",
             violationType: data.violationType ?? "—",
             location: data.location ?? "—",
-            fine: amountDue(Number(data.fineAmount ?? 0), impoundFee),
-            impounded: impoundFee > 0,
+            fine: amountDueFor(data),
+            overdueFee: overdueFeeFor(data) > 0,
             status: deriveStatus(data),
             recordedAt: data.recordedAt ?? null,
             raw: { id: d.id, ...data },
@@ -547,7 +539,7 @@ export default function AllViolations() {
                           <td className="cell-location">{row.location}</td>
                           <td className="cell-fine">
                             {formatCurrency(row.fine)}
-                            {row.impounded && <span className="fine-note">impound fee</span>}
+                            {row.overdueFee && <span className="fine-note">overdue fee</span>}
                           </td>
                           <td>
                             <span

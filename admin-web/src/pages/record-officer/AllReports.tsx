@@ -779,7 +779,7 @@ export default function AllReports() {
                       <strong>{report.awaitingVerification}</strong> awaiting payment verification
                     </span>
                     <span>
-                      <strong>{report.wentToImpound}</strong> went to impound
+                      <strong>{report.overdueClamps}</strong> overdue clamps (₱2,000)
                     </span>
                   </div>
                 </div>

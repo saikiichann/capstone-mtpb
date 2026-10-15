@@ -9,8 +9,9 @@ import { db } from "../firebase";
 
    - REF + OR number, violation → "Pending Verification", payment
      record, audit log. Iba pang staff ang magve-verify.
-   - Ang babayaran = clamp fine, o ₱2,000 impound fee kapag Impounded na
-     (pinapalitan ng impound fee ang clamp fine — hindi dinadagdag).
+   - Ang babayaran = clamp fine (₱900) sa loob ng 24 oras, o ₱2,000
+     overdue clamp fee kapag lumagpas na (pinapalitan ang fine — hindi
+     dinadagdag). Tingnan ang lib/clampFee.ts.
    - Cash Received at Change ay sine-save para sa slip.
 ------------------------------------------------------------------ */
 
@@ -19,7 +20,8 @@ export type OnsitePaymentParams = {
   cin: string;
   plateNo: string;
   fineAmount: number;
-  impoundFee: number;
+  /** ₱2,000 when the clamp is past its 24 hours, else 0 (see lib/clampFee.ts) */
+  overdueFee: number;
   amountInWords: string;
   /** Amount handed over (≥ total). Change = cashReceived − total. */
   cashReceived?: number;
@@ -35,10 +37,10 @@ export type OnsitePaymentParams = {
 export const recordOnsitePayment = async (
   params: OnsitePaymentParams
 ): Promise<{ referenceNumber: string; orNumber: string; paymentId: string }> => {
-  const impounded = params.impoundFee > 0;
-  const total = impounded ? params.impoundFee : params.fineAmount;
-  /** Fine actually charged: none once impounded (the impound fee replaces it). */
-  const fineCharged = impounded ? 0 : params.fineAmount;
+  const overdue = params.overdueFee > 0;
+  const total = overdue ? params.overdueFee : params.fineAmount;
+  /** Fine actually charged: none when overdue (the ₱2,000 replaces it). */
+  const fineCharged = overdue ? 0 : params.fineAmount;
   const paymentLocation = params.counterLocation;
   const cashReceived = Math.max(total, Number(params.cashReceived ?? total) || total);
   const cashChange = cashReceived - total;
@@ -76,7 +78,7 @@ export const recordOnsitePayment = async (
       paymentReference: referenceNumber,
       referenceNumber,
       orNumber,
-      impoundFeePaid: params.impoundFee,
+      overdueFeePaid: params.overdueFee,
       totalPaid: total,
       cashReceived,
       cashChange,
@@ -101,8 +103,8 @@ export const recordOnsitePayment = async (
       guestId: params.guestId,
       violatorName: params.violatorName,
       fineAmount: fineCharged,
-      impoundFee: params.impoundFee,
-      chargeType: impounded ? "Impound" : "Clamp",
+      overdueFee: params.overdueFee,
+      chargeType: overdue ? "Clamp (overdue)" : "Clamp",
       amount: total,
       convenienceFee: 0,
       totalAmount: total,
@@ -127,7 +129,7 @@ export const recordOnsitePayment = async (
       userRole: params.recordedByRole,
       action:
         `recorded cash payment for ${params.cin} — OR #${orNumber}, Ref ${referenceNumber}, Location: ${paymentLocation}` +
-        (impounded ? `, impound fee ₱${params.impoundFee.toLocaleString()}` : ""),
+        (overdue ? `, overdue clamp fee ₱${params.overdueFee.toLocaleString()}` : ""),
       record: params.cin,
       type: "cash-payment",
       metadata: {
@@ -135,7 +137,7 @@ export const recordOnsitePayment = async (
         plateNo: params.plateNo,
         fineAmount: fineCharged,
         clampFine: params.fineAmount,
-        impoundFee: params.impoundFee,
+        overdueFee: params.overdueFee,
         amountDue: total,
         amountInWords: params.amountInWords,
         method: "Cash",
