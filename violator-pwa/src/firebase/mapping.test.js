@@ -161,3 +161,31 @@ describe('normalizePayment', () => {
     assert.equal(normalizePayment('REF-2026-00001', { status: 'paid', amount: 500 }).referenceNumber, 'REF-2026-00001')
   })
 })
+
+describe('impound fee', () => {
+  it('charges the clamp fine while only subject to impound', () => {
+    const v = normalizeViolation('v1', { cin: 'CLMP-1', fineAmount: 900, impoundStatus: 'Subject to Impound', impoundFee: 2000 })
+    assert.equal(v.impoundStatus, 'subject_to_impound')
+    assert.equal(v.impoundFee, 0)
+    assert.equal(v.amountDue, 900)
+  })
+
+  it('replaces the fine with the impound fee once impounded', () => {
+    const v = normalizeViolation('v2', { cin: 'CLMP-2', fineAmount: 900, impoundStatus: 'Impounded', impoundFee: 2000 })
+    assert.equal(v.impoundStatus, 'impounded')
+    assert.equal(v.impoundFee, 2000)
+    assert.equal(v.amountDue, 2000)
+    assert.equal(v.fineAmount, 900)
+  })
+
+  it('uses ₱2,000 when an impounded record has no fee saved', () => {
+    const v = normalizeViolation('v3', { cin: 'CLMP-3', fineAmount: 900, impoundStatus: 'Impounded' })
+    assert.equal(v.amountDue, 2000)
+  })
+
+  it('keeps the fine when nothing about impounding is recorded', () => {
+    const v = normalizeViolation('v4', { cin: 'CLMP-4', fineAmount: 750, impoundStatus: 'None' })
+    assert.equal(v.impoundStatus, 'none')
+    assert.equal(v.amountDue, 750)
+  })
+})

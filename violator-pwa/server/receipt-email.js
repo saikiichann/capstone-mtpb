@@ -21,7 +21,7 @@ export function buildReceiptEmail(attempt) {
       ['Violation Type', attempt.violationType],
       ['Location', attempt.location],
       ['Payment Method', 'GCash'],
-      ['Fine Amount', formatPeso(attempt.fineAmount)],
+      [attempt.chargeType === 'Impound' ? 'Impound Fee' : 'Fine Amount', formatPeso(attempt.fineAmount)],
       ['Convenience Fee', formatPeso(attempt.convenienceFee)],
       ['Total Paid', formatPeso(attempt.totalAmount)],
     ],

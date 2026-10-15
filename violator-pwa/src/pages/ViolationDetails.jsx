@@ -12,6 +12,14 @@ import { evidencePhotosOf } from '../utils/evidence'
 import PayChoiceDialog from './PayChoiceDialog'
 import { formatDateTime, formatPeso } from '../utils/format'
 
+// Impound status words from mapping.js, as shown on Violation Details.
+const IMPOUND_LABELS = {
+  subject_to_impound: 'Subject to Impound',
+  scheduled: 'Scheduled for Impounding',
+  impounded: 'Impounded',
+  released: 'Released from Impound',
+}
+
 // The page a violator lands on after scanning the QR code on the clamp.
 // - Signed out: Figma "VIOLATION DETAILS" (997:328). Pay Now asks whether to
 //   pay as a guest or make an account first; Login / Make an Account are
@@ -81,7 +89,13 @@ function ViolationCard({ violation, showPayment = false, onPayNow }) {
     ['Color', violation.vehicleColor],
     ['Violation', violation.violationType],
     ['Location', violation.location],
-    ['Fine Amount', formatPeso(violation.fineAmount), 'danger'],
+    // Once impounded the impound fee replaces the clamp fine.
+    ...(violation.impoundStatus && violation.impoundStatus !== 'none'
+      ? [['Impound Status', IMPOUND_LABELS[violation.impoundStatus] ?? violation.impoundStatus]]
+      : []),
+    violation.impoundFee > 0
+      ? ['Impound Fee', formatPeso(violation.impoundFee), 'danger']
+      : ['Fine Amount', formatPeso(violation.fineAmount), 'danger'],
     ['Officer', violation.officerName],
   ]
 

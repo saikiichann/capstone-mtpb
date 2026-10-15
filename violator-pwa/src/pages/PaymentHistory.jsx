@@ -131,7 +131,7 @@ function UnpaidRow({ violation: v }) {
           <span className="history-card__plate">{v.plateNumber}</span>
         </span>
         <span className="history-card__side">
-          <span className="history-card__amount">{formatPeso(v.fineAmount)}</span>
+          <span className="history-card__amount">{formatPeso(v.amountDue ?? v.fineAmount)}</span>
           <StatusBadge status="unpaid" />
         </span>
         <span className="history-card__chevron" aria-hidden="true">

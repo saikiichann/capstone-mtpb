@@ -92,7 +92,9 @@ export function createPaymentService({ store, paymongo, mailer = null, onPaid = 
       throw new HttpError(409, 'This violation is already paid.', { referenceNumber: violation.referenceNumber })
     }
 
-    const charges = computeChargesCentavos(violation.fineAmount, method)
+    // Once impounded, the impound fee replaces the clamp fine (mapping.js).
+    const impounded = violation.impoundFee > 0
+    const charges = computeChargesCentavos(violation.amountDue ?? violation.fineAmount, method)
     const profile = await store.getViolatorProfile(uid)
 
     const attemptId = await store.createAttempt({
@@ -114,12 +116,19 @@ export function createPaymentService({ store, paymongo, mailer = null, onPaid = 
       fineAmount: charges.fine / 100,
       convenienceFee: charges.fee / 100,
       totalAmount: charges.total / 100,
+      chargeType: impounded ? 'Impound' : 'Clamp',
+      impoundFee: impounded ? violation.impoundFee : 0,
       status: 'pending',
       createdAt: now(),
     })
 
     const lineItems = [
-      { name: `Fine – ${violation.cin}`, amount: charges.fine, currency: 'PHP', quantity: 1 },
+      {
+        name: `${impounded ? 'Impound fee' : 'Fine'} – ${violation.cin}`,
+        amount: charges.fine,
+        currency: 'PHP',
+        quantity: 1,
+      },
     ]
     if (charges.fee > 0) {
       lineItems.push({ name: 'Convenience fee', amount: charges.fee, currency: 'PHP', quantity: 1 })
