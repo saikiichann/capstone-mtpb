@@ -7,8 +7,8 @@
 //
 // Each "Subject to Impound" row has an "Add Record" button that opens the
 // AddImpoundModal prefilled from the clamp details; staff add the driver
-// and impound details from the paper ticket. The icon beside each status
-// reopens that record.
+// and impound details from the paper ticket. Impounded / Released rows
+// have "View Record" to reopen it.
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -18,7 +18,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  FileText,
 } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
@@ -725,41 +724,27 @@ export default function ImpoundingLog() {
                               {formatDateTime(row.recordedAt)}
                             </td>
                             <td>
-                              <div className="status-cell">
-                                <span
-                                  className={`status-pill ${getStatusClass(
-                                    row.status
-                                  )}`}
-                                >
-                                  {row.status}
-                                </span>
-                                <button
-                                  type="button"
-                                  className="btn-status-details"
-                                  onClick={() => openImpoundRecord(row)}
-                                  disabled={preparingRowId !== null}
-                                  title="View impound record"
-                                  aria-label={`View impound record for ${row.cin}`}
-                                >
-                                  <FileText size={15} />
-                                </button>
-                              </div>
+                              <span
+                                className={`status-pill ${getStatusClass(
+                                  row.status
+                                )}`}
+                              >
+                                {row.status}
+                              </span>
                             </td>
                             <td>
-                              {row.status === "Subject to Impound" ? (
-                                <button
-                                  type="button"
-                                  className="btn-record-impound"
-                                  onClick={() => openImpoundRecord(row)}
-                                  disabled={preparingRowId !== null}
-                                >
-                                  {preparingRowId === row.id
-                                    ? "Loading..."
-                                    : "Add Record"}
-                                </button>
-                              ) : (
-                                <span className="cell-muted">—</span>
-                              )}
+                              <button
+                                type="button"
+                                className="btn-record-impound"
+                                onClick={() => openImpoundRecord(row)}
+                                disabled={preparingRowId !== null}
+                              >
+                                {preparingRowId === row.id
+                                  ? "Loading..."
+                                  : row.status === "Subject to Impound"
+                                    ? "Add Record"
+                                    : "View Record"}
+                              </button>
                             </td>
                           </tr>
                         ))}
