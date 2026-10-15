@@ -176,6 +176,7 @@ describe('impound fee', () => {
     assert.equal(v.impoundFee, 2000)
     assert.equal(v.amountDue, 2000)
     assert.equal(v.fineAmount, 900)
+    assert.equal(v.status, 'impounded')
   })
 
   it('uses ₱2,000 when an impounded record has no fee saved', () => {

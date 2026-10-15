@@ -162,7 +162,12 @@ export function normalizeViolation(id, data) {
     referenceNumber: pick(data, FIELDS.referenceNumber, ''),
     paymentMethod: pick(data, FIELDS.paymentMethod, ''),
     paidAt: pick(data, FIELDS.paidAt, null),
-    status: normalizeViolationStatus(pick(data, FIELDS.enforcementType) ?? pick(data, FIELDS.status)),
+    // A clamped vehicle that the impounding staff have since towed reads as
+    // impounded, like one the enforcer impounded directly.
+    status:
+      impoundStatus === 'impounded'
+        ? 'impounded'
+        : normalizeViolationStatus(pick(data, FIELDS.enforcementType) ?? pick(data, FIELDS.status)),
     // Kept as written by the admin app ("Clamping", "Impounding"), since it's
     // shown to the violator as a label rather than used for logic.
     enforcementType: pick(data, FIELDS.enforcementType, ''),

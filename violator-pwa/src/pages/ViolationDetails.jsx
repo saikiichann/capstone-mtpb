@@ -158,9 +158,25 @@ function ViolationCard({ violation, showPayment = false, onPayNow }) {
       ) : (
         <>
           <p className="notice">
-            {t('violation.avoid')}
-            <br />
-            {t('violation.onTime')}
+            {violation.impoundStatus === 'impounded' ? (
+              <>
+                {t('violation.impounded')}
+                <br />
+                {t('violation.payImpound', { fee: formatPeso(violation.impoundFee) })}
+              </>
+            ) : violation.impoundStatus === 'subject_to_impound' || violation.impoundStatus === 'scheduled' ? (
+              <>
+                {t('violation.subjectToImpound')}
+                <br />
+                {t('violation.payBeforeImpound')}
+              </>
+            ) : (
+              <>
+                {t('violation.avoid')}
+                <br />
+                {t('violation.onTime')}
+              </>
+            )}
           </p>
           <div className="btn-stack">
             <button type="button" className="btn btn--primary" onClick={onPayNow}>
