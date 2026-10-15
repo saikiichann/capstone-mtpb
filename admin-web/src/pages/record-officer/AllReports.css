@@ -554,3 +554,11 @@
 .reports-page .rp-records-table .cin-pill {
   white-space: nowrap;
 }
+
+@media print {
+  .reports-page .rp-print-period {
+    font-size: 15px;
+    font-weight: 600;
+    color: #374151;
+  }
+}

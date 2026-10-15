@@ -538,8 +538,12 @@ export default function AllReports() {
                   <p className="rp-print-only rp-print-org">
                     MTPB · Manila Traffic and Parking Bureau · Integrated Enforcement System
                   </p>
-                  <p className="card-eyebrow">SECTOR 3 · {def.title.toUpperCase()}</p>
-                  <h2 className="card-title rp-period-title">{period.label}</h2>
+                  <p className="card-eyebrow">SECTOR 3</p>
+                  <h2 className="card-title rp-period-title">
+                    {def.title}
+                    {/* The period is already in the date picker; print shows it here. */}
+                    <span className="rp-print-only rp-print-period">{period.label}</span>
+                  </h2>
                   <p className="rp-print-only rp-print-meta">
                     Generated {formatDateTime(new Date())} by {currentUser.name} (Record Officer)
                   </p>
