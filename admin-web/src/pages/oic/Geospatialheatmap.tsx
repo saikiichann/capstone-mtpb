@@ -128,6 +128,8 @@ const AREA_CENTERS: Record<string, [number, number]> = {
   "Sta. Cruz": [14.6091, 120.9822],
   Binondo: [14.6019, 120.9721],
   Quiapo: [14.5996, 120.9842],
+  Sampaloc: [14.6085, 120.9895],
+  "San Miguel": [14.594, 120.9925],
 };
 
 /** Different spellings of the same area collapse to one name. */
@@ -137,15 +139,19 @@ const AREA_ALIASES: Record<string, string> = {
   "santa cruz": "Sta. Cruz",
   binondo: "Binondo",
   quiapo: "Quiapo",
+  sampaloc: "Sampaloc",
+  "san miguel": "San Miguel",
 };
 
 const MANILA_D3_CENTER: [number, number] = [14.604, 120.978];
 
+// Covers every Sector 3 location the enforcer app offers (Sampaloc, Sta.
+// Cruz, Quiapo, San Miguel, Binondo, San Nicolas). Approximate rectangle.
 const DISTRICT_3_BOUNDARY: [number, number][] = [
-  [14.6115, 120.966],
-  [14.6115, 120.9865],
-  [14.5975, 120.9865],
-  [14.5975, 120.966],
+  [14.6245, 120.964],
+  [14.6245, 120.9965],
+  [14.5905, 120.9965],
+  [14.5905, 120.964],
 ];
 
 const OUTER_MASK: [number, number][] = [
@@ -156,9 +162,54 @@ const OUTER_MASK: [number, number][] = [
 ];
 
 const MAX_BOUNDS: [[number, number], [number, number]] = [
-  [14.59, 120.958],
-  [14.618, 120.994],
+  [14.585, 120.955],
+  [14.629, 121.003],
 ];
+
+/**
+ * Coordinates of the locations the enforcer app offers
+ * (src/screens/ClampingDetailsScreen.js, LOCATIONS). The enforcer app saves
+ * the phone's GPS first; when that GPS is outside Sector 3 (e.g. testing
+ * away from the area), the clamp is placed at its recorded location instead.
+ */
+const KNOWN_LOCATIONS: Record<string, [number, number]> = {
+  "Sampaloc - España Boulevard": [14.6095, 120.989],
+  "Sampaloc - Lacson Avenue": [14.6118, 120.9937],
+  "Sampaloc - Earnshaw Street": [14.6082, 120.9856],
+  "Sampaloc - Dapitan Street": [14.6132, 120.9876],
+  "Sampaloc - P. Noval Street": [14.6108, 120.9895],
+  "Sampaloc - A.H. Lacson Avenue": [14.6118, 120.9937],
+  "Sampaloc - Legarda Street": [14.6003, 120.9925],
+  "Sampaloc - Recto Avenue": [14.6042, 120.9889],
+  "Santa Cruz - Rizal Avenue": [14.6172, 120.9818],
+  "Santa Cruz - Blumentritt Road": [14.6229, 120.9845],
+  "Santa Cruz - Oroquieta Street": [14.6104, 120.9829],
+  "Santa Cruz - Tayuman Street": [14.618, 120.9828],
+  "Santa Cruz - Bambang Street": [14.6118, 120.9819],
+  "Santa Cruz - Fugoso Street": [14.6106, 120.9832],
+  "Quiapo - Quezon Boulevard": [14.5987, 120.9853],
+  "Quiapo - Hidalgo Street": [14.5964, 120.9865],
+  "Quiapo - Villalobos Street": [14.5977, 120.9852],
+  "Quiapo - Palanca Street": [14.5971, 120.9842],
+  "Quiapo - Evangelista Street": [14.5965, 120.9848],
+  "San Miguel - Ayala Bridge": [14.5921, 120.9898],
+  "San Miguel - Malacañang Area": [14.5941, 120.9947],
+  "San Miguel - Nepomuceno Street": [14.5952, 120.9935],
+};
+
+const insideMap = (lat: number, lng: number): boolean =>
+  lat >= MAX_BOUNDS[0][0] &&
+  lat <= MAX_BOUNDS[1][0] &&
+  lng >= MAX_BOUNDS[0][1] &&
+  lng <= MAX_BOUNDS[1][1];
+
+/** "Sampaloc – España Blvd." style differences don't matter. */
+const locationKey = (value: string): string =>
+  value.toLowerCase().replace(/[^a-z0-9ñ]+/g, " ").trim();
+
+const KNOWN_LOCATION_KEYS: Map<string, [number, number]> = new Map(
+  Object.entries(KNOWN_LOCATIONS).map(([name, coords]) => [locationKey(name), coords])
+);
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -407,6 +458,19 @@ const violationPinIcon = (color: string) =>
     iconAnchor: [5, 5],
   });
 
+/** Moves the map to where the clamps are (the red zones) when data loads. */
+function FitToZones({ zones }: { zones: HeatZone[] }) {
+  const map = useMap();
+  const fitted = useRef(false);
+  useEffect(() => {
+    if (fitted.current || zones.length === 0) return;
+    fitted.current = true;
+    const bounds = L.latLngBounds(zones.map((z) => [z.lat, z.lng] as [number, number]));
+    map.fitBounds(bounds.pad(0.3), { maxZoom: 16, animate: false });
+  }, [map, zones]);
+  return null;
+}
+
 function InvalidateSizeOnMount() {
   const map = useMap();
   useEffect(() => {
@@ -432,6 +496,8 @@ export default function GeospatialHeatmap() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const [points, setPoints] = useState<ViolationPoint[]>([]);
+  /** Clamps not placed by GPS: put at their recorded location, or left off. */
+  const [placement, setPlacement] = useState({ offMap: 0, placedByLocation: 0 });
   const [loading, setLoading] = useState(true);
 
   /* Current user */
@@ -472,6 +538,8 @@ export default function GeospatialHeatmap() {
       q,
       (snap) => {
         const fetched: ViolationPoint[] = [];
+        let offMap = 0;
+        let placedByLocation = 0;
 
         snap.docs.forEach((d) => {
           const data = d.data();
@@ -480,19 +548,29 @@ export default function GeospatialHeatmap() {
           const coords = data.locationCoords as
             | { lat: number; lng: number }
             | undefined;
+          const gpsOk =
+            !!coords &&
+            typeof coords.lat === "number" &&
+            typeof coords.lng === "number" &&
+            insideMap(coords.lat, coords.lng);
 
-          if (
-            !coords ||
-            typeof coords.lat !== "number" ||
-            typeof coords.lng !== "number"
-          ) {
-            // Skip violations na walang valid coordinates
+          // GPS outside Sector 3 (or missing): use the recorded location.
+          const known = data.location
+            ? KNOWN_LOCATION_KEYS.get(locationKey(String(data.location)))
+            : undefined;
+          const position: [number, number] | null = gpsOk
+            ? [coords!.lat, coords!.lng]
+            : known ?? null;
+
+          if (!position) {
+            offMap++;
             return;
           }
+          if (!gpsOk) placedByLocation++;
 
           fetched.push({
-            lat: coords.lat,
-            lng: coords.lng,
+            lat: position[0],
+            lng: position[1],
             barangay: (data.barangay as string) ?? null,
             violationType: (data.violationType as string) ?? null,
             cin: (data.cin as string) ?? null,
@@ -502,6 +580,7 @@ export default function GeospatialHeatmap() {
         });
 
         setPoints(fetched);
+        setPlacement({ offMap, placedByLocation });
         setLoading(false);
       },
       (err) => {
@@ -708,6 +787,7 @@ export default function GeospatialHeatmap() {
                 style={{ height: "100%", width: "100%" }}
               >
                 <InvalidateSizeOnMount />
+                <FitToZones zones={heatZones} />
                 <ZoomControl position="topright" />
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -883,6 +963,20 @@ export default function GeospatialHeatmap() {
                   </>
                 )}
 
+                {placement.placedByLocation > 0 && (
+                  <p className="geo-note">
+                    {placement.placedByLocation} clamp
+                    {placement.placedByLocation === 1 ? "" : "s"} had GPS outside Sector 3
+                    and {placement.placedByLocation === 1 ? "is" : "are"} shown at the
+                    recorded location instead.
+                  </p>
+                )}
+                {placement.offMap > 0 && (
+                  <p className="geo-note">
+                    {placement.offMap} clamp{placement.offMap === 1 ? "" : "s"} could not be
+                    placed on the map (GPS outside Sector 3 and an unknown location).
+                  </p>
+                )}
                 {unassigned > 0 && (
                   <p className="geo-note">
                     {unassigned} Sector 3 violation
