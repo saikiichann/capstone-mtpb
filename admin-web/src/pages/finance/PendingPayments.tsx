@@ -165,13 +165,44 @@ const formatDate = (ts: Timestamp | null): string => {
   }
 };
 
+/**
+ * Ilang araw pa bago ang due date. Negative kapag lumampas na — kahit
+ * ilang oras pa lang. (Dati Math.ceil lang, kaya ang -0.2 araw ay naging
+ * "0 days / Due Today" kahit overdue na at naka-auto-flag na.)
+ */
 const computeDaysLeft = (ts: Timestamp | null): number => {
   if (!ts) return 0;
   try {
-    return Math.ceil((ts.toDate().getTime() - new Date().getTime()) / 86400000);
+    const diffDays = (ts.toDate().getTime() - new Date().getTime()) / 86400000;
+    return diffDays < 0 ? Math.floor(diffDays) : Math.ceil(diffDays);
   } catch {
     return 0;
   }
+};
+
+/** True kapag ngayong araw ang due date at hindi pa lumalampas. */
+const isDueToday = (ts: Timestamp | null): boolean => {
+  if (!ts) return false;
+  try {
+    const due = ts.toDate();
+    const now = new Date();
+    return due.getTime() >= now.getTime() && due.toDateString() === now.toDateString();
+  } catch {
+    return false;
+  }
+};
+
+/** "Overdue", "5 hrs" kapag wala nang isang araw, o "2 days". */
+const formatTimeLeft = (ts: Timestamp | null, daysLeft: number): string => {
+  if (daysLeft < 0) return "Overdue";
+  if (!ts) return "—";
+  try {
+    const hours = Math.ceil((ts.toDate().getTime() - Date.now()) / 3600000);
+    if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"}`;
+  } catch {
+    return "—";
+  }
+  return `${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
 };
 
 const getStatusClass = (status: PendingStatus): string =>
@@ -620,7 +651,7 @@ export default function PendingPaymentsFinance() {
   const metrics = useMemo(() => {
     const totalPending = rows.length;
     const overdue = rows.filter((r) => r.daysLeft < 0).length;
-    const dueToday = rows.filter((r) => r.daysLeft === 0).length;
+    const dueToday = rows.filter((r) => r.daysLeft >= 0 && isDueToday(r.dueDate)).length;
     return { totalPending, overdue, dueToday };
   }, [rows]);
 
@@ -843,9 +874,7 @@ export default function PendingPaymentsFinance() {
                             <td className="cell-amount">{formatCurrency(row.amount)}</td>
                             <td className="cell-due-date">{formatDate(row.dueDate)}</td>
                             <td className={`cell-days-left ${row.daysLeft < 0 ? "text-red" : ""}`}>
-                              {row.daysLeft < 0
-                                ? "Overdue"
-                                : `${row.daysLeft} day${row.daysLeft === 1 ? "" : "s"}`}
+                              {formatTimeLeft(row.dueDate, row.daysLeft)}
                             </td>
                             <td>
                               <span className={`status-pill ${getStatusClass(row.status)}`}>

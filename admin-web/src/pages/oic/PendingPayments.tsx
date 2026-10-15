@@ -16,6 +16,13 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./PendingPayments.css";
+import {
+  IMPOUND_FEE,
+  setImpoundRecord,
+  setImpoundRecordInTransaction,
+  useImpoundRecordIds,
+  type ImpoundRecordSource,
+} from "../../lib/impoundFlag";
 import CashPaymentSlip from "../../components/CashPaymentSlip";
 
 // Asset imports
@@ -64,6 +71,10 @@ type PendingRow = {
   impoundStatus: string | null;
   impoundAutoFlagged: boolean;
   impoundFlaggedBy: string | null;
+  /** "clamped" | "impounded" — direct tows are never flagged. */
+  enforcementType: string;
+  /** For the impoundRecords entry */
+  impoundSource: ImpoundRecordSource;
   // ⚠️ ADDED: violator identity fields
   violatorUid: string | null;
   guestId: string | null;
@@ -81,7 +92,6 @@ type SortOption = "oldest" | "newest" | "amount-high" | "amount-low" | "plate-as
 ------------------------------------------------------------------ */
 const ITEMS_PER_PAGE = 10;
 const PAYMENT_DUE_HOURS = 24;
-const IMPOUND_FEE = 2000;
 
 const PAYMENT_LOCATIONS: { value: PaymentLocation; label: string }[] = [
   { value: "Central", label: "Central (MTPB Office)" },
@@ -187,13 +197,44 @@ const formatDate = (ts: Timestamp | null): string => {
   }
 };
 
+/**
+ * Ilang araw pa bago ang due date. Negative kapag lumampas na — kahit
+ * ilang oras pa lang. (Dati Math.ceil lang, kaya ang -0.2 araw ay naging
+ * "0 days / Due Today" kahit overdue na at naka-auto-flag na.)
+ */
 const computeDaysLeft = (ts: Timestamp | null): number => {
   if (!ts) return 0;
   try {
-    return Math.ceil((ts.toDate().getTime() - new Date().getTime()) / 86400000);
+    const diffDays = (ts.toDate().getTime() - new Date().getTime()) / 86400000;
+    return diffDays < 0 ? Math.floor(diffDays) : Math.ceil(diffDays);
   } catch {
     return 0;
   }
+};
+
+/** True kapag ngayong araw ang due date at hindi pa lumalampas. */
+const isDueToday = (ts: Timestamp | null): boolean => {
+  if (!ts) return false;
+  try {
+    const due = ts.toDate();
+    const now = new Date();
+    return due.getTime() >= now.getTime() && due.toDateString() === now.toDateString();
+  } catch {
+    return false;
+  }
+};
+
+/** "Overdue", "5 hrs" kapag wala nang isang araw, o "2 days". */
+const formatTimeLeft = (ts: Timestamp | null, daysLeft: number): string => {
+  if (daysLeft < 0) return "Overdue";
+  if (!ts) return "—";
+  try {
+    const hours = Math.ceil((ts.toDate().getTime() - Date.now()) / 3600000);
+    if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"}`;
+  } catch {
+    return "—";
+  }
+  return `${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
 };
 
 const getStatusClass = (status: PendingStatus): string =>
@@ -420,6 +461,9 @@ export default function PendingPaymentsOIC() {
   const [impoundRow, setImpoundRow] = useState<PendingRow | null>(null);
   const [impoundNotes, setImpoundNotes] = useState("");
   const [impoundSaving, setImpoundSaving] = useState(false);
+  const impoundRecordIds = useImpoundRecordIds();
+  const autoFlagRunning = useRef(false);
+  const autoFlagHandled = useRef<Set<string>>(new Set());
 
   /* Effect: Fetch current user profile */
   useEffect(() => {
@@ -494,6 +538,20 @@ export default function PendingPaymentsOIC() {
               impoundStatus: data.impoundStatus ?? null,
               impoundAutoFlagged: data.impoundAutoFlagged ?? false,
               impoundFlaggedBy: data.impoundFlaggedBy ?? null,
+              enforcementType: String(data.enforcementType ?? "clamped").toLowerCase(),
+              impoundSource: {
+                id: d.id,
+                reference:
+                  (data.referenceNumber as string) ??
+                  (data.paymentReference as string) ??
+                  null,
+                cin,
+                plateNo: data.plateNo ?? "—",
+                location: data.location ?? "—",
+                violation: data.violationType ?? "—",
+                officer: data.officer ?? "—",
+                recordedAt,
+              },
               // ⚠️ ADDED: violator identity (with null-safe fallbacks)
               violatorUid: data.violatorUid ?? null,
               guestId: data.guestId ?? null,
@@ -517,62 +575,102 @@ export default function PendingPaymentsOIC() {
     return () => unsubscribe();
   }, []);
 
-  /* AUTO-FLAG OVERDUE VIOLATIONS */
+  /* AUTO-FLAG OVERDUE VIOLATIONS
+     Clamped and unpaid past the 24-hour window → "Subject to Impound",
+     plus an impoundRecords entry so the vehicle reaches Active Impounding
+     and the Impounding Log. Also adds the record for violations flagged
+     before that was done. Direct tows (enforcementType "impounded") are
+     already impounded, so they are skipped. */
   useEffect(() => {
     if (loading || rows.length === 0) return;
+    if (impoundRecordIds === null) return;
+    if (autoFlagRunning.current) return;
+
+    const handled = autoFlagHandled.current;
+    const isActiveClamp = (row: PendingRow) =>
+      row.enforcementType !== "impounded" &&
+      row.impoundStatus !== "Impounded" &&
+      !handled.has(row.id);
+
+    const overdueRows = rows.filter(
+      (row) =>
+        isActiveClamp(row) &&
+        row.daysLeft < 0 &&
+        row.impoundStatus !== "Subject to Impound"
+    );
+    const missingRecordRows = rows.filter(
+      (row) =>
+        isActiveClamp(row) &&
+        row.impoundStatus === "Subject to Impound" &&
+        !impoundRecordIds.has(row.id)
+    );
+
+    if (overdueRows.length === 0 && missingRecordRows.length === 0) return;
+
+    const work = [
+      ...overdueRows.map((row) => ({ row, flag: true })),
+      ...missingRecordRows.map((row) => ({ row, flag: false })),
+    ];
 
     const autoFlagOverdue = async () => {
-      const overdueRows = rows.filter(
-        (row) =>
-          row.daysLeft < 0 &&
-          row.impoundStatus !== "Subject to Impound" &&
-          row.impoundStatus !== "Impounded"
-      );
-
-      if (overdueRows.length === 0) return;
-
+      autoFlagRunning.current = true;
+      // A batch holds up to 500 writes; each row uses at most 3.
+      const CHUNK = 150;
       try {
-        const batch = writeBatch(db);
-        overdueRows.forEach((row) => {
-          const violationRef = doc(db, "violations", row.id);
-          const auditRef = doc(collection(db, "auditLogs"));
+        for (let i = 0; i < work.length; i += CHUNK) {
+          const chunk = work.slice(i, i + CHUNK);
+          const batch = writeBatch(db);
 
-          batch.update(violationRef, {
-            impoundStatus: "Subject to Impound",
-            impoundFlaggedAt: serverTimestamp(),
-            impoundFlaggedBy: "system",
-            impoundFlaggedByRole: "system",
-            impoundAutoFlagged: true,
-            impoundFee: IMPOUND_FEE,
-            updatedAt: serverTimestamp(),
-            updatedBy: "system",
+          chunk.forEach(({ row, flag }) => {
+            if (flag) {
+              batch.update(doc(db, "violations", row.id), {
+                impoundStatus: "Subject to Impound",
+                impoundFlaggedAt: serverTimestamp(),
+                impoundFlaggedBy: "system",
+                impoundFlaggedByRole: "system",
+                impoundAutoFlagged: true,
+                impoundFee: IMPOUND_FEE,
+                updatedAt: serverTimestamp(),
+                updatedBy: "system",
+              });
+
+              batch.set(doc(collection(db, "auditLogs")), {
+                userName: "System",
+                userRole: "system",
+                action: `auto-flagged violation ${row.cin} as Subject to Impound (24hr grace period expired)`,
+                record: row.cin,
+                type: "impound-flag-auto",
+                metadata: {
+                  cin: row.cin,
+                  plateNo: row.plateNo,
+                  daysOverdue: Math.abs(row.daysLeft),
+                  impoundFee: IMPOUND_FEE,
+                  method: "client-side",
+                },
+                timestamp: serverTimestamp(),
+              });
+            }
+
+            if (!impoundRecordIds.has(row.id)) {
+              setImpoundRecord(batch, row.impoundSource, {
+                autoFlagged: flag || row.impoundAutoFlagged,
+                createdBy: "system",
+              });
+            }
           });
 
-          batch.set(auditRef, {
-            userName: "System",
-            userRole: "system",
-            action: `auto-flagged violation ${row.cin} as Subject to Impound (24hr grace period expired)`,
-            record: row.cin,
-            type: "impound-flag-auto",
-            metadata: {
-              cin: row.cin,
-              plateNo: row.plateNo,
-              daysOverdue: Math.abs(row.daysLeft),
-              impoundFee: IMPOUND_FEE,
-              method: "client-side",
-            },
-            timestamp: serverTimestamp(),
-          });
-        });
-
-        await batch.commit();
+          await batch.commit();
+          chunk.forEach(({ row }) => handled.add(row.id));
+        }
       } catch (err) {
         console.error("[auto-flag] Failed to flag overdue violations:", err);
+      } finally {
+        autoFlagRunning.current = false;
       }
     };
 
     autoFlagOverdue();
-  }, [loading, rows]);
+  }, [loading, rows, impoundRecordIds]);
 
   /* Click outside */
   useEffect(() => {
@@ -671,7 +769,16 @@ export default function PendingPaymentsOIC() {
       const violationRef = doc(db, "violations", impoundRow.id);
       const auditRef = doc(collection(db, "auditLogs"));
 
+      const needsRecord = !impoundRecordIds?.has(impoundRow.id);
+
       await runTransaction(db, async (tx) => {
+        if (needsRecord) {
+          setImpoundRecordInTransaction(tx, impoundRow.impoundSource, {
+            autoFlagged: false,
+            createdBy: currentUser.name,
+          });
+        }
+
         tx.update(violationRef, {
           impoundStatus: "Subject to Impound",
           impoundFlaggedAt: serverTimestamp(),
@@ -761,7 +868,7 @@ export default function PendingPaymentsOIC() {
   const metrics = useMemo(() => {
     const totalPending = rows.length;
     const overdue = rows.filter((r) => r.daysLeft < 0).length;
-    const dueToday = rows.filter((r) => r.daysLeft === 0).length;
+    const dueToday = rows.filter((r) => r.daysLeft >= 0 && isDueToday(r.dueDate)).length;
     return { totalPending, overdue, dueToday };
   }, [rows]);
 
@@ -972,9 +1079,7 @@ export default function PendingPaymentsOIC() {
                             <td className="cell-amount">{formatCurrency(row.amount)}</td>
                             <td className="cell-due-date">{formatDate(row.dueDate)}</td>
                             <td className={`cell-days-left ${row.daysLeft < 0 ? "text-red" : ""}`}>
-                              {row.daysLeft < 0
-                                ? "Overdue"
-                                : `${row.daysLeft} day${row.daysLeft === 1 ? "" : "s"}`}
+                              {formatTimeLeft(row.dueDate, row.daysLeft)}
                             </td>
                             <td>
                               <span className={`status-pill ${getStatusClass(row.status)}`}>
@@ -991,6 +1096,7 @@ export default function PendingPaymentsOIC() {
                               </button>
 
                               {row.status === "Overdue" &&
+                                row.enforcementType !== "impounded" &&
                                 row.impoundStatus !== "Subject to Impound" &&
                                 row.impoundStatus !== "Impounded" && (
                                   <button

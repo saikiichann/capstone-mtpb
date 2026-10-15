@@ -21,6 +21,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./ClampingLog.css";
+import { setImpoundRecord, useImpoundRecordIds } from "../../lib/impoundFlag";
 
 import logo from "../../assets/mtpb-logo.png";
 import avatarImg from "../../assets/user.png";
@@ -263,7 +264,7 @@ export default function ClampingLog() {
   /** True kapag na-load na ang role — hindi tatakbo ang auto-flag bago nito. */
   const [userLoaded, setUserLoaded] = useState(false);
   /** IDs ng violations na may impoundRecords na; null habang naglo-load. */
-  const [impoundRecordIds, setImpoundRecordIds] = useState<Set<string> | null>(null);
+  const impoundRecordIds = useImpoundRecordIds();
   const autoFlagRunning = useRef(false);
   /** Mga violation na naproseso na sa session na ito — iwas doble. */
   const autoFlagHandled = useRef<Set<string>>(new Set());
@@ -341,24 +342,6 @@ export default function ClampingLog() {
         console.warn("Clamping log fetch failed:", err.code);
         setLoading(false);
       }
-    );
-    return () => unsubscribe();
-  }, []);
-
-  /* Which violations already have an impoundRecords entry */
-  useEffect(() => {
-    const unsubscribe = onSnapshot(
-      collection(db, "impoundRecords"),
-      (snap) => {
-        const ids = new Set<string>();
-        snap.docs.forEach((d) => {
-          ids.add(d.id);
-          const source = d.data().sourceViolationId;
-          if (typeof source === "string" && source) ids.add(source);
-        });
-        setImpoundRecordIds(ids);
-      },
-      (err) => console.warn("impoundRecords fetch failed:", err.code)
     );
     return () => unsubscribe();
   }, []);
@@ -462,20 +445,9 @@ export default function ClampingLog() {
             }
 
             if (!impoundRecordIds.has(row.id)) {
-              batch.set(doc(db, "impoundRecords", row.id), {
-                sourceViolationId: row.id,
-                referenceNumber: row.reference,
-                cin: row.cin,
-                plateNo: row.plateNo,
-                location: row.location,
-                initialViolation: row.violation,
-                clampedBy: row.officer,
-                clampedAt: row.recordedAt,
-                status: "Subject to Impound",
-                impoundFee: IMPOUND_FEE,
+              setImpoundRecord(batch, row, {
                 autoFlagged: flag || row.autoFlagged,
                 createdBy: "system",
-                createdAt: serverTimestamp(),
               });
             }
           });
