@@ -63,15 +63,18 @@ type Schedule = {
   title: string;
   timeStart: string; // HH:MM
   timeEnd: string; // HH:MM
-  team: string;
-  focus: string;
+  /** Always Sector 3 — the MTPB district this system covers */
+  sector: string;
   source: OperationSource;
   referenceNo: string;
   complaintType: ComplaintType;
   location: string;
+  /** Remarks when scheduling (what to look out for, instructions) */
+  remarks: string;
   status: OperationStatus;
   vehiclesClamped: number | null;
-  remarks: string;
+  /** Remarks when completing (outcome) */
+  resultRemarks: string;
   cancelReason: string;
 };
 
@@ -81,8 +84,7 @@ type ScheduleFormData = Pick<
   | "title"
   | "timeStart"
   | "timeEnd"
-  | "team"
-  | "focus"
+  | "remarks"
   | "source"
   | "referenceNo"
   | "complaintType"
@@ -205,6 +207,9 @@ const NAV_GROUPS: NavGroup[] = [
 ------------------------------------------------------------------ */
 /** Local YYYY-MM-DD, matching how <input type="date"> stores it — not
  *  toISOString(), which is UTC and can land on the wrong calendar day. */
+const SECTOR = "Sector 3";
+const SECTOR_ID = "sector-3";
+
 const SOURCE_OPTIONS: OperationSource[] = ["Hotline 8888", "MTPB Order", "Other Complaint"];
 
 const COMPLAINT_OPTIONS: ComplaintType[] = [
@@ -270,7 +275,6 @@ export default function OperationScheduler() {
   const [tab, setTab] = useState<SchedulerTab>("upcoming");
   const [completing, setCompleting] = useState<Schedule | null>(null);
   const [loading, setLoading] = useState(true);
-  const [teamNames, setTeamNames] = useState<string[]>([]);
 
   const [modalMode, setModalMode] = useState<"add" | "edit" | null>(null);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
@@ -316,8 +320,8 @@ export default function OperationScheduler() {
               title: data.title ?? "—",
               timeStart: data.timeStart ?? "",
               timeEnd: data.timeEnd ?? "",
-              team: data.team ?? "—",
-              focus: data.focus ?? "",
+              sector: data.sector ?? SECTOR,
+              remarks: data.remarks ?? data.focus ?? "",
               source: asSource(data.source),
               referenceNo: data.referenceNo ?? "",
               complaintType: asComplaint(data.complaintType),
@@ -325,7 +329,7 @@ export default function OperationScheduler() {
               status: asStatus(data.status),
               vehiclesClamped:
                 typeof data.vehiclesClamped === "number" ? data.vehiclesClamped : null,
-              remarks: data.remarks ?? "",
+              resultRemarks: data.resultRemarks ?? "",
               cancelReason: data.cancelReason ?? "",
             };
           })
@@ -341,23 +345,6 @@ export default function OperationScheduler() {
         console.warn("Operation schedules fetch failed:", err.code);
         setLoading(false);
       }
-    );
-    return () => unsubscribe();
-  }, []);
-
-  /** Team suggestions from the clampingTeams collection, if any. The team
-   *  field is free text, since there is no team-management page. */
-  useEffect(() => {
-    const unsubscribe = onSnapshot(
-      collection(db, "clampingTeams"),
-      (snap) => {
-        const names = snap.docs
-          .map((d) => (d.data().name as string) ?? null)
-          .filter((n): n is string => Boolean(n))
-          .sort();
-        setTeamNames(names);
-      },
-      (err) => console.warn("Team names fetch failed:", err.code)
     );
     return () => unsubscribe();
   }, []);
@@ -407,7 +394,7 @@ export default function OperationScheduler() {
         ...data,
         title:
           data.title.trim() ||
-          `${data.complaintType} — ${data.location || data.team}`,
+          `${data.complaintType} — ${data.location}`,
         updatedAt: serverTimestamp(),
         updatedBy: currentUser.name,
       };
@@ -415,9 +402,11 @@ export default function OperationScheduler() {
       if (modalMode === "add") {
         await addDoc(collection(db, "operationSchedules"), {
           ...batch,
+          sector: SECTOR,
+          sectorId: SECTOR_ID,
           status: "Scheduled",
           vehiclesClamped: null,
-          remarks: "",
+          resultRemarks: "",
           cancelReason: "",
           createdAt: serverTimestamp(),
           createdBy: currentUser.name,
@@ -427,7 +416,7 @@ export default function OperationScheduler() {
           userName: currentUser.name,
           action: `scheduled operation "${batch.title}" (${data.source}${
             data.referenceNo ? ` #${data.referenceNo}` : ""
-          }) for ${data.team} on ${data.date}`,
+          }) at ${data.location}, ${SECTOR} on ${data.date}`,
           record: batch.title,
           type: "operation-scheduler",
           metadata: { ...data },
@@ -499,7 +488,7 @@ export default function OperationScheduler() {
       "Completed",
       {
         vehiclesClamped,
-        remarks,
+        resultRemarks: remarks,
         completedAt: serverTimestamp(),
         completedBy: currentUser.name,
       },
@@ -510,7 +499,7 @@ export default function OperationScheduler() {
 
   const handleCancel = (s: Schedule) => {
     const reason = window.prompt(
-      `Cancel "${s.title}" (${formatDate(s.date)}, ${s.team})?\n\nReason (kept in the operations log):`
+      `Cancel "${s.title}" (${formatDate(s.date)}, ${s.location})?\n\nReason (kept in the operations log):`
     );
     if (reason === null) return;
     if (!reason.trim()) {
@@ -714,15 +703,15 @@ export default function OperationScheduler() {
                           <span className="op-complaint">{s.complaintType}</span>
                         </div>
                         <div className="scheduler-detail">
-                          {formatTime(s.timeStart)}–{formatTime(s.timeEnd)} · {s.team}
+                          {formatTime(s.timeStart)}–{formatTime(s.timeEnd)} · {s.sector}
                           {s.location ? ` · ${s.location}` : ""}
-                          {s.focus ? ` · ${s.focus}` : ""}
+                          {s.remarks ? ` · Remarks: ${s.remarks}` : ""}
                         </div>
                         {s.status === "Completed" && (
                           <div className="op-result">
                             Result: {s.vehiclesClamped ?? 0} vehicle
                             {s.vehiclesClamped === 1 ? "" : "s"} clamped
-                            {s.remarks ? ` · ${s.remarks}` : ""}
+                            {s.resultRemarks ? ` · ${s.resultRemarks}` : ""}
                           </div>
                         )}
                         {s.status === "Cancelled" && s.cancelReason && (
@@ -782,7 +771,6 @@ export default function OperationScheduler() {
       {modalMode && (
         <ScheduleModal
           schedule={modalMode === "edit" ? editingSchedule : null}
-          teamNames={teamNames}
           onClose={() => {
             setModalMode(null);
             setEditingSchedule(null);
@@ -866,7 +854,7 @@ function CompleteModal({
               />
             </div>
             <div>
-              <label className="form-label">Remarks</label>
+              <label className="form-label">Result remarks</label>
               <textarea
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
@@ -897,14 +885,12 @@ function CompleteModal({
 ------------------------------------------------------------------ */
 type ScheduleModalProps = {
   schedule: Schedule | null;
-  teamNames: string[];
   onClose: () => void;
   onSave: (data: ScheduleFormData) => void;
 };
 
 function ScheduleModal({
   schedule,
-  teamNames,
   onClose,
   onSave,
 }: ScheduleModalProps) {
@@ -912,10 +898,9 @@ function ScheduleModal({
   const [form, setForm] = useState<ScheduleFormData>({
     title: schedule?.title ?? "",
     date: schedule?.date ?? "",
-    team: schedule?.team ?? teamNames[0] ?? "",
     timeStart: schedule?.timeStart ?? "",
     timeEnd: schedule?.timeEnd ?? "",
-    focus: schedule?.focus ?? "",
+    remarks: schedule?.remarks ?? "",
     source: schedule?.source ?? "Hotline 8888",
     referenceNo: schedule?.referenceNo ?? "",
     complaintType: schedule?.complaintType ?? "Illegal Parking",
@@ -942,7 +927,6 @@ function ScheduleModal({
           : "Enter the MTPB order no."
       );
     if (!form.date) return setError("Select a date.");
-    if (!form.team.trim()) return setError("Enter the team or officers assigned.");
     if (!form.timeStart || !form.timeEnd)
       return setError("Enter both a start and end time.");
 
@@ -1062,21 +1046,8 @@ function ScheduleModal({
               </div>
 
               <div>
-                <label className="form-label">Team / Officers</label>
-                <input
-                  type="text"
-                  list="op-team-options"
-                  value={form.team}
-                  onChange={(e) => set("team", e.target.value)}
-                  placeholder="e.g. Team Reyes"
-                  className="form-input"
-                  disabled={isSaving}
-                />
-                <datalist id="op-team-options">
-                  {teamNames.map((team) => (
-                    <option key={team} value={team} />
-                  ))}
-                </datalist>
+                <label className="form-label">Sector</label>
+                <div className="form-input form-input-readonly">{SECTOR}</div>
               </div>
             </div>
 
@@ -1104,11 +1075,11 @@ function ScheduleModal({
             </div>
 
             <div>
-              <label className="form-label">Focus / notes</label>
+              <label className="form-label">Remarks</label>
               <textarea
-                value={form.focus}
-                onChange={(e) => set("focus", e.target.value)}
-                placeholder="Focus or notes"
+                value={form.remarks}
+                onChange={(e) => set("remarks", e.target.value)}
+                placeholder="e.g. No parking along the loading zone; coordinate with barangay"
                 rows={3}
                 className="form-textarea"
                 disabled={isSaving}

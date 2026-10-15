@@ -833,3 +833,12 @@
 .scheduler-page .op-result-cancelled {
   color: #6B7280;
 }
+
+.scheduler-page .form-input-readonly {
+  display: flex;
+  align-items: center;
+  background: #F9FAFB;
+  color: #374151;
+  font-weight: 600;
+  cursor: default;
+}
