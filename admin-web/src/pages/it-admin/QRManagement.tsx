@@ -46,6 +46,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./QRManagement.css";
+import { impoundFeeDue } from "../../lib/impoundFlag";
 
 // Asset imports
 import logo from "../../assets/mtpb-logo.png";
@@ -137,6 +138,9 @@ type ViolationDetails = {
   color: string | null;
   violationType: string;
   fineAmount: number;
+  /** ₱2,000 once impounded — replaces the clamp fine */
+  impoundFee: number;
+  impoundStatus: string | null;
   convenienceFee: number | null;
   totalPaid: number | null;
   referenceNumber: string | null;
@@ -978,6 +982,9 @@ export default function QRManagement() {
         color: data.color ?? null,
         violationType: data.violationType ?? "—",
         fineAmount: Number(data.fineAmount ?? 0),
+        impoundFee: impoundFeeDue(data.impoundStatus, data.impoundFee),
+        impoundStatus:
+          data.impoundStatus && data.impoundStatus !== "None" ? String(data.impoundStatus) : null,
         convenienceFee: data.convenienceFee != null ? Number(data.convenienceFee) : null,
         totalPaid: data.totalPaid != null ? Number(data.totalPaid) : null,
         referenceNumber: data.referenceNumber ?? null,
@@ -1611,10 +1618,20 @@ export default function QRManagement() {
                   <label>Location</label>
                   <p>{viewingViolation.location}</p>
                 </div>
+                {viewingViolation.impoundStatus && (
+                  <div className="violation-item">
+                    <label>Impound Status</label>
+                    <p>{viewingViolation.impoundStatus}</p>
+                  </div>
+                )}
                 <div className="violation-item">
-                  <label>Fine Amount</label>
+                  <label>{viewingViolation.impoundFee > 0 ? "Impound Fee" : "Fine Amount"}</label>
                   <p className="violation-amount">
-                    {formatCurrency(viewingViolation.fineAmount)}
+                    {formatCurrency(
+                      viewingViolation.impoundFee > 0
+                        ? viewingViolation.impoundFee
+                        : viewingViolation.fineAmount
+                    )}
                   </p>
                 </div>
                 {viewingViolation.convenienceFee !== null && (
