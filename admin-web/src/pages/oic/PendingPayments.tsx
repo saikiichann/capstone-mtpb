@@ -330,6 +330,10 @@ export default function PendingPaymentsOIC() {
   const [showPrintSlip, setShowPrintSlip] = useState(false);
   const [payMethod, setPayMethod] = useState<OnsiteMethod>("Cash");
   const [gcashRef, setGcashRef] = useState("");
+  /** Cash handed over by the payer (blank = exact amount) */
+  const [cashGiven, setCashGiven] = useState("");
+  /** Cash received as saved, for the printed slip */
+  const [savedCashReceived, setSavedCashReceived] = useState<number | null>(null);
 
   /* Subject-to-Impound modal state */
   const [impoundRow, setImpoundRow] = useState<PendingRow | null>(null);
@@ -583,6 +587,8 @@ export default function PendingPaymentsOIC() {
     setCashError("");
     setPayMethod("Cash");
     setGcashRef("");
+    setCashGiven("");
+    setSavedCashReceived(null);
     setPaymentLocation("Central");
     setSavedReference(null);
     setSavedOrNumber(null);
@@ -603,6 +609,11 @@ export default function PendingPaymentsOIC() {
     if (!cashRow) return;
     setCashError("");
 
+    const cashReceivedValue = cashGiven.trim() === "" ? cashRow.amount : Number(cashGiven);
+    if (payMethod === "Cash" && (!Number.isFinite(cashReceivedValue) || cashReceivedValue < cashRow.amount)) {
+      setCashError(`Cash received must be at least ${formatCurrency(cashRow.amount)}.`);
+      return;
+    }
     if (payMethod === "GCash" && !isValidGcashReference(gcashRef)) {
       setCashError("Enter the 13-digit reference no. from the payer's GCash receipt.");
       return;
@@ -624,6 +635,7 @@ export default function PendingPaymentsOIC() {
         amountInWords: numberToWords(cashRow.amount),
         method: payMethod,
         gcashReference: gcashRef,
+        cashReceived: payMethod === "Cash" ? cashReceivedValue : undefined,
         counterLocation: paymentLocation,
         recordedByRole: "oic",
         officerName: currentUser.name,
@@ -632,6 +644,7 @@ export default function PendingPaymentsOIC() {
         violatorName: cashRow.violatorName || null,
       });
 
+      setSavedCashReceived(payMethod === "Cash" ? cashReceivedValue : null);
       setSavedReference(result.referenceNumber);
       setSavedOrNumber(result.orNumber);
       setSavedPaymentId(result.paymentId);
@@ -1151,9 +1164,15 @@ export default function PendingPaymentsOIC() {
                     </div>
                     {payMethod === "Cash" && (
                       <div className="cash-summary-row">
-                        <span>Cash Received</span>
+                        <span>Change</span>
                         <strong className="cash-summary-amount">
-                          {formatCurrency(cashRow.amount)}
+                          {formatCurrency(
+                            Math.max(
+                              0,
+                              (cashGiven.trim() === "" ? cashRow.amount : Number(cashGiven) || 0) -
+                                cashRow.amount
+                            )
+                          )}
                         </strong>
                       </div>
                     )}
@@ -1181,6 +1200,27 @@ export default function PendingPaymentsOIC() {
                       ))}
                     </div>
                   </div>
+
+                  {payMethod === "Cash" && (
+                    <div className="form-group">
+                      <label htmlFor="cashGiven">Cash Received</label>
+                      <input
+                        id="cashGiven"
+                        className="form-input"
+                        type="number"
+                        inputMode="decimal"
+                        min={cashRow.amount}
+                        step="0.01"
+                        placeholder={cashRow.amount.toFixed(2)}
+                        value={cashGiven}
+                        onChange={(e) => setCashGiven(e.target.value)}
+                        disabled={saving}
+                      />
+                      <small className="form-hint">
+                        Amount handed over by the payer. Leave blank if exact.
+                      </small>
+                    </div>
+                  )}
 
                   {payMethod === "GCash" && (
                     <div className="form-group">
@@ -1381,6 +1421,7 @@ export default function PendingPaymentsOIC() {
           impoundFee={cashRow.impoundFee}
           totalAmount={cashRow.amount}
           method={payMethod}
+          cashReceived={savedCashReceived ?? undefined}
           orNumber={savedOrNumber || ""}
           recordedBy={currentUser.name}
           createdAt={new Date()}

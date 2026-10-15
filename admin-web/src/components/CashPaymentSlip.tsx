@@ -60,27 +60,37 @@ const COPY_LABEL: Record<SlipCopy, string> = {
 
 function Slip(props: CashPaymentSlipProps & { copy: SlipCopy }) {
   const { copy, paymentId, referenceNumber, cin, plateNo, amount, totalAmount, orNumber, recordedBy, createdAt, cashReceived, impoundFee, method } = props;
-  const showChange = typeof cashReceived === "number" && cashReceived !== totalAmount;
+  // Cash: always show Cash Received and Change (₱0.00 when exact).
+  const showCash = typeof cashReceived === "number";
+  const violation = `${cin}${plateNo ? ` · ${plateNo}` : ""}`;
 
   return (
-    <article className="cash-slip" aria-label="Cash payment slip">
+    <article className={`cash-slip cash-slip--${copy}`} aria-label={`Payment slip, ${COPY_LABEL[copy].toLowerCase()}`}>
+      <p className="cash-slip__banner">{COPY_LABEL[copy]}</p>
+
       <header className="cash-slip__head">
         <img className="cash-slip__seal" src={mtpbLogo} alt="MTPB seal" />
         <p className="cash-slip__org">MTPB</p>
         <p className="cash-slip__org-full">MANILA TRAFFIC AND PARKING BUREAU</p>
         <p className="cash-slip__title">PAYMENT ACKNOWLEDGMENT</p>
-        <p className="cash-slip__copy">{COPY_LABEL[copy]}</p>
       </header>
 
-      <div className="cash-slip__qr">
-        <QRCodeSVG value={`${PAYMENT_CHECK_URL}${encodeURIComponent(paymentId)}`} size={136} level="M" />
-      </div>
-      <p className="cash-slip__qr-caption">Scan to verify this payment</p>
-      <p className="cash-slip__ref">{referenceNumber}</p>
-      <p className="cash-slip__violation">
-        {cin}
-        {plateNo ? ` · ${plateNo}` : ""}
-      </p>
+      {copy === "violator" ? (
+        <>
+          <div className="cash-slip__qr">
+            <QRCodeSVG value={`${PAYMENT_CHECK_URL}${encodeURIComponent(paymentId)}`} size={136} level="M" />
+          </div>
+          <p className="cash-slip__qr-caption">Scan to verify this payment or add it to your account</p>
+          <p className="cash-slip__ref">{referenceNumber}</p>
+          <p className="cash-slip__violation">{violation}</p>
+        </>
+      ) : (
+        <>
+          <p className="cash-slip__ref-label">REFERENCE NUMBER</p>
+          <p className="cash-slip__ref-big">{referenceNumber}</p>
+          <p className="cash-slip__violation">{violation}</p>
+        </>
+      )}
 
       <hr className="cash-slip__rule" />
 
@@ -97,10 +107,10 @@ function Slip(props: CashPaymentSlipProps & { copy: SlipCopy }) {
             </tr>
           )}
           <tr className="cash-slip__total">
-            <td>TOTAL PAID</td>
+            <td>TOTAL DUE</td>
             <td>{peso(totalAmount)}</td>
           </tr>
-          {showChange && (
+          {showCash && (
             <>
               <tr>
                 <td>Cash Received</td>
@@ -108,7 +118,7 @@ function Slip(props: CashPaymentSlipProps & { copy: SlipCopy }) {
               </tr>
               <tr>
                 <td>Change</td>
-                <td>{peso((cashReceived as number) - totalAmount)}</td>
+                <td>{peso(Math.max(0, (cashReceived as number) - totalAmount))}</td>
               </tr>
             </>
           )}
@@ -123,9 +133,9 @@ function Slip(props: CashPaymentSlipProps & { copy: SlipCopy }) {
             <td>{slipDate(createdAt)}</td>
             <td>{orNumber ? `OR No. ${orNumber}` : ""}</td>
           </tr>
-          {method && (
+          {method && method !== "Cash" && (
             <tr>
-              <td>Payment Method</td>
+              <td>Paid via</td>
               <td>{method}</td>
             </tr>
           )}
@@ -143,20 +153,34 @@ function Slip(props: CashPaymentSlipProps & { copy: SlipCopy }) {
       <hr className="cash-slip__rule" />
 
       {copy === "violator" ? (
-        <p className="cash-slip__footer">
-          <strong>Keep this slip.</strong> Present it when claiming your vehicle.
-          <br />
-          For concerns: mtpbovrdivision@gmail.com
-        </p>
+        <>
+          <div className="cash-slip__account">
+            <p className="cash-slip__account-title">Add this to your MTPB account.</p>
+            <p>
+              Once MTPB verifies it, scan the QR with your phone camera within 7 days, then
+              sign in or create an account.
+            </p>
+          </div>
+          <p className="cash-slip__footer">
+            <strong>Keep this slip.</strong> Present it when claiming your vehicle.
+            <br />
+            For concerns: mtpbovrdivision@gmail.com
+          </p>
+        </>
       ) : (
         <>
+          <p className="cash-slip__footer">
+            <strong>For MTPB records.</strong> File with the day's cash collections. Not for the
+            violator.
+          </p>
           <div className="cash-slip__sign">
             <div className="cash-slip__sign-line" />
             <p>Payer's signature over printed name</p>
           </div>
-          <p className="cash-slip__footer">
-            <strong>For MTPB records.</strong> File with the day's collections.
-          </p>
+          <div className="cash-slip__sign">
+            <div className="cash-slip__sign-line" />
+            <p>Cashier's signature</p>
+          </div>
         </>
       )}
     </article>

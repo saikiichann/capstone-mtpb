@@ -32,13 +32,46 @@
   font-weight: 700;
   letter-spacing: 0.08em;
 }
-.cash-slip__copy {
-  margin-top: 1.5mm !important;
-  font-size: 8.5pt;
+/* Black bar with the copy name (solid black prints cleanly on thermal) */
+.cash-slip__banner {
+  margin: -5mm -4mm 3mm !important;
+  padding: 1.6mm 0;
+  background: #000;
+  color: #fff;
+  font-size: 9.5pt;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
+  text-align: center;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
-.cash-slip__sign { margin: 6mm 4mm 2.5mm; text-align: center; font-size: 7pt; }
+/* MTPB copy: reference number instead of the QR */
+.cash-slip__ref-label {
+  margin-top: 3mm !important;
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-align: center;
+}
+.cash-slip__ref-big {
+  margin-top: 0.5mm !important;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 15pt;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+/* Violator copy: "Add this to your MTPB account" box */
+.cash-slip__account {
+  margin: 0 0 2.5mm;
+  padding: 2mm 2.5mm;
+  border: 1px dashed #000;
+  font-size: 7.5pt;
+  line-height: 1.35;
+  text-align: center;
+}
+.cash-slip__account-title { font-weight: 700; margin-bottom: 0.5mm !important; }
+.cash-slip__sign { margin: 7mm 4mm 0; text-align: center; font-size: 7pt; }
 .cash-slip__sign-line { border-top: 1px solid #000; margin-bottom: 1mm; }
 .cash-slip__qr { width: 36mm; height: 36mm; margin: 3mm auto 1mm; }
 .cash-slip__qr svg { display: block; width: 100%; height: 100%; }

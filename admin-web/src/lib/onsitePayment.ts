@@ -35,6 +35,8 @@ export type OnsitePaymentParams = {
   method: OnsiteMethod;
   /** Required for GCash: the reference no. on the payer's GCash receipt */
   gcashReference?: string;
+  /** Cash only: amount handed over (≥ total). Change = cashReceived − total. */
+  cashReceived?: number;
   /** Counter where the staff received it (City Hall / Central) */
   counterLocation: "City Hall" | "Central";
   recordedByRole: "finance" | "oic";
@@ -68,7 +70,8 @@ export const recordOnsitePayment = async (
 
   const total = params.fineAmount + params.impoundFee;
   const paymentLocation = isGcash ? "Online" : params.counterLocation;
-  const cashReceived = isGcash ? 0 : total;
+  const cashReceived = isGcash ? 0 : Math.max(total, Number(params.cashReceived ?? total) || total);
+  const cashChange = isGcash ? 0 : cashReceived - total;
 
   const year = new Date().getFullYear();
   const counterRef = doc(db, "counters", "paymentReference");
@@ -107,7 +110,7 @@ export const recordOnsitePayment = async (
       impoundFeePaid: params.impoundFee,
       totalPaid: total,
       cashReceived,
-      cashChange: 0,
+      cashChange,
       amountInWords: params.amountInWords,
       paymentLocation,
       paidAt: serverTimestamp(),
@@ -134,6 +137,7 @@ export const recordOnsitePayment = async (
       convenienceFee: 0,
       totalAmount: total,
       cashReceived,
+      cashChange,
       amountInWords: params.amountInWords,
       referenceNumber,
       orNumber,
