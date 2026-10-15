@@ -28,7 +28,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./ImpoundingLog.css";
-import AddImpoundModal from "./AddImpoundModal";
+import AddImpoundModal, { type PrefillData } from "./AddImpoundModal";
 
 // Assets
 import mtpbLogo from "../../assets/mtpb-logo.png";
@@ -69,6 +69,16 @@ type ImpoundLogRow = {
   officer: string;
   recordedAt: Timestamp | null;
   status: LogStatus;
+  /** impoundRecords doc id, kung galing sa record */
+  recordId: string | null;
+  /** violations doc id ng clamp, kung mayroon */
+  violationId: string | null;
+};
+
+/** Ang bubuksang "Record Impound" form */
+type ImpoundTarget = {
+  prefill: PrefillData;
+  recordId: string | null;
 };
 
 type NavItem = {
@@ -192,6 +202,8 @@ const getStatusClass = (status: LogStatus): string => {
 export default function ImpoundingLog() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [impoundTarget, setImpoundTarget] = useState<ImpoundTarget | null>(null);
+  const [preparingRowId, setPreparingRowId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -276,6 +288,8 @@ export default function ImpoundingLog() {
           const data = d.data();
           return {
             id: `ir_${d.id}`,
+            recordId: d.id,
+            violationId: (data.sourceViolationId as string) || null,
             reference:
               (data.referenceNumber as string) ??
               (data.paymentReference as string) ??
@@ -328,6 +342,8 @@ export default function ImpoundingLog() {
 
             return {
               id: `v_${d.id}`,
+              recordId: null,
+              violationId: d.id,
               reference:
                 (data.referenceNumber as string) ??
                 (data.paymentReference as string) ??
@@ -379,6 +395,69 @@ export default function ImpoundingLog() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  /**
+   * "Record Impound" sa isang Subject to Impound na row: binubuksan ang
+   * form na may laman na mula sa clamp record (violations doc na sinave ng
+   * enforcer app) at sa impound record, para ang kulang lang ang ilalagay
+   * ng staff mula sa paper ticket.
+   */
+  const openRecordImpound = async (row: ImpoundLogRow) => {
+    setPreparingRowId(row.id);
+    try {
+      const recordData = row.recordId
+        ? (await getDoc(doc(db, "impoundRecords", row.recordId))).data() ?? {}
+        : {};
+
+      // Mga lumang record (bago ang sourceViolationId) ay may doc id na
+      // kapareho ng violation id.
+      let violationId = row.violationId;
+      let violationData: Record<string, unknown> = {};
+      const candidateId = violationId ?? row.recordId;
+      if (candidateId) {
+        const snap = await getDoc(doc(db, "violations", candidateId));
+        if (snap.exists()) {
+          violationId = snap.id;
+          violationData = snap.data();
+        }
+      }
+
+      const pick = (...values: unknown[]): string | undefined => {
+        for (const v of values) {
+          if (typeof v === "string" && v.trim() && v.trim() !== "—") return v.trim();
+        }
+        return undefined;
+      };
+
+      const prefill: PrefillData = {
+        sourceViolationId: violationId ?? undefined,
+        cin: pick(recordData.cin, violationData.cin, row.cin),
+        plateNo: pick(recordData.plateNo, violationData.plateNo, row.plateNo),
+        color: pick(recordData.color, violationData.vehicleColor),
+        vehicleType: pick(recordData.vehicleType, violationData.vehicleType),
+        location: pick(recordData.location, violationData.location, row.location),
+        violatorName: pick(recordData.violatorName, violationData.violatorName),
+        contactNo: pick(recordData.contactNo, violationData.contactNo),
+        initialViolation: pick(
+          recordData.initialViolation,
+          violationData.violationType,
+          row.violation
+        ),
+        clampedAt:
+          (recordData.clampedAt as Timestamp | undefined) ??
+          (violationData.recordedAt as Timestamp | undefined) ??
+          row.recordedAt,
+        clampedBy: pick(recordData.clampedBy, violationData.officer),
+      };
+
+      setImpoundTarget({ prefill, recordId: row.recordId });
+    } catch (err) {
+      console.error("Failed to load clamp details:", err);
+      alert("Hindi ma-load ang clamp details. Subukan ulit.");
+    } finally {
+      setPreparingRowId(null);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -624,6 +703,7 @@ export default function ImpoundingLog() {
                           <th>Impounded by</th>
                           <th>Time</th>
                           <th>Status</th>
+                          <th>Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -650,6 +730,22 @@ export default function ImpoundingLog() {
                               >
                                 {row.status}
                               </span>
+                            </td>
+                            <td>
+                              {row.status === "Subject to Impound" ? (
+                                <button
+                                  type="button"
+                                  className="btn-record-impound"
+                                  onClick={() => openRecordImpound(row)}
+                                  disabled={preparingRowId !== null}
+                                >
+                                  {preparingRowId === row.id
+                                    ? "Loading..."
+                                    : "Record Impound"}
+                                </button>
+                              ) : (
+                                <span className="cell-muted">—</span>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -703,6 +799,20 @@ export default function ImpoundingLog() {
             // onSnapshot handles the refresh automatically
           }}
           currentUserName={currentUser.name}
+        />
+      )}
+
+      {/* RECORD IMPOUND — prefilled from the clamp details */}
+      {impoundTarget && (
+        <AddImpoundModal
+          key={impoundTarget.recordId ?? impoundTarget.prefill.sourceViolationId}
+          onClose={() => setImpoundTarget(null)}
+          onSaved={() => {
+            // onSnapshot handles the refresh automatically
+          }}
+          currentUserName={currentUser.name}
+          prefill={impoundTarget.prefill}
+          existingRecordId={impoundTarget.recordId}
         />
       )}
     </div>

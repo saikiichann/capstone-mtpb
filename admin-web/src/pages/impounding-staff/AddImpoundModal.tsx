@@ -3,7 +3,10 @@ import { X, AlertCircle } from "lucide-react";
 import {
   addDoc,
   collection,
+  doc,
   serverTimestamp,
+  setDoc,
+  updateDoc,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "../../firebase";
@@ -27,6 +30,12 @@ type AddImpoundModalProps = {
   onSaved: () => void;
   currentUserName: string;
   prefill?: PrefillData;
+  /**
+   * impoundRecords doc na ia-update. Kapag galing sa "Subject to Impound"
+   * na row, may record na iyon (ginawa noong na-flag) — ina-update iyon
+   * para hindi magdoble ang sasakyan sa log.
+   */
+  existingRecordId?: string | null;
 };
 
 type FormState = {
@@ -112,12 +121,23 @@ function timestampToLocalInput(ts: Timestamp | null | undefined): string {
   }
 }
 
+/** Options list plus the prefilled value when the enforcer app used one
+ *  that isn't in the list (e.g. "AUV", "MPV"), so it still shows. */
+function withPrefillOption(options: string[], value: string | undefined): string[] {
+  return value && !options.includes(value) ? [value, ...options] : options;
+}
+
 export default function AddImpoundModal({
   onClose,
   onSaved,
   currentUserName,
   prefill,
+  existingRecordId,
 }: AddImpoundModalProps) {
+  const fromClamp = Boolean(prefill?.sourceViolationId || existingRecordId);
+  const colorOptions = withPrefillOption(COLOR_OPTIONS, prefill?.color);
+  const vehicleTypeOptions = withPrefillOption(VEHICLE_TYPE_OPTIONS, prefill?.vehicleType);
+
   const [form, setForm] = useState<FormState>({
     violatorName: prefill?.violatorName ?? "",
     contactNo: prefill?.contactNo ?? "",
@@ -181,10 +201,9 @@ export default function AddImpoundModal({
         throw new Error("Invalid date format.");
       }
 
-      await addDoc(collection(db, "impoundRecords"), {
+      const details = {
         sourceViolationId: prefill?.sourceViolationId ?? null,
         cin: form.cin.trim(),
-        referenceNumber: null,
         violatorName: form.violatorName.trim() || "—",
         contactNo: form.contactNo.trim() || "—",
         initialViolation: form.initialViolation.trim() || "—",
@@ -198,11 +217,66 @@ export default function AddImpoundModal({
         receivedBy: form.receivedBy.trim() || currentUserName,
         orNumber: form.orNumber.trim() || "—",
         status: form.status,
-        createdBy: currentUserName,
-        createdAt: serverTimestamp(),
+        ...(form.status === "Impounded" ? { impoundedAt: serverTimestamp() } : {}),
         updatedBy: currentUserName,
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      if (existingRecordId) {
+        // Record na ginawa noong na-flag — kumpletuhin at i-update.
+        await updateDoc(doc(db, "impoundRecords", existingRecordId), details);
+      } else if (prefill?.sourceViolationId) {
+        // Galing sa clamp pero wala pang record: doc id = violation id,
+        // pareho ng ginagawa ng Clamping Log, para iisa lang ang record.
+        await setDoc(doc(db, "impoundRecords", prefill.sourceViolationId), {
+          ...details,
+          referenceNumber: null,
+          createdBy: currentUserName,
+          createdAt: serverTimestamp(),
+        });
+      } else {
+        // Paper ticket na walang clamp record sa system.
+        await addDoc(collection(db, "impoundRecords"), {
+          ...details,
+          referenceNumber: null,
+          createdBy: currentUserName,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      // Sabayan ang status sa violation para tama rin ang Clamping Log at
+      // Pending Payments. Best effort: kapag hindi pa naka-publish ang
+      // bagong Firestore rules, naka-save pa rin ang record.
+      if (prefill?.sourceViolationId) {
+        try {
+          await updateDoc(doc(db, "violations", prefill.sourceViolationId), {
+            impoundStatus: form.status,
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUserName,
+          });
+        } catch (syncErr) {
+          console.warn("Impound status not synced to the violation:", syncErr);
+        }
+      }
+
+      try {
+        await addDoc(collection(db, "auditLogs"), {
+          userName: currentUserName,
+          userRole: "impounding-staff",
+          action: `recorded impound ${form.cin.trim()} (${form.status})`,
+          record: form.cin.trim(),
+          type: "impound-record",
+          metadata: {
+            cin: form.cin.trim(),
+            plateNo: form.plateNo.trim().toUpperCase(),
+            status: form.status,
+            sourceViolationId: prefill?.sourceViolationId ?? null,
+          },
+          timestamp: serverTimestamp(),
+        });
+      } catch (auditErr) {
+        console.warn("Audit log not written:", auditErr);
+      }
 
       onSaved();
       onClose();
@@ -225,7 +299,9 @@ export default function AddImpoundModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
-          <h3 className="modal-title">Add Impound Record</h3>
+          <h3 className="modal-title">
+            {fromClamp ? "Record Impound" : "Add Impound Record"}
+          </h3>
           <button
             type="button"
             className="modal-close-btn"
@@ -238,7 +314,9 @@ export default function AddImpoundModal({
         </div>
 
         <p className="modal-subtitle">
-          Copy the details from the MTPB paper ticket issued on-site.
+          {fromClamp
+            ? "Details from the clamp record are already filled in. Check them and complete the rest from the paper ticket."
+            : "Copy the details from the MTPB paper ticket issued on-site."}
         </p>
 
         <h4 className="form-section-title">Driver Information</h4>
@@ -334,7 +412,7 @@ export default function AddImpoundModal({
               disabled={saving}
             >
               <option value="">Select color...</option>
-              {COLOR_OPTIONS.map((c) => (
+              {colorOptions.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
@@ -352,7 +430,7 @@ export default function AddImpoundModal({
               disabled={saving}
             >
               <option value="">Select type...</option>
-              {VEHICLE_TYPE_OPTIONS.map((t) => (
+              {vehicleTypeOptions.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>

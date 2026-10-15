@@ -58,6 +58,8 @@ type ImpoundRow = {
   clampedAt: Timestamp | null;
   hoursOverdue: number;
   status: ImpoundStatus;
+  /** violations doc id ng clamp (para i-sync ang impoundStatus) */
+  violationId: string;
 };
 
 type Metrics = {
@@ -370,6 +372,8 @@ export default function ActiveImpounding() {
               clampedAt,
               hoursOverdue,
               status: (data.status ?? "Subject to Impound") as ImpoundStatus,
+              // Mga lumang record: doc id = violation id
+              violationId: (data.sourceViolationId as string) || d.id,
             };
           })
           .filter((r) => r.status !== "Released")
@@ -471,6 +475,24 @@ export default function ActiveImpounding() {
       updatedAt: serverTimestamp(),
       updatedBy: currentUser.name,
     });
+
+    // Sabayan sa violation para tama ang Clamping Log at Pending Payments.
+    // Best effort — paper tickets na walang violation ay lalaktawan lang.
+    if (
+      newStatus === "Scheduled for Impounding" ||
+      newStatus === "Impounded" ||
+      newStatus === "Released"
+    ) {
+      try {
+        await updateDoc(doc(db, "violations", selectedRow.violationId), {
+          impoundStatus: newStatus,
+          updatedAt: serverTimestamp(),
+          updatedBy: currentUser.name,
+        });
+      } catch (syncErr) {
+        console.warn("Impound status not synced to the violation:", syncErr);
+      }
+    }
 
     await addDoc(collection(db, "auditLogs"), {
       userName: currentUser.name,
