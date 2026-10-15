@@ -323,8 +323,15 @@ export const decideReleaseRequest = async (params: {
   approve: boolean;
   reason?: string;
   officerName: string;
+  /** "oic" o "supervisor" — kung sino talaga ang nagdesisyon */
+  officerRole?: string;
 }): Promise<void> => {
   const batch = writeBatch(db);
+  // releaseStatus stays "Approved by OIC" / "Rejected by OIC": Release Queue
+  // and the violator app look for those exact words. Who decided (OIC or
+  // Supervisor) is kept in the *ByRole fields and the audit log.
+  const role = params.officerRole === "supervisor" ? "supervisor" : "oic";
+  const roleLabel = role === "supervisor" ? "Supervisor" : "OIC";
   const violationRef = doc(db, "violations", params.violationId);
 
   if (params.approve) {
@@ -332,6 +339,7 @@ export const decideReleaseRequest = async (params: {
       releaseStatus: RELEASE_QUEUE_STATUS,
       oicApprovedAt: serverTimestamp(),
       oicApprovedBy: params.officerName,
+      oicApprovedByRole: role,
       updatedAt: serverTimestamp(),
       updatedBy: params.officerName,
     });
@@ -361,6 +369,7 @@ export const decideReleaseRequest = async (params: {
       releaseStatus: "Rejected by OIC",
       oicRejectedAt: serverTimestamp(),
       oicRejectedBy: params.officerName,
+      oicRejectedByRole: role,
       oicRejectionReason: params.reason ?? null,
       updatedAt: serverTimestamp(),
       updatedBy: params.officerName,
@@ -369,6 +378,7 @@ export const decideReleaseRequest = async (params: {
 
   batch.set(doc(collection(db, "auditLogs")), {
     userName: params.officerName,
+    userRole: role,
     action: `${params.approve ? "approved" : "rejected"} release for ${
       params.cin
     }`,
@@ -377,7 +387,7 @@ export const decideReleaseRequest = async (params: {
     metadata: {
       cin: params.cin,
       plateNo: params.plateNo,
-      decision: params.approve ? "Approved by OIC" : "Rejected by OIC",
+      decision: `${params.approve ? "Approved" : "Rejected"} by ${roleLabel}`,
       ...(params.reason ? { reason: params.reason } : {}),
     },
     timestamp: serverTimestamp(),

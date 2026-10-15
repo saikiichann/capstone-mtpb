@@ -415,6 +415,7 @@ export default function ReleaseRequests() {
         clampId: row.clampId,
         approve: true,
         officerName: currentUser.name,
+        officerRole: currentUser.role,
       });
     } catch (err: any) {
       console.error("Approve failed:", err);
@@ -455,6 +456,7 @@ export default function ReleaseRequests() {
         approve: false,
         reason: reason.trim(),
         officerName: currentUser.name,
+        officerRole: currentUser.role,
       });
     } catch (err: any) {
       console.error("Reject failed:", err);
