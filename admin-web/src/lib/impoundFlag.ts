@@ -28,9 +28,13 @@ import { db } from "../firebase";
 export const IMPOUND_FEE = 2000;
 
 /**
- * Impound fee na sisingilin: ₱2,000 kapag NA-IMPOUND na ang sasakyan
- * (impoundStatus "Impounded", o "Released" kung na-release na bago
- * mabayaran). Wala pa kapag "Subject to Impound" o "Scheduled" lang.
+ * Impound fee: ₱2,000 kapag NA-IMPOUND na ang sasakyan (impoundStatus
+ * "Impounded", o "Released" kung na-release na bago mabayaran). Wala pa
+ * kapag "Subject to Impound" o "Scheduled" lang.
+ *
+ * PINAPALITAN nito ang clamp fine — hindi dinadagdag. Kapag impounded,
+ * ₱2,000 ang buong babayaran (hindi ₱900 + ₱2,000). Tingnan ang
+ * amountDue() sa ibaba.
  */
 export const impoundFeeDue = (impoundStatus: unknown, storedFee?: unknown): number => {
   const status = String(impoundStatus ?? "").toLowerCase().trim();
@@ -38,6 +42,10 @@ export const impoundFeeDue = (impoundStatus: unknown, storedFee?: unknown): numb
   const fee = Number(storedFee);
   return Number.isFinite(fee) && fee > 0 ? fee : IMPOUND_FEE;
 };
+
+/** Babayaran: ang impound fee kapag impounded na, kung hindi ang clamp fine. */
+export const amountDue = (fineAmount: number, impoundFee: number): number =>
+  impoundFee > 0 ? impoundFee : fineAmount;
 
 /** Ang kailangang detalye ng violation para gumawa ng impound record. */
 export type ImpoundRecordSource = {

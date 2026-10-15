@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import { useStaffProfile } from "../../lib/useStaffProfile";
-import { impoundFeeDue } from "../../lib/impoundFlag";
+import { amountDue, impoundFeeDue } from "../../lib/impoundFlag";
 import "./PendingPayments.css";
 import CashPaymentSlip from "../../components/CashPaymentSlip";
 import {
@@ -57,7 +57,7 @@ type PendingRow = {
   violationNo: string;
   cin: string;
   plateNo: string;
-  /** fine + impound fee (kapag Impounded na) */
+  /** babayaran: clamp fine, o ₱2,000 impound fee kapag Impounded na */
   amount: number;
   fineAmount: number;
   impoundFee: number;
@@ -354,9 +354,10 @@ export default function PendingPaymentsFinance() {
               plateNo: data.plateNo ?? "—",
               fineAmount: Number(data.fineAmount ?? 0),
               impoundFee: impoundFeeDue(data.impoundStatus, data.impoundFee),
-              amount:
-                Number(data.fineAmount ?? 0) +
-                impoundFeeDue(data.impoundStatus, data.impoundFee),
+              amount: amountDue(
+                Number(data.fineAmount ?? 0),
+                impoundFeeDue(data.impoundStatus, data.impoundFee)
+              ),
               recordedAt,
               dueDate,
               daysLeft,
@@ -792,7 +793,7 @@ export default function PendingPaymentsFinance() {
                             <td className="cell-amount">
                               {formatCurrency(row.amount)}
                               {row.impoundFee > 0 && (
-                                <small className="amount-note">incl. impound fee</small>
+                                <small className="amount-note">impound fee</small>
                               )}
                             </td>
                             <td className="cell-due-date">{formatDate(row.dueDate)}</td>
@@ -939,17 +940,21 @@ export default function PendingPaymentsFinance() {
                         <strong>{cashRow.violatorName}</strong>
                       </div>
                     )}
-                    {cashRow.impoundFee > 0 && (
-                      <>
-                        <div className="cash-summary-row">
-                          <span>Fine</span>
-                          <strong>{formatCurrency(cashRow.fineAmount)}</strong>
-                        </div>
-                        <div className="cash-summary-row">
-                          <span>Impound Fee</span>
-                          <strong>{formatCurrency(cashRow.impoundFee)}</strong>
-                        </div>
-                      </>
+                    {cashRow.impoundFee > 0 ? (
+                      <div className="cash-summary-row">
+                        <span>
+                          Impound Fee
+                          <small className="amount-note">
+                            Replaces the {formatCurrency(cashRow.fineAmount)} clamp fine
+                          </small>
+                        </span>
+                        <strong>{formatCurrency(cashRow.impoundFee)}</strong>
+                      </div>
+                    ) : (
+                      <div className="cash-summary-row">
+                        <span>Fine</span>
+                        <strong>{formatCurrency(cashRow.fineAmount)}</strong>
+                      </div>
                     )}
                     <div className="cash-summary-row">
                       <span>Amount Due</span>
@@ -1126,7 +1131,7 @@ export default function PendingPaymentsFinance() {
           referenceNumber={savedReference || ""}
           cin={cashRow.cin}
           plateNo={cashRow.plateNo}
-          amount={cashRow.fineAmount}
+          amount={cashRow.impoundFee > 0 ? 0 : cashRow.fineAmount}
           impoundFee={cashRow.impoundFee}
           totalAmount={cashRow.amount}
           method={payMethod}

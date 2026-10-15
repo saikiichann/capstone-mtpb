@@ -37,7 +37,7 @@ interface CashPaymentSlipProps {
   createdAt: Date;
   /** Optional: when given and different from the total, Cash Received and Change are shown. */
   cashReceived?: number;
-  /** Optional: impound fee included in the total (₱2,000 when impounded). */
+  /** Optional: ₱2,000 when impounded — replaces the clamp fine on the slip. */
   impoundFee?: number;
   /** Optional: "Cash" or "GCash"; shown when given. */
   method?: string;
@@ -96,14 +96,16 @@ function Slip(props: CashPaymentSlipProps & { copy: SlipCopy }) {
 
       <table className="cash-slip__rows">
         <tbody>
-          <tr>
-            <td>Fine Amount</td>
-            <td>{peso(amount)}</td>
-          </tr>
-          {typeof impoundFee === "number" && impoundFee > 0 && (
+          {typeof impoundFee === "number" && impoundFee > 0 ? (
+            // Impounded: the impound fee replaces the clamp fine.
             <tr>
               <td>Impound Fee</td>
               <td>{peso(impoundFee)}</td>
+            </tr>
+          ) : (
+            <tr>
+              <td>Fine Amount</td>
+              <td>{peso(amount)}</td>
             </tr>
           )}
           <tr className="cash-slip__total">

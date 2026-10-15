@@ -18,7 +18,8 @@ import { db } from "../firebase";
 
    - Pareho sa dati: REF + OR number, violation → "Pending Verification",
      payment record, audit log. Iba pang staff ang magve-verify.
-   - Ang babayaran = fine + impound fee (₱2,000 kapag Impounded na).
+   - Ang babayaran = clamp fine, o ₱2,000 impound fee kapag Impounded na
+     (pinapalitan ng impound fee ang clamp fine — hindi dinadagdag).
    - GCash → paymentLocation "Online" (Central Finance + OIC ang sakop,
      ayon sa lib/paymentLocation.ts).
 ------------------------------------------------------------------ */
@@ -68,7 +69,10 @@ export const recordOnsitePayment = async (
   const gcashReference = isGcash ? normalizeGcashReference(params.gcashReference ?? "") : null;
   if (isGcash && !gcashReference) throw new Error("GCash reference no. is required.");
 
-  const total = params.fineAmount + params.impoundFee;
+  const impounded = params.impoundFee > 0;
+  const total = impounded ? params.impoundFee : params.fineAmount;
+  /** Fine actually charged: none once impounded (the impound fee replaces it). */
+  const fineCharged = impounded ? 0 : params.fineAmount;
   const paymentLocation = isGcash ? "Online" : params.counterLocation;
   const cashReceived = isGcash ? 0 : Math.max(total, Number(params.cashReceived ?? total) || total);
   const cashChange = isGcash ? 0 : cashReceived - total;
@@ -131,8 +135,9 @@ export const recordOnsitePayment = async (
       violatorUid: params.violatorUid,
       guestId: params.guestId,
       violatorName: params.violatorName,
-      fineAmount: params.fineAmount,
+      fineAmount: fineCharged,
       impoundFee: params.impoundFee,
+      chargeType: impounded ? "Impound" : "Clamp",
       amount: total,
       convenienceFee: 0,
       totalAmount: total,
@@ -160,13 +165,14 @@ export const recordOnsitePayment = async (
       action:
         `recorded ${params.method} payment for ${params.cin} — OR #${orNumber}, Ref ${referenceNumber}` +
         (isGcash ? `, GCash Ref ${gcashReference}` : `, Location: ${paymentLocation}`) +
-        (params.impoundFee > 0 ? `, incl. impound fee ₱${params.impoundFee.toLocaleString()}` : ""),
+        (impounded ? `, impound fee ₱${params.impoundFee.toLocaleString()}` : ""),
       record: params.cin,
       type: isGcash ? "gcash-onsite-payment" : "cash-payment",
       metadata: {
         cin: params.cin,
         plateNo: params.plateNo,
-        fineAmount: params.fineAmount,
+        fineAmount: fineCharged,
+        clampFine: params.fineAmount,
         impoundFee: params.impoundFee,
         amountDue: total,
         amountInWords: params.amountInWords,
