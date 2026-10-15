@@ -15,11 +15,10 @@ import {
   onSnapshot,
   query,
   where,
-  writeBatch,
-  serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import ChangePasswordModal from "../../components/ChangePasswordModal";
 import "./ClampingLog.css";
 
 // Asset imports
@@ -92,7 +91,6 @@ type NavGroup = {
 const ITEMS_PER_PAGE = 10;
 const ALL_VIOLATIONS = "All Violations";
 const GRACE_PERIOD_HOURS = 24;
-const IMPOUND_FEE = 2000;
 
 const MASTER_VIOLATIONS = [
   "Illegal Parking",
@@ -252,11 +250,56 @@ const deriveStatus = (releaseStatus: unknown): ClampStatus =>
 const getStatusClass = (status: ClampStatus): string =>
   status === "Released" ? "status-released-clamp" : "status-active-clamp";
 
+/** Where the clamp stands in the 24-hour grace → impound flow. */
+function ImpoundCell({ row }: { row: ClampingRow }) {
+  const impound = String(row.impoundStatus ?? "").toLowerCase();
+  if (impound === "impounded") {
+    return <span className="badge-impounded">Impounded</span>;
+  }
+  if (row.status === "Released") {
+    return <span className="action-placeholder">—</span>;
+  }
+  if (impound === "scheduled for impounding") {
+    return <span className="badge-impound">Scheduled for impounding</span>;
+  }
+  if (impound === "subject to impound") {
+    return (
+      <span
+        className={`badge-impound ${row.autoFlagged ? "badge-impound-auto" : ""}`}
+        title={
+          row.autoFlagged
+            ? "Flagged automatically when the 24-hour grace period ended"
+            : "Flagged by the OIC"
+        }
+      >
+        Subject to Impound{row.autoFlagged ? " · auto" : ""}
+      </span>
+    );
+  }
+  if (row.hoursSinceClamp < GRACE_PERIOD_HOURS) {
+    const left = Math.max(1, Math.ceil(GRACE_PERIOD_HOURS - row.hoursSinceClamp));
+    return (
+      <span className="impound-pending" title="Within the 24-hour grace period">
+        Grace · {left}h left
+      </span>
+    );
+  }
+  return (
+    <span
+      className="badge-grace-ended"
+      title="The 24-hour grace period has ended. The OIC flags it as Subject to Impound."
+    >
+      Grace ended
+    </span>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // COMPONENT
 // ---------------------------------------------------------------------------
 export default function ClampingLog() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -353,77 +396,10 @@ export default function ClampingLog() {
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // AUTO-FLAG OVERDUE VIOLATIONS (Client-Side)
-  //
-  // Runs on every page load. Finds clamped violations that have exceeded
-  // the 24-hour grace period and auto-flags them as "Subject to Impound"
-  // with a fixed impound fee of ₱2,000.
-  // -----------------------------------------------------------------------
-  useEffect(() => {
-    if (loading || rows.length === 0) return;
-
-    const autoFlagOverdue = async () => {
-      const overdueRows = rows.filter(
-        (row) =>
-          row.status === "Clamped" &&
-          row.hoursSinceClamp >= GRACE_PERIOD_HOURS &&
-          row.impoundStatus !== "Subject to Impound" &&
-          row.impoundStatus !== "Impounded"
-      );
-
-      if (overdueRows.length === 0) return;
-
-      console.log(
-        `[auto-flag] Found ${overdueRows.length} overdue clamped violation(s) to flag`
-      );
-
-      try {
-        const batch = writeBatch(db);
-
-        overdueRows.forEach((row) => {
-          const violationRef = doc(db, "violations", row.id);
-          const auditRef = doc(collection(db, "auditLogs"));
-
-          batch.update(violationRef, {
-            impoundStatus: "Subject to Impound",
-            impoundFlaggedAt: serverTimestamp(),
-            impoundFlaggedBy: "system",
-            impoundFlaggedByRole: "system",
-            impoundAutoFlagged: true,
-            impoundFee: IMPOUND_FEE,
-            updatedAt: serverTimestamp(),
-            updatedBy: "system",
-          });
-
-          batch.set(auditRef, {
-            userName: "System",
-            userRole: "system",
-            action: `auto-flagged violation ${row.cin} as Subject to Impound (24hr grace period expired)`,
-            record: row.cin,
-            type: "impound-flag-auto",
-            metadata: {
-              cin: row.cin,
-              plateNo: row.plateNo,
-              hoursSinceClamp: Math.round(row.hoursSinceClamp),
-              impoundFee: IMPOUND_FEE,
-              method: "client-side",
-            },
-            timestamp: serverTimestamp(),
-          });
-        });
-
-        await batch.commit();
-        console.log(
-          `[auto-flag] Successfully flagged ${overdueRows.length} violation(s)`
-        );
-      } catch (err) {
-        console.error("[auto-flag] Failed to flag overdue violations:", err);
-      }
-    };
-
-    autoFlagOverdue();
-  }, [loading, rows]);
+  // Flagging overdue clamps as "Subject to Impound" is done by the OIC's
+  // Clamping Log (it also creates the impound record). The Record Officer
+  // only views records — the Firestore rules don't allow this role to
+  // write impoundStatus — so this page just shows where each clamp is.
 
   // -----------------------------------------------------------------------
   // EFFECT: Click-outside for dropdown
@@ -457,8 +433,8 @@ export default function ClampingLog() {
   };
 
   const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
     setIsMenuOpen(false);
+    setShowChangePassword(true);
   };
 
   const violationOptions = useMemo(() => {
@@ -678,40 +654,7 @@ export default function ClampingLog() {
                             </span>
                           </td>
                           <td>
-                            {/* AUTO-FLAG INDICATOR */}
-                            {row.status === "Clamped" &&
-                              row.hoursSinceClamp < GRACE_PERIOD_HOURS &&
-                              row.impoundStatus !== "Subject to Impound" &&
-                              row.impoundStatus !== "Impounded" && (
-                                <span className="impound-pending">
-                                  Within {GRACE_PERIOD_HOURS}hr grace
-                                </span>
-                              )}
-
-                            {row.impoundStatus === "Subject to Impound" && (
-                              <span
-                                className={`badge-impound ${
-                                  row.autoFlagged ? "badge-impound-auto" : ""
-                                }`}
-                                title={
-                                  row.autoFlagged
-                                    ? "Auto-flagged by system (24hr grace period expired)"
-                                    : "Flagged as Subject to Impound"
-                                }
-                              >
-                                {row.autoFlagged
-                                  ? `🤖 Auto-flagged (₱${IMPOUND_FEE.toLocaleString()})`
-                                  : `Subject to Impound (₱${IMPOUND_FEE.toLocaleString()})`}
-                              </span>
-                            )}
-
-                            {row.impoundStatus === "Impounded" && (
-                              <span className="badge-impounded">Impounded</span>
-                            )}
-
-                            {row.status === "Released" && (
-                              <span className="action-placeholder">—</span>
-                            )}
+                            <ImpoundCell row={row} />
                           </td>
                         </tr>
                       ))}
@@ -755,6 +698,10 @@ export default function ClampingLog() {
           </main>
         </div>
       </div>
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </div>
   );
 }

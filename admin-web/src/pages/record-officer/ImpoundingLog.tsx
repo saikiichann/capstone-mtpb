@@ -18,6 +18,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import ChangePasswordModal from "../../components/ChangePasswordModal";
 import "./ImpoundingLog.css";
 
 import logo from "../../assets/mtpb-logo.png";
@@ -47,7 +48,11 @@ type RoleSlug =
 
 type CurrentUser = { name: string; role: RoleSlug };
 
-type LogStatus = "Impounded" | "Released";
+type LogStatus =
+  | "Subject to Impound"
+  | "Scheduled for Impounding"
+  | "Impounded"
+  | "Released";
 
 type ImpoundLogRow = {
   id: string;
@@ -162,8 +167,26 @@ const millis = (ts: Timestamp | null): number => {
 const deriveLogStatus = (releaseStatus: unknown): LogStatus =>
   releaseStatus === "Released" ? "Released" : "Impounded";
 
-const getStatusClass = (status: LogStatus): string =>
-  status === "Released" ? "status-released" : "status-impounded";
+/** Status from impoundRecords.status or violations.impoundStatus. */
+const normalizeImpoundStatus = (value: unknown): LogStatus => {
+  const v = String(value ?? "").toLowerCase().trim();
+  if (v === "released") return "Released";
+  if (v === "impounded") return "Impounded";
+  if (v === "scheduled for impounding") return "Scheduled for Impounding";
+  return "Subject to Impound";
+};
+
+const STATUS_CLASS: Record<LogStatus, string> = {
+  "Subject to Impound": "status-subject-pill",
+  "Scheduled for Impounding": "status-scheduled-pill",
+  Impounded: "status-impounded-pill",
+  Released: "status-released-pill",
+};
+
+const getStatusClass = (status: LogStatus): string => STATUS_CLASS[status];
+
+/** impoundStatus values that put a clamped vehicle on the impound queue. */
+const FLAGGED_STATUSES = ["Subject to Impound", "Scheduled for Impounding"];
 
 /* ------------------------------------------------------------------
    COMPONENT
@@ -177,6 +200,7 @@ export default function RecordOfficerImpoundingLog() {
     role: "record-officer",
   });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   const [rows, setRows] = useState<ImpoundLogRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -209,51 +233,153 @@ export default function RecordOfficerImpoundingLog() {
   }, []);
 
   /**
-   * Impounding actions only (enforcementType == "impounded") — clamping
-   * has its own log page. Reads the SAME `violations` collection as
-   * OIC/ImpoundingLog.tsx so both roles see identical rows. No orderBy()
-   * on purpose: Firestore silently drops documents that lack the ordered
-   * field, so a record without recordedAt would vanish instead of
-   * appearing out of order. Sorting happens client-side.
+   * Three sources, merged into one log:
+   *
+   *   A. violations with enforcementType == "impounded" — vehicles towed
+   *      directly by the enforcer.
+   *   B. impoundRecords — the impounding side's own records: clamped
+   *      vehicles flagged from the Clamping Log (doc id = violation id) and
+   *      paper tickets encoded by Impounding Staff. Its status (Subject to
+   *      Impound → Scheduled → Impounded → Released) is kept up to date by
+   *      Impounding Staff, so it wins over the violation's impoundStatus.
+   *   C. violations flagged "Subject to Impound" / "Scheduled for
+   *      Impounding" that have no impoundRecords entry yet, so a flagged
+   *      vehicle shows here right away.
+   *
+   * No orderBy() on purpose: Firestore silently drops documents that lack
+   * the ordered field, so a record without recordedAt would vanish instead
+   * of showing up out of order. Sorting happens client-side.
    */
   useEffect(() => {
-    const q = query(
-      collection(db, "violations"),
-      where("enforcementType", "==", "impounded")
-    );
+    let impoundedRows: ImpoundLogRow[] = [];
+    let recordRows: (ImpoundLogRow & { linkedViolationId: string })[] = [];
+    let flaggedRows: ImpoundLogRow[] = [];
+    let pending = 3;
 
-    const unsubscribe = onSnapshot(
-      q,
+    const merge = () => {
+      const impoundedIds = new Set(impoundedRows.map((r) => r.id));
+      const recordLinkedIds = new Set(recordRows.map((r) => r.linkedViolationId));
+
+      const merged: ImpoundLogRow[] = [
+        ...impoundedRows,
+        // A direct tow already has its own row from source A.
+        ...recordRows
+          .filter((r) => !impoundedIds.has(r.linkedViolationId))
+          .map(({ linkedViolationId: _linked, ...row }) => row),
+        // Flagged violations only until their impoundRecords entry exists.
+        ...flaggedRows.filter(
+          (r) => !recordLinkedIds.has(r.id) && !impoundedIds.has(r.id)
+        ),
+      ].sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
+
+      setRows(merged);
+      if (pending <= 0) setLoading(false);
+    };
+
+    const loaded = (() => {
+      const seen = new Set<string>();
+      return (source: string) => {
+        if (!seen.has(source)) {
+          seen.add(source);
+          pending -= 1;
+        }
+      };
+    })();
+
+    const onError = (source: string) => (err: { code: string }) => {
+      console.warn(`Impounding log (${source}) fetch failed:`, err.code);
+      loaded(source);
+      merge();
+    };
+
+    // A. Direct impounds
+    const unsubImpounded = onSnapshot(
+      query(collection(db, "violations"), where("enforcementType", "==", "impounded")),
       (snap) => {
-        const fetched: ImpoundLogRow[] = snap.docs
-          .map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              reference:
-                (data.referenceNumber as string) ??
-                (data.paymentReference as string) ??
-                null,
-              cin: data.cin ?? "—",
-              plateNo: data.plateNo ?? "—",
-              violation: data.violationType ?? "—",
-              location: data.location ?? "—",
-              officer: data.officer ?? "—",
-              recordedAt: (data.recordedAt as Timestamp) ?? null,
-              status: deriveLogStatus(data.releaseStatus),
-            };
-          })
-          .sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
-
-        setRows(fetched);
-        setLoading(false);
+        impoundedRows = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            reference:
+              (data.referenceNumber as string) ??
+              (data.paymentReference as string) ??
+              null,
+            cin: data.cin ?? "—",
+            plateNo: data.plateNo ?? "—",
+            violation: data.violationType ?? "—",
+            location: data.location ?? "—",
+            officer: data.officer ?? "—",
+            recordedAt: (data.recordedAt as Timestamp) ?? null,
+            status: deriveLogStatus(data.releaseStatus),
+          };
+        });
+        loaded("impounded");
+        merge();
       },
-      (err) => {
-        console.warn("Impounding log fetch failed:", err.code);
-        setLoading(false);
-      }
+      onError("impounded")
     );
-    return () => unsubscribe();
+
+    // B. Impound records
+    const unsubRecords = onSnapshot(
+      collection(db, "impoundRecords"),
+      (snap) => {
+        recordRows = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            linkedViolationId: (data.sourceViolationId as string) || d.id,
+            reference:
+              (data.referenceNumber as string) ??
+              (data.paymentReference as string) ??
+              null,
+            cin: data.cin ?? "—",
+            plateNo: data.plateNo ?? "—",
+            violation:
+              data.initialViolation ?? data.violationType ?? data.violation ?? "—",
+            location: data.location ?? "—",
+            officer: data.clampedBy ?? data.towedBy ?? data.impoundedBy ?? "—",
+            recordedAt: (data.clampedAt as Timestamp) ?? null,
+            status: normalizeImpoundStatus(data.status),
+          };
+        });
+        loaded("records");
+        merge();
+      },
+      onError("records")
+    );
+
+    // C. Flagged clamped violations
+    const unsubFlagged = onSnapshot(
+      query(collection(db, "violations"), where("impoundStatus", "in", FLAGGED_STATUSES)),
+      (snap) => {
+        flaggedRows = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            reference:
+              (data.referenceNumber as string) ??
+              (data.paymentReference as string) ??
+              null,
+            cin: data.cin ?? "—",
+            plateNo: data.plateNo ?? "—",
+            violation: data.violationType ?? "—",
+            location: data.location ?? "—",
+            officer: data.officer ?? "—",
+            recordedAt: (data.recordedAt as Timestamp) ?? null,
+            status: normalizeImpoundStatus(data.impoundStatus),
+          };
+        });
+        loaded("flagged");
+        merge();
+      },
+      onError("flagged")
+    );
+
+    return () => {
+      unsubImpounded();
+      unsubRecords();
+      unsubFlagged();
+    };
   }, []);
 
   /* Click outside */
@@ -312,6 +438,13 @@ export default function RecordOfficerImpoundingLog() {
 
   const impoundedCount = useMemo(
     () => rows.filter((r) => r.status === "Impounded").length,
+    [rows]
+  );
+  const awaitingCount = useMemo(
+    () =>
+      rows.filter(
+        (r) => r.status === "Subject to Impound" || r.status === "Scheduled for Impounding"
+      ).length,
     [rows]
   );
 
@@ -394,7 +527,13 @@ export default function RecordOfficerImpoundingLog() {
                       {ROLE_LABELS[currentUser.role]}
                     </p>
                   </div>
-                  <button className="dropdown-item">
+                  <button
+                    className="dropdown-item"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setShowChangePassword(true);
+                    }}
+                  >
                     <KeyRound size={18} />
                     <span>Change Password</span>
                   </button>
@@ -418,7 +557,7 @@ export default function RecordOfficerImpoundingLog() {
                 <input
                   type="text"
                   className="search-bar-input"
-                  placeholder="Search CIN, Plate No..."
+                  placeholder="Search CIN, plate no., location..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -446,7 +585,8 @@ export default function RecordOfficerImpoundingLog() {
               <div className="log-header">
                 <p className="card-eyebrow">Sector 3</p>
                 <div className="log-header-meta">
-                  Impounded vehicles: {impoundedCount} total
+                  <strong>{impoundedCount}</strong> impounded ·{" "}
+                  <strong>{awaitingCount}</strong> awaiting impound
                 </div>
               </div>
               <h2 className="card-title" style={{ marginBottom: 16 }}>
@@ -545,6 +685,10 @@ export default function RecordOfficerImpoundingLog() {
           </main>
         </div>
       </div>
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </div>
   );
 }

@@ -197,3 +197,17 @@
 .record-page .btn-primary:hover {
   background-color: #1E40AF;
 }
+/* Clamped vehicles on their way to the impound lot */
+.record-page .status-subject-pill {
+  background: #FEF9C3;
+  color: #854D0E;
+}
+
+.record-page .status-scheduled-pill {
+  background: #FFEDD5;
+  color: #9A3412;
+}
+
+.record-page .impounding-card .cell-time {
+  white-space: nowrap;
+}

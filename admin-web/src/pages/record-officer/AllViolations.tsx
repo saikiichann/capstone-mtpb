@@ -1,17 +1,19 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, Search, ChevronDown } from "lucide-react";
+import { KeyRound, Search, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
   doc,
   getDoc,
   onSnapshot,
-  orderBy,
-  query,
   Timestamp,
+  type DocumentData,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { amountDue, impoundFeeDue } from "../../lib/impoundFlag";
+import ChangePasswordModal from "../../components/ChangePasswordModal";
+import ViolationDetailsModal from "./ViolationDetailsModal";
 import "./AllViolations.css";
 
 // Asset imports
@@ -47,7 +49,9 @@ type ViolationStatus =
   | "Awaiting OIC Approval"
   | "Approved — For Release"
   | "Released"
-  | "Payment Rejected";
+  | "Payment Rejected"
+  | "Subject to Impound"
+  | "Impounded";
 
 type ViolationRow = {
   id: string;
@@ -55,9 +59,12 @@ type ViolationRow = {
   plateNo: string;
   violationType: string;
   location: string;
+  /** Amount due: the ₱2,000 impound fee once impounded, else the fine */
   fine: number;
+  impounded: boolean;
   status: ViolationStatus;
   recordedAt: Timestamp | null;
+  raw: DocumentData & { id: string };
 };
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
@@ -83,9 +90,13 @@ const STATUS_FILTER_OPTIONS: Array<ViolationStatus | "All Status"> = [
   "Pending Verification",
   "Awaiting OIC Approval",
   "Approved — For Release",
+  "Subject to Impound",
+  "Impounded",
   "Released",
   "Payment Rejected",
 ];
+
+const ITEMS_PER_PAGE = 10;
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -160,6 +171,8 @@ const getStatusClass = (status: ViolationStatus): string => {
     "Approved — For Release": "status-approved",
     Released: "status-released",
     "Payment Rejected": "status-rejected",
+    "Subject to Impound": "status-subject-impound",
+    Impounded: "status-impounded-violation",
   };
   return map[status] ?? "";
 };
@@ -209,6 +222,13 @@ const deriveStatus = (data: any): ViolationStatus => {
     return "Pending Verification";
   }
 
+  // Not paid, and past the 24-hour grace period
+  const impoundStatus = String(data.impoundStatus ?? "").toLowerCase();
+  if (impoundStatus === "impounded") return "Impounded";
+  if (impoundStatus === "subject to impound" || impoundStatus === "scheduled for impounding") {
+    return "Subject to Impound";
+  }
+
   // Default — Unpaid
   return "Unpaid";
 };
@@ -230,6 +250,9 @@ export default function AllViolations() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All Status");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selected, setSelected] = useState<ViolationRow | null>(null);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   // Fetch current user
   useEffect(() => {
@@ -262,25 +285,35 @@ export default function AllViolations() {
 
   // Fetch violations
   useEffect(() => {
-    const ref = collection(db, "violations");
-    const q = query(ref, orderBy("recordedAt", "desc"));
-
+    // No orderBy(): Firestore drops documents that lack the ordered field,
+    // so a record without recordedAt would vanish. Sorted below instead.
     const unsubscribe = onSnapshot(
-      q,
+      collection(db, "violations"),
       (snap) => {
         const rows: ViolationRow[] = snap.docs.map((d) => {
           const data = d.data();
+          const impoundFee = impoundFeeDue(data.impoundStatus, data.impoundFee);
           return {
             id: d.id,
             cin: data.cin ?? "—",
             plateNo: data.plateNo ?? "—",
             violationType: data.violationType ?? "—",
             location: data.location ?? "—",
-            fine: Number(data.fineAmount ?? 0),
+            fine: amountDue(Number(data.fineAmount ?? 0), impoundFee),
+            impounded: impoundFee > 0,
             status: deriveStatus(data),
             recordedAt: data.recordedAt ?? null,
+            raw: { id: d.id, ...data },
           };
         });
+        const ms = (t: Timestamp | null) => {
+          try {
+            return t ? t.toMillis() : 0;
+          } catch {
+            return 0;
+          }
+        };
+        rows.sort((a, b) => ms(b.recordedAt) - ms(a.recordedAt));
 
         setViolations(rows);
         setLoading(false);
@@ -323,23 +356,34 @@ export default function AllViolations() {
   };
 
   const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
     setIsMenuOpen(false);
+    setShowChangePassword(true);
   };
 
   // Filter
-  const filteredViolations = violations.filter((v) => {
+  const filteredViolations = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    const matchesSearch =
-      !q ||
-      v.cin.toLowerCase().includes(q) ||
-      v.plateNo.toLowerCase().includes(q);
+    return violations.filter((v) => {
+      const matchesSearch =
+        !q ||
+        v.cin.toLowerCase().includes(q) ||
+        v.plateNo.toLowerCase().includes(q) ||
+        v.violationType.toLowerCase().includes(q) ||
+        v.location.toLowerCase().includes(q);
+      const matchesStatus = statusFilter === "All Status" || v.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [violations, searchQuery, statusFilter]);
 
-    const matchesStatus =
-      statusFilter === "All Status" || v.status === statusFilter;
+  // Back to page 1 whenever the search or filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter]);
 
-    return matchesSearch && matchesStatus;
-  });
+  const totalPages = Math.max(1, Math.ceil(filteredViolations.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * ITEMS_PER_PAGE;
+  const pagedViolations = filteredViolations.slice(pageStart, pageStart + ITEMS_PER_PAGE);
 
   return (
     <div className="record-page">
@@ -434,7 +478,7 @@ export default function AllViolations() {
               <div className="search-box">
                 <input
                   type="text"
-                  placeholder="Search CIN, Plate No..."
+                  placeholder="Search CIN, plate no., violation, location..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -475,14 +519,26 @@ export default function AllViolations() {
                         <th>Plate No.</th>
                         <th>Violation</th>
                         <th>Location</th>
-                        <th>Fine</th>
+                        <th>Amount Due</th>
                         <th>Status</th>
                         <th>Recorded</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredViolations.map((row) => (
-                        <tr key={row.id}>
+                      {pagedViolations.map((row) => (
+                        <tr
+                          key={row.id}
+                          className="violation-row-clickable"
+                          onClick={() => setSelected(row)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setSelected(row);
+                            }
+                          }}
+                          tabIndex={0}
+                          title="View details"
+                        >
                           <td>
                             <span className="cin-pill">{row.cin}</span>
                           </td>
@@ -491,6 +547,7 @@ export default function AllViolations() {
                           <td className="cell-location">{row.location}</td>
                           <td className="cell-fine">
                             {formatCurrency(row.fine)}
+                            {row.impounded && <span className="fine-note">impound fee</span>}
                           </td>
                           <td>
                             <span
@@ -510,10 +567,56 @@ export default function AllViolations() {
                   </table>
                 </div>
               )}
+
+              {!loading && filteredViolations.length > 0 && (
+                <div className="pagination av-pagination">
+                  <p className="av-count">
+                    Showing {pageStart + 1}–{pageStart + pagedViolations.length} of{" "}
+                    {filteredViolations.length}
+                    {filteredViolations.length !== violations.length
+                      ? ` (filtered from ${violations.length})`
+                      : ""}
+                  </p>
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={safePage === 1}
+                  >
+                    <ChevronLeft size={16} />
+                    Previous
+                  </button>
+                  <div className="pagination-info">
+                    <span className="pagination-page">{safePage}</span>
+                    <span className="pagination-sep">of {totalPages} pages</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={safePage === totalPages}
+                  >
+                    Next
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              )}
             </div>
           </main>
         </div>
       </div>
+
+      {selected && (
+        <ViolationDetailsModal
+          data={selected.raw}
+          status={selected.status}
+          statusClass={getStatusClass(selected.status)}
+          onClose={() => setSelected(null)}
+        />
+      )}
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </div>
   );
 }
