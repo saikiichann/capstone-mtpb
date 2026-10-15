@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { JSX } from 'react';
 import { X } from 'lucide-react';
 import './Modal.css';
@@ -23,7 +24,9 @@ export default function Modal({
     return () => document.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
-  return (
+  // Rendered into <body> so a page's own scoped .modal-* styles
+  // (e.g. ".record-page .modal-overlay") can't leak into it.
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div
         className="modal-panel"
@@ -41,6 +44,7 @@ export default function Modal({
         </div>
         <div className="modal-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

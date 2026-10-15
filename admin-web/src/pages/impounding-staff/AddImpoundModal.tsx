@@ -3,10 +3,14 @@ import { X, AlertCircle } from "lucide-react";
 import {
   addDoc,
   collection,
+  doc,
   serverTimestamp,
+  setDoc,
+  updateDoc,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "../../firebase";
+import { syncClampImpound } from "../../lib/impoundFlag";
 
 export type PrefillData = {
   sourceViolationId?: string;
@@ -20,6 +24,11 @@ export type PrefillData = {
   initialViolation?: string;
   clampedAt?: Timestamp | null;
   clampedBy?: string;
+  /** Saved impound details — when opening an existing record */
+  impoundViolations?: string[];
+  receivedBy?: string;
+  orNumber?: string;
+  status?: string;
 };
 
 type AddImpoundModalProps = {
@@ -27,6 +36,12 @@ type AddImpoundModalProps = {
   onSaved: () => void;
   currentUserName: string;
   prefill?: PrefillData;
+  /**
+   * impoundRecords doc na ia-update. Kapag galing sa "Subject to Impound"
+   * na row, may record na iyon (ginawa noong na-flag) — ina-update iyon
+   * para hindi magdoble ang sasakyan sa log.
+   */
+  existingRecordId?: string | null;
 };
 
 type FormState = {
@@ -112,28 +127,59 @@ function timestampToLocalInput(ts: Timestamp | null | undefined): string {
   }
 }
 
+/** Options list plus the prefilled value when the enforcer app used one
+ *  that isn't in the list (e.g. "AUV", "MPV"), so it still shows. */
+function withPrefillOption(options: string[], value: string | undefined): string[] {
+  return value && !options.includes(value) ? [value, ...options] : options;
+}
+
 export default function AddImpoundModal({
   onClose,
   onSaved,
   currentUserName,
   prefill,
+  existingRecordId,
 }: AddImpoundModalProps) {
+  const fromClamp = Boolean(prefill?.sourceViolationId || existingRecordId);
+  const colorOptions = withPrefillOption(COLOR_OPTIONS, prefill?.color);
+  const vehicleTypeOptions = withPrefillOption(VEHICLE_TYPE_OPTIONS, prefill?.vehicleType);
+
   const [form, setForm] = useState<FormState>({
     violatorName: prefill?.violatorName ?? "",
     contactNo: prefill?.contactNo ?? "",
     initialViolation: prefill?.initialViolation ?? "",
-    impoundViolations: [],
+    impoundViolations: prefill?.impoundViolations ?? [],
     plateNo: prefill?.plateNo ?? "",
     color: prefill?.color ?? "",
     vehicleType: prefill?.vehicleType ?? "",
     place: prefill?.location ?? "",
     ticketDate: timestampToLocalInput(prefill?.clampedAt),
     turnOverBy: prefill?.clampedBy ?? "",
-    receivedBy: currentUserName || "",
-    orNumber: "",
+    receivedBy: prefill?.receivedBy ?? (currentUserName || ""),
+    orNumber: prefill?.orNumber ?? "",
     cin: prefill?.cin ?? "",
-    status: "Impounded",
+    status:
+      prefill?.status && STATUS_OPTIONS.includes(prefill.status)
+        ? prefill.status
+        : "Impounded",
   });
+
+  /**
+   * Galing sa clamp record ang Vehicle, Location & Time, Turn-over By at
+   * CIN — naka-lock kapag may laman na. Ang walang laman ay puwede pang
+   * punan ng staff.
+   */
+  const [locked] = useState(() => ({
+    plateNo: fromClamp && Boolean(prefill?.plateNo),
+    color: fromClamp && Boolean(prefill?.color),
+    vehicleType: fromClamp && Boolean(prefill?.vehicleType),
+    place: fromClamp && Boolean(prefill?.location),
+    ticketDate: fromClamp && Boolean(prefill?.clampedAt),
+    turnOverBy: fromClamp && Boolean(prefill?.clampedBy),
+    cin: fromClamp && Boolean(prefill?.cin),
+  }));
+  const alreadyRecorded =
+    prefill?.status === "Impounded" || prefill?.status === "Released";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -181,10 +227,9 @@ export default function AddImpoundModal({
         throw new Error("Invalid date format.");
       }
 
-      await addDoc(collection(db, "impoundRecords"), {
+      const details = {
         sourceViolationId: prefill?.sourceViolationId ?? null,
         cin: form.cin.trim(),
-        referenceNumber: null,
         violatorName: form.violatorName.trim() || "—",
         contactNo: form.contactNo.trim() || "—",
         initialViolation: form.initialViolation.trim() || "—",
@@ -198,11 +243,69 @@ export default function AddImpoundModal({
         receivedBy: form.receivedBy.trim() || currentUserName,
         orNumber: form.orNumber.trim() || "—",
         status: form.status,
-        createdBy: currentUserName,
-        createdAt: serverTimestamp(),
+        ...(form.status === "Impounded" && prefill?.status !== "Impounded"
+          ? { impoundedAt: serverTimestamp() }
+          : {}),
         updatedBy: currentUserName,
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      if (existingRecordId) {
+        // Record na ginawa noong na-flag — kumpletuhin at i-update.
+        await updateDoc(doc(db, "impoundRecords", existingRecordId), details);
+      } else if (prefill?.sourceViolationId) {
+        // Galing sa clamp pero wala pang record: doc id = violation id,
+        // pareho ng ginagawa ng Clamping Log, para iisa lang ang record.
+        await setDoc(doc(db, "impoundRecords", prefill.sourceViolationId), {
+          ...details,
+          referenceNumber: null,
+          createdBy: currentUserName,
+          createdAt: serverTimestamp(),
+        });
+      } else {
+        // Paper ticket na walang clamp record sa system.
+        await addDoc(collection(db, "impoundRecords"), {
+          ...details,
+          referenceNumber: null,
+          createdBy: currentUserName,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      // Sabayan ang status sa violation para tama rin ang Clamping Log at
+      // Pending Payments. Best effort: kapag hindi pa naka-publish ang
+      // bagong Firestore rules, naka-save pa rin ang record.
+      if (prefill?.sourceViolationId) {
+        try {
+          await updateDoc(doc(db, "violations", prefill.sourceViolationId), {
+            impoundStatus: form.status,
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUserName,
+          });
+        } catch (syncErr) {
+          console.warn("Impound status not synced to the violation:", syncErr);
+        }
+        await syncClampImpound(prefill.sourceViolationId, form.status);
+      }
+
+      try {
+        await addDoc(collection(db, "auditLogs"), {
+          userName: currentUserName,
+          userRole: "impounding-staff",
+          action: `recorded impound ${form.cin.trim()} (${form.status})`,
+          record: form.cin.trim(),
+          type: "impound-record",
+          metadata: {
+            cin: form.cin.trim(),
+            plateNo: form.plateNo.trim().toUpperCase(),
+            status: form.status,
+            sourceViolationId: prefill?.sourceViolationId ?? null,
+          },
+          timestamp: serverTimestamp(),
+        });
+      } catch (auditErr) {
+        console.warn("Audit log not written:", auditErr);
+      }
 
       onSaved();
       onClose();
@@ -225,7 +328,9 @@ export default function AddImpoundModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
-          <h3 className="modal-title">Add Impound Record</h3>
+          <h3 className="modal-title">
+            {alreadyRecorded ? "Impound Record" : "Add Impound Record"}
+          </h3>
           <button
             type="button"
             className="modal-close-btn"
@@ -238,7 +343,9 @@ export default function AddImpoundModal({
         </div>
 
         <p className="modal-subtitle">
-          Copy the details from the MTPB paper ticket issued on-site.
+          {fromClamp
+            ? "Fill in the driver and impound details from the paper ticket. Vehicle, place, time and CIN come from the clamp record."
+            : "Copy the details from the MTPB paper ticket issued on-site."}
         </p>
 
         <h4 className="form-section-title">Driver Information</h4>
@@ -320,7 +427,7 @@ export default function AddImpoundModal({
               placeholder="ABC 1234"
               value={form.plateNo}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.plateNo}
             />
           </div>
           <div className="form-group">
@@ -331,10 +438,10 @@ export default function AddImpoundModal({
               className="form-select"
               value={form.color}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.color}
             >
               <option value="">Select color...</option>
-              {COLOR_OPTIONS.map((c) => (
+              {colorOptions.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
@@ -349,10 +456,10 @@ export default function AddImpoundModal({
               className="form-select"
               value={form.vehicleType}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.vehicleType}
             >
               <option value="">Select type...</option>
-              {VEHICLE_TYPE_OPTIONS.map((t) => (
+              {vehicleTypeOptions.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
@@ -373,7 +480,7 @@ export default function AddImpoundModal({
               placeholder="Recto Ave. Manila"
               value={form.place}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.place}
             />
           </div>
           <div className="form-group form-group-full">
@@ -387,7 +494,7 @@ export default function AddImpoundModal({
               className="form-input"
               value={form.ticketDate}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.ticketDate}
             />
           </div>
         </div>
@@ -404,7 +511,7 @@ export default function AddImpoundModal({
               placeholder="Enforcer name"
               value={form.turnOverBy}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.turnOverBy}
             />
           </div>
           <div className="form-group">
@@ -449,7 +556,7 @@ export default function AddImpoundModal({
               placeholder="e.g. CLMP-2026-101"
               value={form.cin}
               onChange={handleChange}
-              disabled={saving}
+              disabled={saving || locked.cin}
             />
           </div>
           <div className="form-group">

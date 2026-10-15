@@ -5,8 +5,10 @@
 //   2. `violations`     — flagged entries where impoundStatus is
 //                         "Subject to Impound" or "Scheduled for Impounding"
 //
-// Includes an "Add Record" button that opens the AddImpoundModal so
-// impounding staff can manually encode paper tickets into the system.
+// Each "Subject to Impound" row has an "Add Record" button that opens the
+// AddImpoundModal prefilled from the clamp details; staff add the driver
+// and impound details from the paper ticket. Impounded / Released rows
+// have "View Record" to reopen it.
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -16,7 +18,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Plus,
 } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
@@ -28,7 +29,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./ImpoundingLog.css";
-import AddImpoundModal from "./AddImpoundModal";
+import AddImpoundModal, { type PrefillData } from "./AddImpoundModal";
 
 // Assets
 import mtpbLogo from "../../assets/mtpb-logo.png";
@@ -69,6 +70,16 @@ type ImpoundLogRow = {
   officer: string;
   recordedAt: Timestamp | null;
   status: LogStatus;
+  /** impoundRecords doc id, kung galing sa record */
+  recordId: string | null;
+  /** violations doc id ng clamp, kung mayroon */
+  violationId: string | null;
+};
+
+/** Ang bubuksang "Record Impound" form */
+type ImpoundTarget = {
+  prefill: PrefillData;
+  recordId: string | null;
 };
 
 type NavItem = {
@@ -191,7 +202,8 @@ const getStatusClass = (status: LogStatus): string => {
 ------------------------------------------------------------------ */
 export default function ImpoundingLog() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [impoundTarget, setImpoundTarget] = useState<ImpoundTarget | null>(null);
+  const [preparingRowId, setPreparingRowId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -245,9 +257,17 @@ export default function ImpoundingLog() {
   useEffect(() => {
     let recordsRows: ImpoundLogRow[] = [];
     let violationsRows: ImpoundLogRow[] = [];
+    // Violation ids that already have an impoundRecords entry (doc id or
+    // sourceViolationId). Those violations are shown through the record,
+    // whose status Impounding Staff keeps up to date, so they are not
+    // listed a second time.
+    let recordLinkedIds = new Set<string>();
 
     const merge = () => {
-      const merged = [...recordsRows, ...violationsRows].sort(
+      const merged = [
+        ...recordsRows,
+        ...violationsRows.filter((r) => !recordLinkedIds.has(r.id.slice(2))),
+      ].sort(
         (a, b) => millis(b.recordedAt) - millis(a.recordedAt)
       );
       setLogs(merged);
@@ -258,10 +278,18 @@ export default function ImpoundingLog() {
     const unsubRecords = onSnapshot(
       collection(db, "impoundRecords"),
       (snap) => {
+        recordLinkedIds = new Set<string>();
+        snap.docs.forEach((d) => {
+          recordLinkedIds.add(d.id);
+          const source = d.data().sourceViolationId;
+          if (typeof source === "string" && source) recordLinkedIds.add(source);
+        });
         recordsRows = snap.docs.map((d) => {
           const data = d.data();
           return {
             id: `ir_${d.id}`,
+            recordId: d.id,
+            violationId: (data.sourceViolationId as string) || null,
             reference:
               (data.referenceNumber as string) ??
               (data.paymentReference as string) ??
@@ -314,6 +342,8 @@ export default function ImpoundingLog() {
 
             return {
               id: `v_${d.id}`,
+              recordId: null,
+              violationId: d.id,
               reference:
                 (data.referenceNumber as string) ??
                 (data.paymentReference as string) ??
@@ -365,6 +395,78 @@ export default function ImpoundingLog() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  /**
+   * "Record Impound" sa isang Subject to Impound na row: binubuksan ang
+   * form na may laman na mula sa clamp record (violations doc na sinave ng
+   * enforcer app) at sa impound record, para ang kulang lang ang ilalagay
+   * ng staff mula sa paper ticket.
+   */
+  const openImpoundRecord = async (row: ImpoundLogRow) => {
+    setPreparingRowId(row.id);
+    try {
+      const recordData = row.recordId
+        ? (await getDoc(doc(db, "impoundRecords", row.recordId))).data() ?? {}
+        : {};
+
+      // Mga lumang record (bago ang sourceViolationId) ay may doc id na
+      // kapareho ng violation id.
+      let violationId = row.violationId;
+      let violationData: Record<string, unknown> = {};
+      const candidateId = violationId ?? row.recordId;
+      if (candidateId) {
+        const snap = await getDoc(doc(db, "violations", candidateId));
+        if (snap.exists()) {
+          violationId = snap.id;
+          violationData = snap.data();
+        }
+      }
+
+      const pick = (...values: unknown[]): string | undefined => {
+        for (const v of values) {
+          if (typeof v === "string" && v.trim() && v.trim() !== "—") return v.trim();
+        }
+        return undefined;
+      };
+
+      const prefill: PrefillData = {
+        sourceViolationId: violationId ?? undefined,
+        cin: pick(recordData.cin, violationData.cin, row.cin),
+        plateNo: pick(recordData.plateNo, violationData.plateNo, row.plateNo),
+        color: pick(recordData.color, violationData.vehicleColor),
+        vehicleType: pick(recordData.vehicleType, violationData.vehicleType),
+        location: pick(recordData.location, violationData.location, row.location),
+        violatorName: pick(recordData.violatorName, violationData.violatorName),
+        contactNo: pick(recordData.contactNo, violationData.contactNo),
+        initialViolation: pick(
+          recordData.initialViolation,
+          violationData.violationType,
+          row.violation
+        ),
+        clampedAt:
+          (recordData.clampedAt as Timestamp | undefined) ??
+          (violationData.recordedAt as Timestamp | undefined) ??
+          row.recordedAt,
+        clampedBy: pick(recordData.clampedBy, violationData.officer),
+        impoundViolations: Array.isArray(recordData.impoundViolations)
+          ? (recordData.impoundViolations as string[])
+          : undefined,
+        receivedBy: pick(recordData.receivedBy),
+        orNumber: pick(recordData.orNumber),
+        status:
+          recordData.status === "Impounded" || recordData.status === "Released"
+            ? (recordData.status as string)
+            : undefined,
+      };
+
+      setImpoundTarget({ prefill, recordId: row.recordId });
+    } catch (err) {
+      console.error("Failed to load clamp details:", err);
+      alert("Hindi ma-load ang clamp details. Subukan ulit.");
+    } finally {
+      setPreparingRowId(null);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -573,14 +675,6 @@ export default function ImpoundingLog() {
                     {" · "}
                     Subject to Impound: <strong>{subjectCount}</strong>
                   </p>
-                  <button
-                    type="button"
-                    className="btn-add-record"
-                    onClick={() => setIsAddModalOpen(true)}
-                  >
-                    <Plus size={16} />
-                    Add Record
-                  </button>
                 </div>
               </div>
 
@@ -610,6 +704,7 @@ export default function ImpoundingLog() {
                           <th>Impounded by</th>
                           <th>Time</th>
                           <th>Status</th>
+                          <th>Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -636,6 +731,20 @@ export default function ImpoundingLog() {
                               >
                                 {row.status}
                               </span>
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="btn-record-impound"
+                                onClick={() => openImpoundRecord(row)}
+                                disabled={preparingRowId !== null}
+                              >
+                                {preparingRowId === row.id
+                                  ? "Loading..."
+                                  : row.status === "Subject to Impound"
+                                    ? "Add Record"
+                                    : "View Record"}
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -681,14 +790,18 @@ export default function ImpoundingLog() {
         </div>
       </div>
 
-      {/* ADD IMPOUND RECORD MODAL */}
-      {isAddModalOpen && (
+
+      {/* IMPOUND RECORD — prefilled from the clamp details */}
+      {impoundTarget && (
         <AddImpoundModal
-          onClose={() => setIsAddModalOpen(false)}
+          key={impoundTarget.recordId ?? impoundTarget.prefill.sourceViolationId}
+          onClose={() => setImpoundTarget(null)}
           onSaved={() => {
             // onSnapshot handles the refresh automatically
           }}
           currentUserName={currentUser.name}
+          prefill={impoundTarget.prefill}
+          existingRecordId={impoundTarget.recordId}
         />
       )}
     </div>

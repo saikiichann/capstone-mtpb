@@ -168,6 +168,35 @@
   background: #1E40AF;
 }
 
+/* "Record Impound" sa Subject to Impound na row */
+.impounding-page .btn-record-impound {
+  padding: 6px 12px;
+  background: #FFFFFF;
+  color: #1D4ED8;
+  border: 1px solid #1D4ED8;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.impounding-page .btn-record-impound:hover:not(:disabled) {
+  background: #1D4ED8;
+  color: #FFFFFF;
+}
+
+.impounding-page .btn-record-impound:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.impounding-page .cell-muted {
+  color: #9CA3AF;
+}
+
 /* ==================================================================
    LOG TABLE
 ================================================================== */

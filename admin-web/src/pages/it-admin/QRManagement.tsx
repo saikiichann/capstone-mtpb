@@ -46,6 +46,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./QRManagement.css";
+import { CLAMP_GRACE_HOURS, amountDueFor, overdueFeeFor } from "../../lib/clampFee";
 
 // Asset imports
 import logo from "../../assets/mtpb-logo.png";
@@ -86,6 +87,7 @@ type CurrentUser = {
 type ClampState =
   | "available"
   | "unpaid"
+  | "overdue"
   | "verified"
   | "ready-for-release"
   | "released";
@@ -135,6 +137,10 @@ type ViolationDetails = {
   color: string | null;
   violationType: string;
   fineAmount: number;
+  /** ₱2,000 once the clamp is past 24 hours unpaid — replaces the fine */
+  overdueFee: number;
+  /** What the owner pays now (lib/clampFee.ts) */
+  amountDue: number;
   convenienceFee: number | null;
   totalPaid: number | null;
   referenceNumber: string | null;
@@ -155,6 +161,7 @@ const STATUS_OPTIONS: Array<ClampState | "All Status"> = [
   "All Status",
   "available",
   "unpaid",
+  "overdue",
   "verified",
   "ready-for-release",
   "released",
@@ -163,6 +170,7 @@ const STATUS_OPTIONS: Array<ClampState | "All Status"> = [
 const STATUS_LABELS: Record<ClampState, string> = {
   available: "Available",
   unpaid: "Unpaid",
+  overdue: "Overdue (₱2,000)",
   verified: "Verified",
   "ready-for-release": "Ready for Release",
   released: "Released",
@@ -268,6 +276,7 @@ const getStatusClass = (status: ClampState): string => {
   const map: Record<ClampState, string> = {
     available: "status-waiting",
     unpaid: "status-pay",
+    overdue: "status-subject",
     verified: "status-paid",
     "ready-for-release": "status-ready",
     released: "status-released",
@@ -314,6 +323,20 @@ const deriveState = (data: {
   if (data.paidAt) return "verified";
   if (data.deployedAt || data.cin || data.currentViolationId) return "unpaid";
   return "available";
+};
+
+/**
+ * Unpaid clamp past its 24 hours: the fee is now a fixed ₱2,000
+ * (lib/clampFee.ts). It stays clamped — clamps are not sent to impound.
+ */
+const withOverdueState = (state: ClampState, deployedAt: Timestamp | null): ClampState => {
+  if (state !== "unpaid" || !deployedAt) return state;
+  try {
+    const ends = deployedAt.toDate().getTime() + CLAMP_GRACE_HOURS * 3600000;
+    return Date.now() >= ends ? "overdue" : state;
+  } catch {
+    return state;
+  }
 };
 
 const detectClampType = (clampId: string): ClampType | null => {
@@ -471,8 +494,11 @@ export default function QRManagement() {
           };
 
           const storedStatus = (data.status as ClampState | undefined) ?? null;
-          const state = deriveState(timestamps);
-          const hasStateMismatch = storedStatus !== null && storedStatus !== state;
+          const baseState = deriveState(timestamps);
+          // Mismatch is checked on the lifecycle state only; "overdue" is
+          // derived from the time since the clamp was deployed.
+          const hasStateMismatch = storedStatus !== null && storedStatus !== baseState;
+          const state = withOverdueState(baseState, timestamps.deployedAt);
 
           return {
             id: d.id,
@@ -955,6 +981,8 @@ export default function QRManagement() {
         color: data.color ?? null,
         violationType: data.violationType ?? "—",
         fineAmount: Number(data.fineAmount ?? 0),
+        overdueFee: overdueFeeFor(data),
+        amountDue: amountDueFor(data),
         convenienceFee: data.convenienceFee != null ? Number(data.convenienceFee) : null,
         totalPaid: data.totalPaid != null ? Number(data.totalPaid) : null,
         referenceNumber: data.referenceNumber ?? null,
@@ -1589,9 +1617,17 @@ export default function QRManagement() {
                   <p>{viewingViolation.location}</p>
                 </div>
                 <div className="violation-item">
-                  <label>Fine Amount</label>
+                  <label>
+                    {viewingViolation.overdueFee > 0
+                      ? "Overdue Clamp Fee (past 24 hrs)"
+                      : "Fine Amount"}
+                  </label>
                   <p className="violation-amount">
-                    {formatCurrency(viewingViolation.fineAmount)}
+                    {formatCurrency(
+                      viewingViolation.overdueFee > 0
+                        ? viewingViolation.overdueFee
+                        : viewingViolation.fineAmount
+                    )}
                   </p>
                 </div>
                 {viewingViolation.convenienceFee !== null && (

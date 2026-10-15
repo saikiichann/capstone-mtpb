@@ -227,3 +227,49 @@
     gap: 8px;
   }
 }
+/* ==================================================================
+   HEAT ZONES LEGEND (bottom-left of the map)
+================================================================== */
+.geo-page .heat-legend {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 1000;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  font-size: 11px;
+  color: #111827;
+  pointer-events: none;
+}
+
+.geo-page .heat-legend-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.geo-page .heat-legend-row {
+  display: flex;
+  gap: 10px;
+}
+
+.geo-page .heat-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.geo-page .heat-legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  opacity: 0.85;
+}
+
+.geo-page .heat-legend-note {
+  margin-top: 4px;
+  color: #b91c1c;
+  font-weight: 600;
+}

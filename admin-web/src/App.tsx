@@ -10,7 +10,6 @@
   import OICReleaseRequests from "./pages/oic/ReleaseRequests";
   import GeospatialHeatmap from "./pages/oic/Geospatialheatmap";
   import OICClampingLog from "./pages/oic/ClampingLog";
-  import OICActiveImpounding from "./pages/oic/ActiveImpounding";
   import OICImpoundingLog from "./pages/oic/ImpoundingLog";
   import OICVehicleHistory from "./pages/oic/VehicleHistory";
   import OICPendingPayments from "./pages/oic/PendingPayments";
@@ -19,9 +18,21 @@
   import OICRevenueReports from "./pages/oic/RevenueReports";
   import OICReleaseQueue from "./pages/oic/ReleaseQueue";
   import OICReleaseLog from "./pages/oic/ReleaseLog";
-  import OICActiveClampingTeams from "./pages/oic/ActiveClampingTeams";
   import OICFieldUpdates from "./pages/oic/FieldUpdates";
   import OICOperationScheduler from "./pages/oic/OperationScheduler";
+
+  // Supervisor — its own pages (pages/supervisor/), own routes (/supervisor/...)
+  import SupervisorHomepage from "./pages/supervisor/Homepage";
+  import SupervisorSectorAnalytics from "./pages/supervisor/SectorAnalytics";
+  import SupervisorGeospatialHeatmap from "./pages/supervisor/GeospatialHeatmap";
+  import SupervisorClampingLog from "./pages/supervisor/ClampingLog";
+  import SupervisorImpoundingLog from "./pages/supervisor/ImpoundingLog";
+  import SupervisorVehicleHistory from "./pages/supervisor/VehicleHistory";
+  import SupervisorReleaseRequests from "./pages/supervisor/ReleaseRequests";
+  import SupervisorReleaseQueue from "./pages/supervisor/ReleaseQueue";
+  import SupervisorReleaseLog from "./pages/supervisor/ReleaseLog";
+  import SupervisorFieldUpdates from "./pages/supervisor/FieldUpdates";
+  import SupervisorOperationScheduler from "./pages/supervisor/OperationScheduler";
 
   // Impounding Staff
   import ImpoundingStaffHomepage from "./pages/impounding-staff/Homepage";
@@ -75,41 +86,22 @@
           <Route path="/" element={<LoginPage />} />
 
           {/* ================================================================
-              OIC DASHBOARD (shared with Supervisor)
+              OIC DASHBOARD (/dashboard/...) — OIC only.
 
-              Supervisors use the same pages as the OIC. Their Payment/Finance
-              menu is hidden inside each page, and the Finance routes further
-              below do NOT include "supervisor", so typing those URLs
-              directly is still blocked.
+              The Supervisor has its own routes (/supervisor/..., further
+              below) showing the same pages without Payment/Finance. The
+              Payment/Finance routes here are OIC-only, so typing those URLs
+              as a Supervisor redirects back to /supervisor.
 
-              Clamping Log and Active Impounding are also shared with
-              Supervisor for VIEWING — but the "Subject to Impound" action on
-              Clamping Log is OIC-only. That is enforced two ways: the button
-              itself is hidden for anyone whose role isn't "oic" (see
-              ClampingLog.tsx), and the write is additionally guarded in the
-              handler as a safety net. Neither of those is the real security
-              boundary — a Firestore rule restricting writes to
-              `violations.impoundStatus` and to the `impoundRecords`
-              collection (create) to role == "oic" still needs to be added,
-              or a Supervisor could trigger the same write straight from the
-              browser console.
-
-              All four Payment/Finance pages (Pending Payments, Payment
-              Verification, Transaction History, Revenue Reports) are
-              OIC-only — NOT shared with Supervisor — for consistency with
-              the Payment/Finance group being hidden from Supervisor's
-              sidebar on every OIC page. Transaction History and Revenue
-              Reports have no write actions at all; they're OIC-only purely
-              for that consistency, not because viewing them is risky.
-
-              Sidebar items without a route here send the user back to the
-              login page through the catch-all at the bottom, so add a route
-              for each one as its page is finished.
+              Flagging "Subject to Impound" is OIC-only: the Clamping Log
+              auto-flag runs for role "oic" only, and the Firestore rules
+              allow impoundStatus and impoundRecords writes to the OIC
+              (and Impounding Staff for Scheduled / Impounded / Released).
           ================================================================ */}
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <Homepage />
               </ProtectedRoute>
             }
@@ -117,7 +109,7 @@
           <Route
             path="/dashboard/sector-analytics"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <SectorAnalytics />
               </ProtectedRoute>
             }
@@ -125,7 +117,7 @@
           <Route
             path="/dashboard/heatmap"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <GeospatialHeatmap />
               </ProtectedRoute>
             }
@@ -133,7 +125,7 @@
           <Route
             path="/dashboard/clamping"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICClampingLog />
               </ProtectedRoute>
             }
@@ -141,7 +133,7 @@
           <Route
             path="/dashboard/impounding"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICImpoundingLog />
               </ProtectedRoute>
             }
@@ -193,7 +185,7 @@
           <Route
             path="/dashboard/vehicle-history"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICVehicleHistory />
               </ProtectedRoute>
             }
@@ -201,7 +193,7 @@
           <Route
             path="/dashboard/release-requests"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICReleaseRequests />
               </ProtectedRoute>
             }
@@ -209,7 +201,7 @@
           <Route
             path="/dashboard/release-queue"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICReleaseQueue />
               </ProtectedRoute>
             }
@@ -217,24 +209,8 @@
           <Route
             path="/dashboard/release-log"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICReleaseLog />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dashboard/clamping-teams"
-            element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
-                <OICActiveClampingTeams />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dashboard/active-impounding"
-            element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
-                <OICActiveImpounding />
               </ProtectedRoute>
             }
           />
@@ -242,7 +218,7 @@
           <Route
             path="/dashboard/field-updates"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICFieldUpdates />
               </ProtectedRoute>
             }
@@ -251,8 +227,105 @@
           <Route
             path="/dashboard/operation-scheduler"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICOperationScheduler />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ================================================================
+              SUPERVISOR — monitoring + release approval, no Payment/Finance.
+              Its own pages in pages/supervisor/ (same content as the OIC's,
+              with the Supervisor's sidebar and its own CSS files).
+              Can: approve/reject release requests, Release Queue actions,
+              Operation Scheduler. Cannot: payments,
+              or flag "Subject to Impound" (OIC-only, also in Firestore rules).
+          ================================================================ */}
+          <Route
+            path="/supervisor"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorHomepage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/sector-analytics"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorSectorAnalytics />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/heatmap"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorGeospatialHeatmap />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/clamping"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorClampingLog />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/impounding"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorImpoundingLog />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/vehicle-history"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorVehicleHistory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/release-requests"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorReleaseRequests />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/release-queue"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorReleaseQueue />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/release-log"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorReleaseLog />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/field-updates"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorFieldUpdates />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/operation-scheduler"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorOperationScheduler />
               </ProtectedRoute>
             }
           />

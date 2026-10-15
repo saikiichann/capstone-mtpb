@@ -21,6 +21,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import ChangePasswordModal from "../../components/ChangePasswordModal";
 import "./Homepage.css";
 
 // Asset imports
@@ -246,6 +247,7 @@ const deriveStatus = (data: any): ViolationStatus => {
 // ---------------------------------------------------------------------------
 export default function RecordOfficerHomepage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -384,8 +386,8 @@ export default function RecordOfficerHomepage() {
   };
 
   const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
     setIsMenuOpen(false);
+    setShowChangePassword(true);
   };
 
   const metricCards = [
@@ -525,7 +527,7 @@ export default function RecordOfficerHomepage() {
                   <BarChart
                     data={topViolations}
                     layout="vertical"
-                    margin={{ left: 40, right: 40 }}
+                    margin={{ left: 8, right: 40 }}
                   >
                     <CartesianGrid
                       strokeDasharray="3 3"
@@ -544,7 +546,7 @@ export default function RecordOfficerHomepage() {
                       tick={{ fontSize: 12, fill: "#374151" }}
                       axisLine={false}
                       tickLine={false}
-                      width={120}
+                      width={170}
                     />
                     <Tooltip cursor={{ fill: "rgba(59, 130, 246, 0.08)" }} />
                     <Bar
@@ -621,6 +623,10 @@ export default function RecordOfficerHomepage() {
           </main>
         </div>
       </div>
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </div>
   );
 }

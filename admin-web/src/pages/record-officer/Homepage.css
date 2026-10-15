@@ -420,6 +420,7 @@
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .record-page .cell-plate {

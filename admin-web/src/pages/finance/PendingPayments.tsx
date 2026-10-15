@@ -4,18 +4,17 @@ import { KeyRound, ChevronLeft, ChevronRight, X, Search } from "lucide-react";
 import { signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
-  doc,
   onSnapshot,
   query,
-  runTransaction,
-  serverTimestamp,
   where,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import { useStaffProfile } from "../../lib/useStaffProfile";
+import { amountDueFor, overdueFeeFor } from "../../lib/clampFee";
 import "./PendingPayments.css";
 import CashPaymentSlip from "../../components/CashPaymentSlip";
+import { recordOnsitePayment } from "../../lib/onsitePayment";
 
 // Asset imports
 import mtpbLogo from "../../assets/mtpb-logo.png";
@@ -53,14 +52,15 @@ type PendingRow = {
   violationNo: string;
   cin: string;
   plateNo: string;
+  /** babayaran: ₱900 fine sa loob ng 24 oras, ₱2,000 kapag lumagpas (lib/clampFee.ts) */
   amount: number;
+  fineAmount: number;
+  /** ₱2,000 once the clamp is past 24 hours (replaces the fine), else 0 */
+  overdueFee: number;
   recordedAt: Timestamp | null;
   dueDate: Timestamp | null;
   daysLeft: number;
   status: PendingStatus;
-  impoundStatus: string | null;
-  impoundAutoFlagged: boolean;
-  impoundFlaggedBy: string | null;
   violatorUid: string | null;
   guestId: string | null;
   violatorName: string | null;
@@ -70,7 +70,7 @@ type PendingRow = {
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
-type StatusFilter = "All" | "Unpaid" | "Overdue" | "Subject to Impound" | "Impounded";
+type StatusFilter = "All" | "Unpaid" | "Overdue";
 type SortOption = "oldest" | "newest" | "amount-high" | "amount-low" | "plate-asc";
 
 /* ------------------------------------------------------------------
@@ -100,8 +100,6 @@ const STATUS_FILTERS: StatusFilter[] = [
   "All",
   "Unpaid",
   "Overdue",
-  "Subject to Impound",
-  "Impounded",
 ];
 
 /* ------------------------------------------------------------------
@@ -165,13 +163,44 @@ const formatDate = (ts: Timestamp | null): string => {
   }
 };
 
+/**
+ * Ilang araw pa bago ang due date. Negative kapag lumampas na — kahit
+ * ilang oras pa lang. (Dati Math.ceil lang, kaya ang -0.2 araw ay naging
+ * "0 days / Due Today" kahit overdue na at naka-auto-flag na.)
+ */
 const computeDaysLeft = (ts: Timestamp | null): number => {
   if (!ts) return 0;
   try {
-    return Math.ceil((ts.toDate().getTime() - new Date().getTime()) / 86400000);
+    const diffDays = (ts.toDate().getTime() - new Date().getTime()) / 86400000;
+    return diffDays < 0 ? Math.floor(diffDays) : Math.ceil(diffDays);
   } catch {
     return 0;
   }
+};
+
+/** True kapag ngayong araw ang due date at hindi pa lumalampas. */
+const isDueToday = (ts: Timestamp | null): boolean => {
+  if (!ts) return false;
+  try {
+    const due = ts.toDate();
+    const now = new Date();
+    return due.getTime() >= now.getTime() && due.toDateString() === now.toDateString();
+  } catch {
+    return false;
+  }
+};
+
+/** "Overdue", "5 hrs" kapag wala nang isang araw, o "2 days". */
+const formatTimeLeft = (ts: Timestamp | null, daysLeft: number): string => {
+  if (daysLeft < 0) return "Overdue";
+  if (!ts) return "—";
+  try {
+    const hours = Math.ceil((ts.toDate().getTime() - Date.now()) / 3600000);
+    if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"}`;
+  } catch {
+    return "—";
+  }
+  return `${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
 };
 
 const getStatusClass = (status: PendingStatus): string =>
@@ -233,137 +262,6 @@ const numberToWords = (num: number): string => {
 };
 
 /* ------------------------------------------------------------------
-  RECORD CASH PAYMENT (Finance)
------------------------------------------------------------------- */
-const recordCashPaymentFinance = async (params: {
-  violationId: string;
-  cin: string;
-  plateNo: string;
-  amountDue: number;
-  paymentLocation: PaymentLocation;
-  violatorUid: string | null;
-  guestId: string | null;
-  violatorName: string | null;
-  officerName: string;
-}): Promise<{ referenceNumber: string; orNumber: string; paymentId: string }> => {
-  const year = new Date().getFullYear();
-  const counterRef = doc(db, "counters", "paymentReference");
-  const orCounterRef = doc(db, "counters", "orNumber");
-  const violationRef = doc(db, "violations", params.violationId);
-  const paymentRef = doc(collection(db, "payments"));
-  const auditRef = doc(collection(db, "auditLogs"));
-
-  return runTransaction(db, async (tx) => {
-    /* Step 1: Reference Number */
-    const counterSnap = await tx.get(counterRef);
-    const lastRef = counterSnap.exists()
-      ? Number(counterSnap.data().lastValue ?? 0)
-      : 0;
-    const nextRef = lastRef + 1;
-    const referenceNumber = `REF-${year}-${String(nextRef).padStart(5, "0")}`;
-
-    /* Step 2: OR Number */
-    const orCounterSnap = await tx.get(orCounterRef);
-    const lastOr = orCounterSnap.exists()
-      ? Number(orCounterSnap.data().lastValue ?? 0)
-      : 0;
-    const nextOr = lastOr + 1;
-    const orNumber = `OR-${year}-${String(nextOr).padStart(5, "0")}`;
-
-    /* Step 3: Persist both counters */
-    tx.set(
-      counterRef,
-      { lastValue: nextRef, prefix: "REF", updatedAt: serverTimestamp() },
-      { merge: true }
-    );
-
-    tx.set(
-      orCounterRef,
-      { lastValue: nextOr, prefix: "OR", updatedAt: serverTimestamp() },
-      { merge: true }
-    );
-
-    /* Step 4: Update violation */
-    tx.update(violationRef, {
-      paymentStatus: "Pending Verification",
-      paymentMethod: "Cash",
-      paymentReference: referenceNumber,
-      referenceNumber,
-      orNumber,
-      totalPaid: params.amountDue,
-      cashReceived: params.amountDue,
-      cashChange: 0,
-      amountInWords: numberToWords(params.amountDue),
-      paymentLocation: params.paymentLocation,
-      paidAt: serverTimestamp(),
-      cashRecordedBy: params.officerName,
-      cashRecordedByRole: "finance",
-      orIssuedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      updatedBy: params.officerName,
-      violatorUid: params.violatorUid,
-      guestId: params.guestId,
-      violatorName: params.violatorName,
-    });
-
-    /* Step 5: Create payment record */
-    tx.set(paymentRef, {
-      violationId: params.violationId,
-      cin: params.cin,
-      plateNo: params.plateNo,
-      violatorUid: params.violatorUid,
-      guestId: params.guestId,
-      violatorName: params.violatorName,
-      amount: params.amountDue,
-      convenienceFee: 0,
-      totalAmount: params.amountDue,
-      cashReceived: params.amountDue,
-      amountInWords: numberToWords(params.amountDue),
-      referenceNumber,
-      orNumber,
-      paymentLocation: params.paymentLocation,
-      method: "Cash",
-      status: "Pending Verification",
-      verificationStatus: null,
-      recordedBy: params.officerName,
-      recordedByRole: "finance",
-      createdAt: serverTimestamp(),
-      orIssuedAt: serverTimestamp(),
-      orIssuedBy: params.officerName,
-    });
-
-    /* Step 6: Audit log */
-    tx.set(auditRef, {
-      userName: params.officerName,
-      userRole: "finance",
-      action: `recorded cash payment for ${params.cin} — OR #${orNumber}, Ref ${referenceNumber}, Location: ${params.paymentLocation}`,
-      record: params.cin,
-      type: "cash-payment",
-      metadata: {
-        cin: params.cin,
-        plateNo: params.plateNo,
-        amountDue: params.amountDue,
-        amountInWords: numberToWords(params.amountDue),
-        referenceNumber,
-        orNumber,
-        paymentLocation: params.paymentLocation,
-        paymentId: paymentRef.id,
-        violatorUid: params.violatorUid,
-        guestId: params.guestId,
-        violatorName: params.violatorName,
-      },
-      timestamp: serverTimestamp(),
-    });
-
-    return {
-      referenceNumber,
-      orNumber,
-      paymentId: paymentRef.id,
-    };
-  });
-};
-
-/* ------------------------------------------------------------------
   COMPONENT: PendingPaymentsFinance
 ------------------------------------------------------------------ */
 export default function PendingPaymentsFinance() {
@@ -401,6 +299,10 @@ export default function PendingPaymentsFinance() {
   const [savedOrNumber, setSavedOrNumber] = useState<string | null>(null);
   const [savedPaymentId, setSavedPaymentId] = useState<string | null>(null);
   const [showPrintSlip, setShowPrintSlip] = useState(false);
+  /** Cash handed over by the payer (blank = exact amount) */
+  const [cashGiven, setCashGiven] = useState("");
+  /** Cash received as saved, for the printed slip */
+  const [savedCashReceived, setSavedCashReceived] = useState<number | null>(null);
 
   /* Effect: Fetch pending payments (paymentStatus == "Unpaid") */
   useEffect(() => {
@@ -439,14 +341,13 @@ export default function PendingPaymentsFinance() {
               violationNo: generateViolationNo(cin),
               cin,
               plateNo: data.plateNo ?? "—",
-              amount: Number(data.fineAmount ?? 0),
+              fineAmount: Number(data.fineAmount ?? 0),
+              overdueFee: overdueFeeFor(data),
+              amount: amountDueFor(data),
               recordedAt,
               dueDate,
               daysLeft,
               status: (daysLeft < 0 ? "Overdue" : "Unpaid") as PendingStatus,
-              impoundStatus: data.impoundStatus ?? null,
-              impoundAutoFlagged: data.impoundAutoFlagged ?? false,
-              impoundFlaggedBy: data.impoundFlaggedBy ?? null,
               violatorUid: data.violatorUid ?? null,
               guestId: data.guestId ?? null,
               violatorName: data.violatorName ?? null,
@@ -518,6 +419,8 @@ export default function PendingPaymentsFinance() {
   const openCashModal = (row: PendingRow) => {
     setCashRow(row);
     setCashError("");
+    setCashGiven("");
+    setSavedCashReceived(null);
     setSavedReference(null);
     setSavedOrNumber(null);
     setSavedPaymentId(null);
@@ -544,20 +447,31 @@ export default function PendingPaymentsFinance() {
       return;
     }
 
+    const cashReceivedValue = cashGiven.trim() === "" ? cashRow.amount : Number(cashGiven);
+    if (!Number.isFinite(cashReceivedValue) || cashReceivedValue < cashRow.amount) {
+      setCashError(`Cash received must be at least ${formatCurrency(cashRow.amount)}.`);
+      return;
+    }
+
     setSaving(true);
     try {
-      const result = await recordCashPaymentFinance({
+      const result = await recordOnsitePayment({
         violationId: cashRow.id,
         cin: cashRow.cin,
         plateNo: cashRow.plateNo,
-        amountDue: cashRow.amount,
-        paymentLocation,
+        fineAmount: cashRow.fineAmount,
+        overdueFee: cashRow.overdueFee,
+        amountInWords: numberToWords(cashRow.amount),
+        cashReceived: cashReceivedValue,
+        counterLocation: paymentLocation,
+        recordedByRole: "finance",
+        officerName: currentUser.name,
         violatorUid: cashRow.violatorUid || null,
         guestId: cashRow.guestId || null,
         violatorName: cashRow.violatorName || null,
-        officerName: currentUser.name,
       });
 
+      setSavedCashReceived(cashReceivedValue);
       setSavedReference(result.referenceNumber);
       setSavedOrNumber(result.orNumber);
       setSavedPaymentId(result.paymentId);
@@ -587,10 +501,6 @@ export default function PendingPaymentsFinance() {
       result = result.filter((row) => {
         if (statusFilter === "Unpaid") return row.status === "Unpaid";
         if (statusFilter === "Overdue") return row.status === "Overdue";
-        if (statusFilter === "Subject to Impound")
-          return row.impoundStatus === "Subject to Impound";
-        if (statusFilter === "Impounded")
-          return row.impoundStatus === "Impounded";
         return true;
       });
     }
@@ -620,7 +530,7 @@ export default function PendingPaymentsFinance() {
   const metrics = useMemo(() => {
     const totalPending = rows.length;
     const overdue = rows.filter((r) => r.daysLeft < 0).length;
-    const dueToday = rows.filter((r) => r.daysLeft === 0).length;
+    const dueToday = rows.filter((r) => r.daysLeft >= 0 && isDueToday(r.dueDate)).length;
     return { totalPending, overdue, dueToday };
   }, [rows]);
 
@@ -840,12 +750,15 @@ export default function PendingPaymentsFinance() {
                               <span className="cin-pill">{row.cin}</span>
                             </td>
                             <td className="cell-plate">{row.plateNo}</td>
-                            <td className="cell-amount">{formatCurrency(row.amount)}</td>
+                            <td className="cell-amount">
+                              {formatCurrency(row.amount)}
+                              {row.overdueFee > 0 && (
+                                <small className="amount-note">overdue clamp fee</small>
+                              )}
+                            </td>
                             <td className="cell-due-date">{formatDate(row.dueDate)}</td>
                             <td className={`cell-days-left ${row.daysLeft < 0 ? "text-red" : ""}`}>
-                              {row.daysLeft < 0
-                                ? "Overdue"
-                                : `${row.daysLeft} day${row.daysLeft === 1 ? "" : "s"}`}
+                              {formatTimeLeft(row.dueDate, row.daysLeft)}
                             </td>
                             <td>
                               <span className={`status-pill ${getStatusClass(row.status)}`}>
@@ -861,24 +774,6 @@ export default function PendingPaymentsFinance() {
                                 Cash Payment
                               </button>
 
-                              {row.impoundStatus === "Subject to Impound" && (
-                                <span
-                                  className={`badge-impound ${
-                                    row.impoundAutoFlagged ? "badge-impound-auto" : ""
-                                  }`}
-                                  title={
-                                    row.impoundAutoFlagged
-                                      ? "Automatically flagged by system (24hr grace period expired)"
-                                      : `Flagged by ${row.impoundFlaggedBy ?? "OIC"}`
-                                  }
-                                >
-                                  {row.impoundAutoFlagged ? "🤖 Auto-flagged" : "Subject to Impound"}
-                                </span>
-                              )}
-
-                              {row.impoundStatus === "Impounded" && (
-                                <span className="badge-impounded">Impounded</span>
-                              )}
                             </td>
                           </tr>
                         ))}
@@ -983,6 +878,22 @@ export default function PendingPaymentsFinance() {
                         <strong>{cashRow.violatorName}</strong>
                       </div>
                     )}
+                    {cashRow.overdueFee > 0 ? (
+                      <div className="cash-summary-row">
+                        <span>
+                          Overdue Clamp Fee
+                          <small className="amount-note">
+                            Past 24 hours — replaces the {formatCurrency(cashRow.fineAmount)} fine
+                          </small>
+                        </span>
+                        <strong>{formatCurrency(cashRow.overdueFee)}</strong>
+                      </div>
+                    ) : (
+                      <div className="cash-summary-row">
+                        <span>Fine</span>
+                        <strong>{formatCurrency(cashRow.fineAmount)}</strong>
+                      </div>
+                    )}
                     <div className="cash-summary-row">
                       <span>Amount Due</span>
                       <strong className="cash-summary-amount">
@@ -996,11 +907,37 @@ export default function PendingPaymentsFinance() {
                       </strong>
                     </div>
                     <div className="cash-summary-row">
-                      <span>Cash Received</span>
+                      <span>Change</span>
                       <strong className="cash-summary-amount">
-                        {formatCurrency(cashRow.amount)}
+                        {formatCurrency(
+                          Math.max(
+                            0,
+                            (cashGiven.trim() === "" ? cashRow.amount : Number(cashGiven) || 0) -
+                              cashRow.amount
+                          )
+                        )}
                       </strong>
                     </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="cashGiven">Cash Received</label>
+                    <input
+                      id="cashGiven"
+                      className="form-input"
+                      type="number"
+                      inputMode="decimal"
+                      min={cashRow.amount}
+                      step="0.01"
+                      placeholder={cashRow.amount.toFixed(2)}
+                      value={cashGiven}
+                      onChange={(e) => setCashGiven(e.target.value)}
+                      disabled={saving}
+                    />
+                    <small className="form-hint">
+                      Amount handed over by the payer. Leave blank if exact. GCash is paid
+                      online through the violator app.
+                    </small>
                   </div>
 
                   {/* PAYMENT LOCATION — automatic (assignedLocation ng staff) */}
@@ -1080,8 +1017,10 @@ export default function PendingPaymentsFinance() {
           referenceNumber={savedReference || ""}
           cin={cashRow.cin}
           plateNo={cashRow.plateNo}
-          amount={cashRow.amount}
+          amount={cashRow.overdueFee > 0 ? 0 : cashRow.fineAmount}
+          overdueFee={cashRow.overdueFee}
           totalAmount={cashRow.amount}
+          cashReceived={savedCashReceived ?? undefined}
           orNumber={savedOrNumber || ""}
           recordedBy={currentUser.name}
           createdAt={new Date()}
