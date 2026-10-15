@@ -25,6 +25,7 @@ import {
   Calendar,
   BarChart3,
   Table2,
+  ImageDown,
 } from "lucide-react";
 import {
   BarChart,
@@ -66,6 +67,12 @@ import {
   type ReportKind,
   type ReportPeriod,
 } from "../../lib/enforcementReport";
+import {
+  chartFileName,
+  downloadCanvasPng,
+  renderBreakdownChart,
+  renderDayChart,
+} from "../../lib/reportCharts";
 import "./AllReports.css";
 
 // Asset imports
@@ -153,6 +160,22 @@ const REPORT_ICONS: Record<ReportKind, typeof Calendar> = {
 /** Chart series — validated categorical pair (blue / orange). */
 const SERIES = { recorded: "#2a78d6", released: "#eb6834" };
 
+/** Download-as-PNG button shown beside a chart's title. */
+function PngButton({ onClick, label }: { onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      className="rp-png-btn rp-no-print"
+      onClick={onClick}
+      title={`Download "${label}" as an image (PNG)`}
+      aria-label={`Download ${label} chart as PNG`}
+    >
+      <ImageDown size={14} />
+      PNG
+    </button>
+  );
+}
+
 const RECORDS_PREVIEW = 8;
 
 // ---------------------------------------------------------------------------
@@ -191,17 +214,22 @@ function Breakdown({
   label,
   rows,
   limit,
+  onDownload,
 }: {
   title: string;
   label: string;
   rows: CountRow[];
   limit?: number;
+  onDownload?: () => void;
 }) {
   const shown = limit ? rows.slice(0, limit) : rows;
   const max = shown[0]?.count ?? 0;
   return (
     <div className="rp-breakdown">
-      <h3 className="rp-section-title">{title}</h3>
+      <div className="rp-breakdown-head">
+        <h3 className="rp-section-title">{title}</h3>
+        {onDownload && shown.length > 0 && <PngButton onClick={onDownload} label={title} />}
+      </div>
       {shown.length === 0 ? (
         <p className="rp-muted">No records for this period.</p>
       ) : (
@@ -446,6 +474,23 @@ export default function AllReports() {
     // Let the full list render before the print dialog opens.
     setTimeout(() => window.print(), 150);
   };
+
+  /** Saves one chart as a PNG, titled with the report and period. */
+  const downloadChart = (chart: string, draw: (heading: { title: string; subtitle: string }) => HTMLCanvasElement) => {
+    try {
+      const canvas = draw({
+        title: chart,
+        subtitle: `${def.title} · ${period.label} · MTPB Sector 3`,
+      });
+      downloadCanvasPng(canvas, chartFileName(chart, period.fileTag));
+    } catch (err) {
+      console.error("Chart download failed:", err);
+      alert("Couldn't create the chart image. Please try again.");
+    }
+  };
+
+  const breakdownDownload = (chart: string, rows: CountRow[], limit = 10) => () =>
+    downloadChart(chart, (heading) => renderBreakdownChart(rows, { ...heading, limit }));
 
   const shownRecords = showAllRecords
     ? report.records
@@ -793,6 +838,15 @@ export default function AllReports() {
                         <div className="rp-section">
                           <div className="rp-section-head">
                             <h3 className="rp-section-title">Day by day</h3>
+                            <div className="rp-section-tools">
+                            <PngButton
+                              label="Day by day"
+                              onClick={() =>
+                                downloadChart("Day by day", (heading) =>
+                                  renderDayChart(report.days, heading)
+                                )
+                              }
+                            />
                             <div className="rp-toggle rp-no-print" role="group" aria-label="View">
                               <button
                                 type="button"
@@ -810,6 +864,7 @@ export default function AllReports() {
                               >
                                 <Table2 size={14} /> Table
                               </button>
+                            </div>
                             </div>
                           </div>
 
@@ -897,10 +952,31 @@ export default function AllReports() {
 
                       {/* BREAKDOWNS */}
                       <div className="rp-breakdown-grid">
-                        <Breakdown title="By violation type" label="Violation" rows={report.byViolation} />
-                        <Breakdown title="Top locations" label="Location" rows={report.byLocation} limit={8} />
-                        <Breakdown title="By enforcer" label="Enforcer" rows={report.byOfficer} />
-                        <Breakdown title="By vehicle type" label="Vehicle" rows={report.byVehicleType} />
+                        <Breakdown
+                          title="By violation type"
+                          label="Violation"
+                          rows={report.byViolation}
+                          onDownload={breakdownDownload("Violations by type", report.byViolation)}
+                        />
+                        <Breakdown
+                          title="Top locations"
+                          label="Location"
+                          rows={report.byLocation}
+                          limit={8}
+                          onDownload={breakdownDownload("Top locations", report.byLocation)}
+                        />
+                        <Breakdown
+                          title="By enforcer"
+                          label="Enforcer"
+                          rows={report.byOfficer}
+                          onDownload={breakdownDownload("Violations by enforcer", report.byOfficer)}
+                        />
+                        <Breakdown
+                          title="By vehicle type"
+                          label="Vehicle"
+                          rows={report.byVehicleType}
+                          onDownload={breakdownDownload("Violations by vehicle type", report.byVehicleType)}
+                        />
                       </div>
 
                       {/* RECORDS */}

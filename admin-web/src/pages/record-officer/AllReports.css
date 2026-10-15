@@ -679,3 +679,44 @@
 .reports-page .rp-records-table .cin-pill {
   white-space: nowrap;
 }
+
+/* ==================================================================
+   CHART DOWNLOAD (PNG)
+================================================================== */
+.reports-page .rp-section-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reports-page .rp-breakdown-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.reports-page .rp-breakdown-head .rp-section-title {
+  margin: 0;
+}
+
+.reports-page .rp-png-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid #E5E7EB;
+  background: #fff;
+  color: #374151;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reports-page .rp-png-btn:hover {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}

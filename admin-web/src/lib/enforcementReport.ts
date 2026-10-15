@@ -20,6 +20,7 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { amountDue, impoundFeeDue } from "./impoundFlag";
+import { renderBreakdownChart, renderDayChart } from "./reportCharts";
 
 export type ReportKind = "daily" | "weekly" | "monthly";
 
@@ -444,6 +445,34 @@ export const downloadReportPdf = (data: ReportData, preparedBy: string): void =>
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 18;
   };
 
+  /** A chart (canvas) across the page width, with its own title. */
+  const chart = (title: string, canvas: HTMLCanvasElement | null) => {
+    if (!canvas) return;
+    const w = pageWidth - margin * 2;
+    const h = (w * canvas.height) / canvas.width;
+    if (y + h + 30 > pageHeight - 50) {
+      doc.addPage();
+      y = margin;
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(17, 24, 39);
+    doc.text(title, margin, y + 10);
+    y += 18;
+    doc.addImage(canvas.toDataURL("image/png"), "PNG", margin, y, w, h);
+    y += h + 18;
+  };
+
+  /** Charts are a bonus: if the browser can't draw them, the tables remain. */
+  const safeChart = (draw: () => HTMLCanvasElement): HTMLCanvasElement | null => {
+    try {
+      return draw();
+    } catch (err) {
+      console.warn("Chart not added to the PDF:", err);
+      return null;
+    }
+  };
+
   section("Summary", 11);
   table(
     ["Item", "Value"],
@@ -451,9 +480,28 @@ export const downloadReportPdf = (data: ReportData, preparedBy: string): void =>
     { columnStyles: { 1: { halign: "right", cellWidth: 170 } } }
   );
 
-  const breakdown = (title: string, label: string, rows: CountRow[], limit?: number) => {
+  if (data.days.length) {
+    chart("Day by day: recorded vs released", safeChart(() => renderDayChart(data.days, { height: 330 })));
+  }
+
+  const breakdown = (
+    title: string,
+    label: string,
+    rows: CountRow[],
+    limit?: number,
+    withChart = false
+  ) => {
     const shown = limit ? rows.slice(0, limit) : rows;
-    section(title, shown.length);
+    if (withChart && shown.length > 0) {
+      chart(title, safeChart(() => renderBreakdownChart(rows, { limit: limit ?? 10 })));
+      // The table follows the chart under the same heading.
+      if (y + 40 + Math.min(shown.length + 1, 12) * 19 > pageHeight - 50) {
+        doc.addPage();
+        y = margin;
+      }
+    } else {
+      section(title, shown.length);
+    }
     table(
       [label, "Count", "Share"],
       shown.map((r) => [r.name, r.count, pct(r.share)]),
@@ -461,8 +509,8 @@ export const downloadReportPdf = (data: ReportData, preparedBy: string): void =>
     );
   };
 
-  breakdown("Violations by type", "Violation", data.byViolation);
-  breakdown("Top locations", "Location", data.byLocation, 10);
+  breakdown("Violations by type", "Violation", data.byViolation, undefined, true);
+  breakdown("Top locations", "Location", data.byLocation, 10, true);
   breakdown("Violations by enforcer", "Enforcer", data.byOfficer);
 
   if (data.days.length) {
