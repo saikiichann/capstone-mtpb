@@ -45,8 +45,6 @@ import queueIcon from "../../assets/queue.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import mapIcon from "../../assets/map.png";
 import sectorAnalyticsIcon from "../../assets/sectoranalytics.png";
-import clampingTeamsIcon from "../../assets/clampingteams.png";
-import towTruckIcon from "../../assets/tow-truck.png";
 import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
 import logoutIcon from "../../assets/logout.png";
@@ -174,8 +172,6 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { label: "Active Clamping Teams", icon: clampingTeamsIcon, path: "/dashboard/clamping-teams" },
-      { label: "Active Impounding", icon: towTruckIcon, path: "/dashboard/active-impounding" },
       { label: "Field Updates", icon: fieldUpdateIcon, path: "/dashboard/field-updates" },
       { label: "Operation Scheduler", icon: operationSchedulerIcon, path: "/dashboard/operation-scheduler" },
     ],
@@ -455,7 +451,7 @@ export default function PendingPaymentsOIC() {
 
   /* AUTO-FLAG OVERDUE VIOLATIONS
      Clamped and unpaid past the 24-hour window → "Subject to Impound",
-     plus an impoundRecords entry so the vehicle reaches Active Impounding
+     plus an impoundRecords entry so the vehicle reaches the Impounding Log
      and the Impounding Log. Also adds the record for violations flagged
      before that was done. Direct tows (enforcementType "impounded") are
      already impounded, so they are skipped. */

@@ -49,8 +49,6 @@ import impoundingIcon from "../../assets/impounding.png";
 import historyIcon from "../../assets/history.png";
 import releaseRequestIcon from "../../assets/releaserequest.png";
 import releaseLogIcon from "../../assets/releaselog.png";
-import clampingTeamsIcon from "../../assets/clampingteams.png";
-import towTruckIcon from "../../assets/tow-truck.png";
 import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
 import logoutIcon from "../../assets/logout.png";
@@ -217,16 +215,6 @@ const navGroups: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      {
-        label: "Active Clamping Teams",
-        icon: clampingTeamsIcon,
-        path: "/supervisor/clamping-teams",
-      },
-      {
-        label: "Active Impounding",
-        icon: towTruckIcon,
-        path: "/supervisor/active-impounding",
-      },
       {
         label: "Field Updates",
         icon: fieldUpdateIcon,

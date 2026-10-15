@@ -44,8 +44,6 @@ import revenueIcon from "../../assets/revenue.png";
 import releaseRequestIcon from "../../assets/releaserequest.png";
 import queueIcon from "../../assets/queue.png";
 import releaseLogIcon from "../../assets/releaselog.png";
-import clampingTeamsIcon from "../../assets/clampingteams.png";
-import towTruckIcon from "../../assets/tow-truck.png";
 import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
 
@@ -164,8 +162,6 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { label: "Active Clamping Teams", icon: clampingTeamsIcon, path: "/dashboard/clamping-teams" },
-      { label: "Active Impounding", icon: towTruckIcon, path: "/dashboard/active-impounding" },
       { label: "Field Updates", icon: fieldUpdateIcon, path: "/dashboard/field-updates" },
       { label: "Operation Scheduler", icon: operationSchedulerIcon, path: "/dashboard/operation-scheduler" },
     ],
@@ -358,7 +354,7 @@ export default function ClampingLog() {
      1. Clamped violations past the 24-hour grace period are flagged
         "Subject to Impound" with a fixed impound fee of ₱2,000.
      2. Every flagged violation gets an impoundRecords entry (doc id =
-        violation id). That collection is what Active Impounding, the
+        violation id). That collection is what the Impounding Log, the
         Impounding Staff pages and the Impounding Log read, so without it
         a flagged vehicle never reaches the impounding side. This also
         backfills violations that were auto-flagged before this fix.

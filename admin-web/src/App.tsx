@@ -10,7 +10,6 @@
   import OICReleaseRequests from "./pages/oic/ReleaseRequests";
   import GeospatialHeatmap from "./pages/oic/Geospatialheatmap";
   import OICClampingLog from "./pages/oic/ClampingLog";
-  import OICActiveImpounding from "./pages/oic/ActiveImpounding";
   import OICImpoundingLog from "./pages/oic/ImpoundingLog";
   import OICVehicleHistory from "./pages/oic/VehicleHistory";
   import OICPendingPayments from "./pages/oic/PendingPayments";
@@ -19,7 +18,6 @@
   import OICRevenueReports from "./pages/oic/RevenueReports";
   import OICReleaseQueue from "./pages/oic/ReleaseQueue";
   import OICReleaseLog from "./pages/oic/ReleaseLog";
-  import OICActiveClampingTeams from "./pages/oic/ActiveClampingTeams";
   import OICFieldUpdates from "./pages/oic/FieldUpdates";
   import OICOperationScheduler from "./pages/oic/OperationScheduler";
 
@@ -33,8 +31,6 @@
   import SupervisorReleaseRequests from "./pages/supervisor/ReleaseRequests";
   import SupervisorReleaseQueue from "./pages/supervisor/ReleaseQueue";
   import SupervisorReleaseLog from "./pages/supervisor/ReleaseLog";
-  import SupervisorActiveClampingTeams from "./pages/supervisor/ActiveClampingTeams";
-  import SupervisorActiveImpounding from "./pages/supervisor/ActiveImpounding";
   import SupervisorFieldUpdates from "./pages/supervisor/FieldUpdates";
   import SupervisorOperationScheduler from "./pages/supervisor/OperationScheduler";
 
@@ -218,22 +214,6 @@
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/dashboard/clamping-teams"
-            element={
-              <ProtectedRoute allowedRoles={["oic"]}>
-                <OICActiveClampingTeams />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dashboard/active-impounding"
-            element={
-              <ProtectedRoute allowedRoles={["oic"]}>
-                <OICActiveImpounding />
-              </ProtectedRoute>
-            }
-          />
 
           <Route
             path="/dashboard/field-updates"
@@ -258,7 +238,7 @@
               Its own pages in pages/supervisor/ (same content as the OIC's,
               with the Supervisor's sidebar and its own CSS files).
               Can: approve/reject release requests, Release Queue actions,
-              Operation Scheduler, Active Clamping Teams. Cannot: payments,
+              Operation Scheduler. Cannot: payments,
               or flag "Subject to Impound" (OIC-only, also in Firestore rules).
           ================================================================ */}
           <Route
@@ -330,22 +310,6 @@
             element={
               <ProtectedRoute allowedRoles={["supervisor"]}>
                 <SupervisorReleaseLog />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/supervisor/clamping-teams"
-            element={
-              <ProtectedRoute allowedRoles={["supervisor"]}>
-                <SupervisorActiveClampingTeams />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/supervisor/active-impounding"
-            element={
-              <ProtectedRoute allowedRoles={["supervisor"]}>
-                <SupervisorActiveImpounding />
               </ProtectedRoute>
             }
           />
