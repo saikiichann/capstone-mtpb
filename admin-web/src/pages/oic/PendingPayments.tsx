@@ -26,12 +26,7 @@ import {
   type ImpoundRecordSource,
 } from "../../lib/impoundFlag";
 import CashPaymentSlip from "../../components/CashPaymentSlip";
-import {
-  isGcashReferenceUsed,
-  isValidGcashReference,
-  recordOnsitePayment,
-  type OnsiteMethod,
-} from "../../lib/onsitePayment";
+import { recordOnsitePayment } from "../../lib/onsitePayment";
 
 // Asset imports
 import mtpbLogo from "../../assets/mtpb-logo.png";
@@ -329,8 +324,6 @@ export default function PendingPaymentsOIC() {
   const [savedOrNumber, setSavedOrNumber] = useState<string | null>(null);
   const [savedPaymentId, setSavedPaymentId] = useState<string | null>(null);
   const [showPrintSlip, setShowPrintSlip] = useState(false);
-  const [payMethod, setPayMethod] = useState<OnsiteMethod>("Cash");
-  const [gcashRef, setGcashRef] = useState("");
   /** Cash handed over by the payer (blank = exact amount) */
   const [cashGiven, setCashGiven] = useState("");
   /** Cash received as saved, for the printed slip */
@@ -587,8 +580,6 @@ export default function PendingPaymentsOIC() {
   const openCashModal = (row: PendingRow) => {
     setCashRow(row);
     setCashError("");
-    setPayMethod("Cash");
-    setGcashRef("");
     setCashGiven("");
     setSavedCashReceived(null);
     setPaymentLocation("Central");
@@ -612,22 +603,13 @@ export default function PendingPaymentsOIC() {
     setCashError("");
 
     const cashReceivedValue = cashGiven.trim() === "" ? cashRow.amount : Number(cashGiven);
-    if (payMethod === "Cash" && (!Number.isFinite(cashReceivedValue) || cashReceivedValue < cashRow.amount)) {
+    if (!Number.isFinite(cashReceivedValue) || cashReceivedValue < cashRow.amount) {
       setCashError(`Cash received must be at least ${formatCurrency(cashRow.amount)}.`);
-      return;
-    }
-    if (payMethod === "GCash" && !isValidGcashReference(gcashRef)) {
-      setCashError("Enter the 13-digit reference no. from the payer's GCash receipt.");
       return;
     }
 
     setSaving(true);
     try {
-      if (payMethod === "GCash" && (await isGcashReferenceUsed(gcashRef))) {
-        setCashError("This GCash reference no. was already used for another payment.");
-        return;
-      }
-
       const result = await recordOnsitePayment({
         violationId: cashRow.id,
         cin: cashRow.cin,
@@ -635,9 +617,7 @@ export default function PendingPaymentsOIC() {
         fineAmount: cashRow.fineAmount,
         impoundFee: cashRow.impoundFee,
         amountInWords: numberToWords(cashRow.amount),
-        method: payMethod,
-        gcashReference: gcashRef,
-        cashReceived: payMethod === "Cash" ? cashReceivedValue : undefined,
+        cashReceived: cashReceivedValue,
         counterLocation: paymentLocation,
         recordedByRole: "oic",
         officerName: currentUser.name,
@@ -646,7 +626,7 @@ export default function PendingPaymentsOIC() {
         violatorName: cashRow.violatorName || null,
       });
 
-      setSavedCashReceived(payMethod === "Cash" ? cashReceivedValue : null);
+      setSavedCashReceived(cashReceivedValue);
       setSavedReference(result.referenceNumber);
       setSavedOrNumber(result.orNumber);
       setSavedPaymentId(result.paymentId);
@@ -1109,8 +1089,8 @@ export default function PendingPaymentsOIC() {
                     </div>
                   )}
                   <p className="cash-saved-note">
-                    {payMethod} payment recorded by <strong>{currentUser.name}</strong> (OIC) —{" "}
-                    <strong>{payMethod === "GCash" ? "Online (GCash)" : paymentLocation}</strong>. {cashRow.cin} now appears under
+                    Cash payment recorded by <strong>{currentUser.name}</strong> (OIC) —{" "}
+                    <strong>{paymentLocation}</strong>. {cashRow.cin} now appears under
                     Payment Verification.
                   </p>
                   <p className="cash-saved-hint">
@@ -1168,89 +1148,41 @@ export default function PendingPaymentsOIC() {
                         {numberToWords(cashRow.amount)}
                       </strong>
                     </div>
-                    {payMethod === "Cash" && (
-                      <div className="cash-summary-row">
-                        <span>Change</span>
-                        <strong className="cash-summary-amount">
-                          {formatCurrency(
-                            Math.max(
-                              0,
-                              (cashGiven.trim() === "" ? cashRow.amount : Number(cashGiven) || 0) -
-                                cashRow.amount
-                            )
-                          )}
-                        </strong>
-                      </div>
-                    )}
+                    <div className="cash-summary-row">
+                      <span>Change</span>
+                      <strong className="cash-summary-amount">
+                        {formatCurrency(
+                          Math.max(
+                            0,
+                            (cashGiven.trim() === "" ? cashRow.amount : Number(cashGiven) || 0) -
+                              cashRow.amount
+                          )
+                        )}
+                      </strong>
+                    </div>
                   </div>
 
-                  {/* PAYMENT METHOD — Cash, or GCash paid to the MTPB QR */}
                   <div className="form-group">
-                    <label>Payment Method</label>
-                    <div className="pay-method-toggle" role="radiogroup">
-                      {(["Cash", "GCash"] as OnsiteMethod[]).map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          role="radio"
-                          aria-checked={payMethod === m}
-                          className={`pay-method-option ${payMethod === m ? "is-active" : ""}`}
-                          onClick={() => {
-                            setPayMethod(m);
-                            setCashError("");
-                          }}
-                          disabled={saving}
-                        >
-                          {m}
-                        </button>
-                      ))}
-                    </div>
+                    <label htmlFor="cashGiven">Cash Received</label>
+                    <input
+                      id="cashGiven"
+                      className="form-input"
+                      type="number"
+                      inputMode="decimal"
+                      min={cashRow.amount}
+                      step="0.01"
+                      placeholder={cashRow.amount.toFixed(2)}
+                      value={cashGiven}
+                      onChange={(e) => setCashGiven(e.target.value)}
+                      disabled={saving}
+                    />
+                    <small className="form-hint">
+                      Amount handed over by the payer. Leave blank if exact. GCash is paid
+                      online through the violator app.
+                    </small>
                   </div>
 
-                  {payMethod === "Cash" && (
-                    <div className="form-group">
-                      <label htmlFor="cashGiven">Cash Received</label>
-                      <input
-                        id="cashGiven"
-                        className="form-input"
-                        type="number"
-                        inputMode="decimal"
-                        min={cashRow.amount}
-                        step="0.01"
-                        placeholder={cashRow.amount.toFixed(2)}
-                        value={cashGiven}
-                        onChange={(e) => setCashGiven(e.target.value)}
-                        disabled={saving}
-                      />
-                      <small className="form-hint">
-                        Amount handed over by the payer. Leave blank if exact.
-                      </small>
-                    </div>
-                  )}
-
-                  {payMethod === "GCash" && (
-                    <div className="form-group">
-                      <label htmlFor="gcashRef">
-                        GCash Reference No. <span className="required">*</span>
-                      </label>
-                      <input
-                        id="gcashRef"
-                        className="form-input"
-                        inputMode="numeric"
-                        placeholder="13-digit reference no."
-                        value={gcashRef}
-                        onChange={(e) => setGcashRef(e.target.value.replace(/[^\d\s]/g, "").slice(0, 16))}
-                        disabled={saving}
-                      />
-                      <small className="form-hint">
-                        From the payer's GCash receipt after paying to the MTPB GCash QR.
-                        Recorded as an Online (GCash) payment.
-                      </small>
-                    </div>
-                  )}
-
-                  {/* PAYMENT LOCATION — cash only; GCash is "Online" */}
-                  {payMethod === "Cash" && (
+                  {/* PAYMENT LOCATION */}
                   <div className="form-group">
                     <label htmlFor="paymentLocation">
                       Payment Location <span className="required">*</span>
@@ -1272,7 +1204,6 @@ export default function PendingPaymentsOIC() {
                       Select where the violator paid — Central (MTPB Office) or City Hall.
                     </small>
                   </div>
-                  )}
 
                   {/* OR NUMBER — Auto-generated */}
                   <div className="form-group">
@@ -1429,7 +1360,6 @@ export default function PendingPaymentsOIC() {
           amount={cashRow.impoundFee > 0 ? 0 : cashRow.fineAmount}
           impoundFee={cashRow.impoundFee}
           totalAmount={cashRow.amount}
-          method={payMethod}
           cashReceived={savedCashReceived ?? undefined}
           orNumber={savedOrNumber || ""}
           recordedBy={currentUser.name}

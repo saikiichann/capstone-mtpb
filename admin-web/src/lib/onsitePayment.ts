@@ -1,30 +1,18 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  limit,
-  query,
-  runTransaction,
-  serverTimestamp,
-  where,
-} from "firebase/firestore";
+import { collection, doc, runTransaction, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 
 /* ------------------------------------------------------------------
    onsitePayment
-   Pag-record ng bayad na tinanggap ng staff mismo (counter sa City Hall
-   o sa MTPB Central / impound area): Cash, o GCash na binayaran sa QR ng
-   MTPB at ine-encode ng staff ang GCash reference no.
+   Pag-record ng CASH na tinanggap ng staff mismo (counter sa City Hall,
+   o sa MTPB Central / impound area). Ang GCash ay online, sa violator
+   app (PWA) — hindi dito.
 
-   - Pareho sa dati: REF + OR number, violation → "Pending Verification",
-     payment record, audit log. Iba pang staff ang magve-verify.
+   - REF + OR number, violation → "Pending Verification", payment
+     record, audit log. Iba pang staff ang magve-verify.
    - Ang babayaran = clamp fine, o ₱2,000 impound fee kapag Impounded na
      (pinapalitan ng impound fee ang clamp fine — hindi dinadagdag).
-   - GCash → paymentLocation "Online" (Central Finance + OIC ang sakop,
-     ayon sa lib/paymentLocation.ts).
+   - Cash Received at Change ay sine-save para sa slip.
 ------------------------------------------------------------------ */
-
-export type OnsiteMethod = "Cash" | "GCash";
 
 export type OnsitePaymentParams = {
   violationId: string;
@@ -33,10 +21,7 @@ export type OnsitePaymentParams = {
   fineAmount: number;
   impoundFee: number;
   amountInWords: string;
-  method: OnsiteMethod;
-  /** Required for GCash: the reference no. on the payer's GCash receipt */
-  gcashReference?: string;
-  /** Cash only: amount handed over (≥ total). Change = cashReceived − total. */
+  /** Amount handed over (≥ total). Change = cashReceived − total. */
   cashReceived?: number;
   /** Counter where the staff received it (City Hall / Central) */
   counterLocation: "City Hall" | "Central";
@@ -47,35 +32,16 @@ export type OnsitePaymentParams = {
   violatorName: string | null;
 };
 
-/** GCash reference numbers are 13 digits; allow spaces when typed. */
-export const normalizeGcashReference = (raw: string): string => raw.replace(/\s+/g, "");
-
-export const isValidGcashReference = (raw: string): boolean =>
-  /^\d{13}$/.test(normalizeGcashReference(raw));
-
-/** True kapag nagamit na ang GCash reference sa ibang bayad. */
-export const isGcashReferenceUsed = async (raw: string): Promise<boolean> => {
-  const ref = normalizeGcashReference(raw);
-  const snap = await getDocs(
-    query(collection(db, "payments"), where("gcashReference", "==", ref), limit(1))
-  );
-  return !snap.empty;
-};
-
 export const recordOnsitePayment = async (
   params: OnsitePaymentParams
 ): Promise<{ referenceNumber: string; orNumber: string; paymentId: string }> => {
-  const isGcash = params.method === "GCash";
-  const gcashReference = isGcash ? normalizeGcashReference(params.gcashReference ?? "") : null;
-  if (isGcash && !gcashReference) throw new Error("GCash reference no. is required.");
-
   const impounded = params.impoundFee > 0;
   const total = impounded ? params.impoundFee : params.fineAmount;
   /** Fine actually charged: none once impounded (the impound fee replaces it). */
   const fineCharged = impounded ? 0 : params.fineAmount;
-  const paymentLocation = isGcash ? "Online" : params.counterLocation;
-  const cashReceived = isGcash ? 0 : Math.max(total, Number(params.cashReceived ?? total) || total);
-  const cashChange = isGcash ? 0 : cashReceived - total;
+  const paymentLocation = params.counterLocation;
+  const cashReceived = Math.max(total, Number(params.cashReceived ?? total) || total);
+  const cashChange = cashReceived - total;
 
   const year = new Date().getFullYear();
   const counterRef = doc(db, "counters", "paymentReference");
@@ -106,11 +72,10 @@ export const recordOnsitePayment = async (
 
     tx.update(violationRef, {
       paymentStatus: "Pending Verification",
-      paymentMethod: params.method,
+      paymentMethod: "Cash",
       paymentReference: referenceNumber,
       referenceNumber,
       orNumber,
-      gcashReference,
       impoundFeePaid: params.impoundFee,
       totalPaid: total,
       cashReceived,
@@ -146,10 +111,8 @@ export const recordOnsitePayment = async (
       amountInWords: params.amountInWords,
       referenceNumber,
       orNumber,
-      gcashReference,
       paymentLocation,
-      receivedAt: params.counterLocation,
-      method: params.method,
+      method: "Cash",
       status: "Pending Verification",
       verificationStatus: null,
       recordedBy: params.officerName,
@@ -163,11 +126,10 @@ export const recordOnsitePayment = async (
       userName: params.officerName,
       userRole: params.recordedByRole,
       action:
-        `recorded ${params.method} payment for ${params.cin} — OR #${orNumber}, Ref ${referenceNumber}` +
-        (isGcash ? `, GCash Ref ${gcashReference}` : `, Location: ${paymentLocation}`) +
+        `recorded cash payment for ${params.cin} — OR #${orNumber}, Ref ${referenceNumber}, Location: ${paymentLocation}` +
         (impounded ? `, impound fee ₱${params.impoundFee.toLocaleString()}` : ""),
       record: params.cin,
-      type: isGcash ? "gcash-onsite-payment" : "cash-payment",
+      type: "cash-payment",
       metadata: {
         cin: params.cin,
         plateNo: params.plateNo,
@@ -176,13 +138,11 @@ export const recordOnsitePayment = async (
         impoundFee: params.impoundFee,
         amountDue: total,
         amountInWords: params.amountInWords,
-        method: params.method,
-        gcashReference,
-        referenceNumber,
+        method: "Cash",
+          referenceNumber,
         orNumber,
         paymentLocation,
-        receivedAt: params.counterLocation,
-        paymentId: paymentRef.id,
+          paymentId: paymentRef.id,
         violatorUid: params.violatorUid,
         guestId: params.guestId,
         violatorName: params.violatorName,

@@ -1191,41 +1191,8 @@
 }
 
 /* ==================================================================
-   ON-SITE PAYMENT: Cash / GCash toggle + impound fee note
+   Impound fee note (Amount column / payment modal)
 ================================================================== */
-.pending-payments-page .pay-method-toggle {
-  display: inline-flex;
-  border: 1px solid #D1D5DB;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.pending-payments-page .pay-method-option {
-  padding: 8px 22px;
-  background: #FFFFFF;
-  color: #374151;
-  border: none;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.pending-payments-page .pay-method-option + .pay-method-option {
-  border-left: 1px solid #D1D5DB;
-}
-
-.pending-payments-page .pay-method-option.is-active {
-  background: #1D4ED8;
-  color: #FFFFFF;
-}
-
-.pending-payments-page .pay-method-option:disabled {
-  color: #9CA3AF;
-  cursor: not-allowed;
-}
-
 .pending-payments-page .amount-note {
   display: block;
   margin-top: 2px;
