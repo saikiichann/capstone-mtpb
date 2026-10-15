@@ -21,7 +21,11 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./ClampingLog.css";
-import { setImpoundRecord, useImpoundRecordIds } from "../../lib/impoundFlag";
+import {
+  setImpoundRecord,
+  syncClampImpound,
+  useImpoundRecordIds,
+} from "../../lib/impoundFlag";
 
 import logo from "../../assets/mtpb-logo.png";
 import avatarImg from "../../assets/user.png";
@@ -454,6 +458,10 @@ export default function ClampingLog() {
 
           await batch.commit();
           chunk.forEach(({ row }) => handled.add(row.id));
+          // Pati ang clamp record (QR Management / violator app scan).
+          await Promise.all(
+            chunk.map(({ row }) => syncClampImpound(row.id, "Subject to Impound"))
+          );
         }
         console.log("[auto-flag] Done");
       } catch (err) {

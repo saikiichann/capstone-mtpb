@@ -10,6 +10,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "../../firebase";
+import { syncClampImpound } from "../../lib/impoundFlag";
 
 export type PrefillData = {
   sourceViolationId?: string;
@@ -284,6 +285,7 @@ export default function AddImpoundModal({
         } catch (syncErr) {
           console.warn("Impound status not synced to the violation:", syncErr);
         }
+        await syncClampImpound(prefill.sourceViolationId, form.status);
       }
 
       try {

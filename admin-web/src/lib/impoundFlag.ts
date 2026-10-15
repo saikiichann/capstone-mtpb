@@ -2,9 +2,14 @@ import { useEffect, useState } from "react";
 import {
   collection,
   doc,
+  getDocs,
+  limit,
   onSnapshot,
+  query,
   serverTimestamp,
   Timestamp,
+  updateDoc,
+  where,
   type Transaction,
   type WriteBatch,
 } from "firebase/firestore";
@@ -123,4 +128,45 @@ export const setImpoundRecordInTransaction = (
   opts: { autoFlagged: boolean; createdBy: string }
 ): void => {
   tx.set(doc(db, "impoundRecords", source.id), buildImpoundRecord(source, opts));
+};
+
+/**
+ * Sabay na i-update ang CLAMP na may hawak sa violation, para alam din ng
+ * clamp record (QR Management, at ng violator app pag-scan ng QR) na
+ * Subject to Impound / Scheduled / Impounded na ito.
+ *
+ * Hinahanap ang clamp sa currentViolationId (fallback: clampId ng
+ * violation). Hindi ginagalaw ang clamp kung iba na ang violation nito.
+ * Best effort — hindi pinapabagsak ang pag-flag o pag-save kapag pumalya.
+ */
+export const syncClampImpound = async (
+  violationId: string,
+  impoundStatus: string,
+  clampId?: string | null
+): Promise<void> => {
+  try {
+    let snap = await getDocs(
+      query(collection(db, "clamps"), where("currentViolationId", "==", violationId), limit(1))
+    );
+    if (snap.empty && clampId) {
+      snap = await getDocs(
+        query(collection(db, "clamps"), where("clampId", "==", clampId), limit(1))
+      );
+    }
+    if (snap.empty) return;
+
+    const clamp = snap.docs[0];
+    const current = clamp.data().currentViolationId;
+    if (current && current !== violationId) return;
+
+    const status = impoundStatus.toLowerCase();
+    await updateDoc(clamp.ref, {
+      impoundStatus,
+      // ₱2,000 ang babayaran kapag Impounded na (pinapalitan ang fine).
+      impoundFee: status === "released" ? null : IMPOUND_FEE,
+      impoundUpdatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn("Clamp impound status not updated:", err);
+  }
 };

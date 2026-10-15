@@ -86,6 +86,8 @@ type CurrentUser = {
 type ClampState =
   | "available"
   | "unpaid"
+  | "subject-to-impound"
+  | "impounded"
   | "verified"
   | "ready-for-release"
   | "released";
@@ -155,6 +157,8 @@ const STATUS_OPTIONS: Array<ClampState | "All Status"> = [
   "All Status",
   "available",
   "unpaid",
+  "subject-to-impound",
+  "impounded",
   "verified",
   "ready-for-release",
   "released",
@@ -163,6 +167,8 @@ const STATUS_OPTIONS: Array<ClampState | "All Status"> = [
 const STATUS_LABELS: Record<ClampState, string> = {
   available: "Available",
   unpaid: "Unpaid",
+  "subject-to-impound": "Subject to Impound",
+  impounded: "Impounded",
   verified: "Verified",
   "ready-for-release": "Ready for Release",
   released: "Released",
@@ -268,6 +274,8 @@ const getStatusClass = (status: ClampState): string => {
   const map: Record<ClampState, string> = {
     available: "status-waiting",
     unpaid: "status-pay",
+    "subject-to-impound": "status-subject",
+    impounded: "status-impounded",
     verified: "status-paid",
     "ready-for-release": "status-ready",
     released: "status-released",
@@ -314,6 +322,18 @@ const deriveState = (data: {
   if (data.paidAt) return "verified";
   if (data.deployedAt || data.cin || data.currentViolationId) return "unpaid";
   return "available";
+};
+
+/**
+ * Clamp na hindi pa bayad pero Subject to Impound / Scheduled / Impounded
+ * na ang violation (impoundStatus — sine-set ng lib/impoundFlag.ts).
+ */
+const withImpoundState = (state: ClampState, impoundStatus: unknown): ClampState => {
+  if (state !== "unpaid") return state;
+  const v = String(impoundStatus ?? "").toLowerCase();
+  if (v === "impounded") return "impounded";
+  if (v === "subject to impound" || v === "scheduled for impounding") return "subject-to-impound";
+  return state;
 };
 
 const detectClampType = (clampId: string): ClampType | null => {
@@ -471,8 +491,11 @@ export default function QRManagement() {
           };
 
           const storedStatus = (data.status as ClampState | undefined) ?? null;
-          const state = deriveState(timestamps);
-          const hasStateMismatch = storedStatus !== null && storedStatus !== state;
+          const baseState = deriveState(timestamps);
+          // Mismatch is checked on the lifecycle state only; the impound
+          // status is an extra layer set by the impound flow.
+          const hasStateMismatch = storedStatus !== null && storedStatus !== baseState;
+          const state = withImpoundState(baseState, data.impoundStatus);
 
           return {
             id: d.id,

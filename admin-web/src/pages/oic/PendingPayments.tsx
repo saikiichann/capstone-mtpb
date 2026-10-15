@@ -22,6 +22,7 @@ import {
   impoundFeeDue,
   setImpoundRecord,
   setImpoundRecordInTransaction,
+  syncClampImpound,
   useImpoundRecordIds,
   type ImpoundRecordSource,
 } from "../../lib/impoundFlag";
@@ -538,6 +539,10 @@ export default function PendingPaymentsOIC() {
 
           await batch.commit();
           chunk.forEach(({ row }) => handled.add(row.id));
+          // Pati ang clamp record (QR Management / violator app scan).
+          await Promise.all(
+            chunk.map(({ row }) => syncClampImpound(row.id, "Subject to Impound"))
+          );
         }
       } catch (err) {
         console.error("[auto-flag] Failed to flag overdue violations:", err);
@@ -695,6 +700,7 @@ export default function PendingPaymentsOIC() {
         });
       });
 
+      await syncClampImpound(impoundRow.id, "Subject to Impound");
       alert(`✅ ${impoundRow.violationNo} marked as Subject to Impound.`);
       closeImpoundModal();
     } catch (err: any) {
@@ -1376,4 +1382,4 @@ export default function PendingPaymentsOIC() {
       )}
     </div>
   );
-}
+}

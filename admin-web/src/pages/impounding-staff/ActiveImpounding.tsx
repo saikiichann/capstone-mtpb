@@ -13,6 +13,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { syncClampImpound } from "../../lib/impoundFlag";
 import "./ActiveImpounding.css";
 
 // Assets
@@ -492,6 +493,7 @@ export default function ActiveImpounding() {
       } catch (syncErr) {
         console.warn("Impound status not synced to the violation:", syncErr);
       }
+      await syncClampImpound(selectedRow.violationId, newStatus);
     }
 
     await addDoc(collection(db, "auditLogs"), {
