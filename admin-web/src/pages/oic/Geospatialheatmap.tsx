@@ -7,6 +7,8 @@ import {
   Polygon,
   Marker,
   Popup,
+  Circle,
+  Tooltip,
   ZoomControl,
   useMap,
 } from "react-leaflet";
@@ -80,6 +82,17 @@ type AreaStat = {
   topType: string;
   color: string;
   center: [number, number] | null;
+};
+
+/** Clamps close to each other (same ~150 m cell), shown as one heat zone. */
+type HeatZone = {
+  key: string;
+  lat: number;
+  lng: number;
+  count: number;
+  color: string;
+  radius: number;
+  places: string[];
 };
 
 type NavItem = {
@@ -294,6 +307,62 @@ const densityColor = (count: number, max: number): string => {
   return `hsl(${hue}, 100%, 42%)`;
 };
 
+/* ------------------------------------------------------------------
+   HEAT ZONES
+   Clamps are grouped into cells of ~150 m. Each cell becomes a circle
+   that grows and turns from green to RED as clamps pile up there.
+   HOT_COUNT clamps or more in one cell = full red, so one or two clamps
+   never look like a hotspot on their own.
+------------------------------------------------------------------ */
+const HEAT_CELL_DEG = 0.0014; // ≈ 150 m in Manila
+const HOT_COUNT = 5;
+
+const HEAT_LEVELS = [
+  { label: "1", min: 1, color: "#22c55e" },
+  { label: "2", min: 2, color: "#eab308" },
+  { label: "3–4", min: 3, color: "#f97316" },
+  { label: `${HOT_COUNT}+`, min: HOT_COUNT, color: "#dc2626" },
+];
+
+const heatColor = (count: number): string => {
+  let color = HEAT_LEVELS[0].color;
+  for (const level of HEAT_LEVELS) if (count >= level.min) color = level.color;
+  return color;
+};
+
+/** 45 m for a single clamp, growing to 140 m at HOT_COUNT and beyond. */
+const heatRadius = (count: number): number =>
+  Math.round(45 + (Math.min(count, HOT_COUNT * 2) / (HOT_COUNT * 2)) * 140);
+
+const buildHeatZones = (points: ViolationPoint[]): HeatZone[] => {
+  const cells = new Map<string, { lat: number; lng: number; count: number; places: Map<string, number> }>();
+  points.forEach((point) => {
+    const key = `${Math.round(point.lat / HEAT_CELL_DEG)}:${Math.round(point.lng / HEAT_CELL_DEG)}`;
+    const cell = cells.get(key) ?? { lat: 0, lng: 0, count: 0, places: new Map() };
+    cell.lat += point.lat;
+    cell.lng += point.lng;
+    cell.count += 1;
+    const place = point.location?.trim();
+    if (place) cell.places.set(place, (cell.places.get(place) ?? 0) + 1);
+    cells.set(key, cell);
+  });
+  return Array.from(cells.entries())
+    .map(([key, cell]) => ({
+      key,
+      lat: cell.lat / cell.count,
+      lng: cell.lng / cell.count,
+      count: cell.count,
+      color: heatColor(cell.count),
+      radius: heatRadius(cell.count),
+      places: Array.from(cell.places.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([place]) => place),
+    }))
+    // Small zones first so the red ones are drawn on top.
+    .sort((a, b) => a.count - b.count);
+};
+
 const escapeHtml = (value: string): string =>
   value
     .replace(/&/g, "&amp;")
@@ -327,15 +396,15 @@ const violationPinIcon = (color: string) =>
     className: "",
     html: `
       <div style="
-        width:12px;height:12px;
+        width:10px;height:10px;
         background:${color};
         border:2px solid white;
         border-radius:50%;
         box-shadow:0 1px 4px rgba(0,0,0,0.4);
       "></div>
     `,
-    iconSize: [12, 12],
-    iconAnchor: [6, 6],
+    iconSize: [10, 10],
+    iconAnchor: [5, 5],
   });
 
 function InvalidateSizeOnMount() {
@@ -532,6 +601,9 @@ export default function GeospatialHeatmap() {
     return { areas: stats, unassigned: missing };
   }, [points]);
 
+  const heatZones = useMemo(() => buildHeatZones(points), [points]);
+  const hotZoneCount = heatZones.filter((z) => z.count >= HOT_COUNT).length;
+
   const densityTiles = areas.slice(0, 4);
   const hotspots = areas.slice(0, 3);
   const pinnedAreas = areas.filter((area) => area.center !== null);
@@ -658,12 +730,53 @@ export default function GeospatialHeatmap() {
                   pathOptions={{ color: "#2547d0", weight: 3, fillOpacity: 0 }}
                 />
 
-                {/* ⚠️ ADDED: Individual violation pins (real location) */}
+                {/* HEAT ZONES — red where many clamps are in the same spot */}
+                {heatZones.map((zone) => (
+                  <Circle
+                    key={`glow-${zone.key}`}
+                    center={[zone.lat, zone.lng]}
+                    radius={zone.radius * 1.6}
+                    pathOptions={{
+                      stroke: false,
+                      fillColor: zone.color,
+                      fillOpacity: 0.18,
+                    }}
+                    interactive={false}
+                  />
+                ))}
+                {heatZones.map((zone) => (
+                  <Circle
+                    key={`zone-${zone.key}`}
+                    center={[zone.lat, zone.lng]}
+                    radius={zone.radius}
+                    pathOptions={{
+                      color: zone.color,
+                      weight: 1,
+                      fillColor: zone.color,
+                      fillOpacity: zone.count >= HOT_COUNT ? 0.55 : 0.4,
+                    }}
+                  >
+                    <Tooltip direction="top" sticky>
+                      <strong>
+                        {zone.count} clamp{zone.count === 1 ? "" : "s"}
+                      </strong>
+                      {zone.count >= HOT_COUNT ? " · hotspot" : ""}
+                      {zone.places.length > 0 && (
+                        <>
+                          <br />
+                          {zone.places.join(" · ")}
+                        </>
+                      )}
+                    </Tooltip>
+                  </Circle>
+                ))}
+
+                {/* Each clamp as a small dot (click for details) */}
                 {points.map((point, idx) => (
                   <Marker
                     key={`violation-${idx}-${point.cin ?? idx}`}
                     position={[point.lat, point.lng]}
-                    icon={violationPinIcon("#dc2626")}
+                    icon={violationPinIcon("#1f2937")}
                   >
                     <Popup>
                       <div className="map-popup">
@@ -713,6 +826,23 @@ export default function GeospatialHeatmap() {
                   </Marker>
                 ))}
               </MapContainer>
+
+              <div className="heat-legend" aria-label="Clamp density legend">
+                <div className="heat-legend-title">Clamps in one spot (~150 m)</div>
+                <div className="heat-legend-row">
+                  {HEAT_LEVELS.map((level) => (
+                    <span key={level.label} className="heat-legend-item">
+                      <span className="heat-legend-dot" style={{ background: level.color }} />
+                      {level.label}
+                    </span>
+                  ))}
+                </div>
+                <div className="heat-legend-note">
+                  {hotZoneCount > 0
+                    ? `${hotZoneCount} hotspot${hotZoneCount === 1 ? "" : "s"} (red)`
+                    : `Red = ${HOT_COUNT}+ clamps in the same spot`}
+                </div>
+              </div>
             </div>
 
             <div className="geo-split">
