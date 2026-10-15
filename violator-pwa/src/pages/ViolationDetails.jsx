@@ -12,14 +12,6 @@ import { evidencePhotosOf } from '../utils/evidence'
 import PayChoiceDialog from './PayChoiceDialog'
 import { formatDateTime, formatPeso } from '../utils/format'
 
-// Impound status words from mapping.js, as shown on Violation Details.
-const IMPOUND_LABELS = {
-  subject_to_impound: 'Subject to Impound',
-  scheduled: 'Scheduled for Impounding',
-  impounded: 'Impounded',
-  released: 'Released from Impound',
-}
-
 // The page a violator lands on after scanning the QR code on the clamp.
 // - Signed out: Figma "VIOLATION DETAILS" (997:328). Pay Now asks whether to
 //   pay as a guest or make an account first; Login / Make an Account are
@@ -89,12 +81,9 @@ function ViolationCard({ violation, showPayment = false, onPayNow }) {
     ['Color', violation.vehicleColor],
     ['Violation', violation.violationType],
     ['Location', violation.location],
-    // Once impounded the impound fee replaces the clamp fine.
-    ...(violation.impoundStatus && violation.impoundStatus !== 'none'
-      ? [['Impound Status', IMPOUND_LABELS[violation.impoundStatus] ?? violation.impoundStatus]]
-      : []),
-    violation.impoundFee > 0
-      ? ['Impound Fee', formatPeso(violation.impoundFee), 'danger']
+    // Past 24 hours unpaid: a fixed ₱2,000 replaces the fine.
+    violation.overdueFee > 0
+      ? ['Overdue Clamp Fee', formatPeso(violation.overdueFee), 'danger']
       : ['Fine Amount', formatPeso(violation.fineAmount), 'danger'],
     ['Officer', violation.officerName],
   ]
@@ -158,17 +147,13 @@ function ViolationCard({ violation, showPayment = false, onPayNow }) {
       ) : (
         <>
           <p className="notice">
-            {violation.impoundStatus === 'impounded' ? (
+            {violation.status === 'impounded' ? (
+              t('violation.impounded')
+            ) : violation.overdue ? (
               <>
-                {t('violation.impounded')}
+                {t('violation.overdue', { fee: formatPeso(violation.overdueFee) })}
                 <br />
-                {t('violation.payImpound', { fee: formatPeso(violation.impoundFee) })}
-              </>
-            ) : violation.impoundStatus === 'subject_to_impound' || violation.impoundStatus === 'scheduled' ? (
-              <>
-                {t('violation.subjectToImpound')}
-                <br />
-                {t('violation.payBeforeImpound')}
+                {t('violation.payOverdue', { fee: formatPeso(violation.overdueFee) })}
               </>
             ) : (
               <>

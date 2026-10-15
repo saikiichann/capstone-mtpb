@@ -162,31 +162,44 @@ describe('normalizePayment', () => {
   })
 })
 
-describe('impound fee', () => {
-  it('charges the clamp fine while only subject to impound', () => {
-    const v = normalizeViolation('v1', { cin: 'CLMP-1', fineAmount: 900, impoundStatus: 'Subject to Impound', impoundFee: 2000 })
-    assert.equal(v.impoundStatus, 'subject_to_impound')
-    assert.equal(v.impoundFee, 0)
+describe('overdue clamp fee', () => {
+  const hoursAgo = (h) => new Date(Date.now() - h * 3600000).toISOString()
+
+  it('charges the fine within 24 hours of clamping', () => {
+    const v = normalizeViolation('v1', { cin: 'CLMP-1', fineAmount: 900, enforcementType: 'clamped', recordedAt: hoursAgo(5) })
+    assert.equal(v.overdue, false)
+    assert.equal(v.overdueFee, 0)
     assert.equal(v.amountDue, 900)
   })
 
-  it('replaces the fine with the impound fee once impounded', () => {
-    const v = normalizeViolation('v2', { cin: 'CLMP-2', fineAmount: 900, impoundStatus: 'Impounded', impoundFee: 2000 })
-    assert.equal(v.impoundStatus, 'impounded')
-    assert.equal(v.impoundFee, 2000)
+  it('charges a fixed ₱2,000 instead of the fine after 24 hours', () => {
+    const v = normalizeViolation('v2', { cin: 'CLMP-2', fineAmount: 900, enforcementType: 'clamped', recordedAt: hoursAgo(25) })
+    assert.equal(v.overdue, true)
+    assert.equal(v.overdueFee, 2000)
     assert.equal(v.amountDue, 2000)
     assert.equal(v.fineAmount, 900)
-    assert.equal(v.status, 'impounded')
+    assert.equal(v.status, 'clamped')
   })
 
-  it('uses ₱2,000 when an impounded record has no fee saved', () => {
-    const v = normalizeViolation('v3', { cin: 'CLMP-3', fineAmount: 900, impoundStatus: 'Impounded' })
+  it('stays ₱2,000 at 48 hours and later, and the vehicle stays clamped', () => {
+    const v = normalizeViolation('v3', { cin: 'CLMP-3', fineAmount: 900, enforcementType: 'clamped', recordedAt: hoursAgo(72) })
     assert.equal(v.amountDue, 2000)
+    assert.equal(v.status, 'clamped')
   })
 
-  it('keeps the fine when nothing about impounding is recorded', () => {
-    const v = normalizeViolation('v4', { cin: 'CLMP-4', fineAmount: 750, impoundStatus: 'None' })
-    assert.equal(v.impoundStatus, 'none')
-    assert.equal(v.amountDue, 750)
+  it('uses the saved grace period end when there is one', () => {
+    const v = normalizeViolation('v4', {
+      cin: 'CLMP-4', fineAmount: 900, enforcementType: 'clamped', recordedAt: hoursAgo(30), gracePeriodEnd: hoursAgo(-2),
+    })
+    assert.equal(v.overdue, false)
+    assert.equal(v.amountDue, 900)
+  })
+
+  it('keeps what was paid once a payment is in', () => {
+    const v = normalizeViolation('v5', {
+      cin: 'CLMP-5', fineAmount: 900, enforcementType: 'clamped', recordedAt: hoursAgo(30), paymentStatus: 'Pending Verification', totalPaid: 900,
+    })
+    assert.equal(v.overdue, false)
+    assert.equal(v.amountDue, 900)
   })
 })
