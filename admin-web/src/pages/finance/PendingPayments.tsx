@@ -4,18 +4,22 @@ import { KeyRound, ChevronLeft, ChevronRight, X, Search } from "lucide-react";
 import { signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
-  doc,
   onSnapshot,
   query,
-  runTransaction,
-  serverTimestamp,
   where,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import { useStaffProfile } from "../../lib/useStaffProfile";
+import { impoundFeeDue } from "../../lib/impoundFlag";
 import "./PendingPayments.css";
 import CashPaymentSlip from "../../components/CashPaymentSlip";
+import {
+  isGcashReferenceUsed,
+  isValidGcashReference,
+  recordOnsitePayment,
+  type OnsiteMethod,
+} from "../../lib/onsitePayment";
 
 // Asset imports
 import mtpbLogo from "../../assets/mtpb-logo.png";
@@ -53,7 +57,10 @@ type PendingRow = {
   violationNo: string;
   cin: string;
   plateNo: string;
+  /** fine + impound fee (kapag Impounded na) */
   amount: number;
+  fineAmount: number;
+  impoundFee: number;
   recordedAt: Timestamp | null;
   dueDate: Timestamp | null;
   daysLeft: number;
@@ -264,137 +271,6 @@ const numberToWords = (num: number): string => {
 };
 
 /* ------------------------------------------------------------------
-  RECORD CASH PAYMENT (Finance)
------------------------------------------------------------------- */
-const recordCashPaymentFinance = async (params: {
-  violationId: string;
-  cin: string;
-  plateNo: string;
-  amountDue: number;
-  paymentLocation: PaymentLocation;
-  violatorUid: string | null;
-  guestId: string | null;
-  violatorName: string | null;
-  officerName: string;
-}): Promise<{ referenceNumber: string; orNumber: string; paymentId: string }> => {
-  const year = new Date().getFullYear();
-  const counterRef = doc(db, "counters", "paymentReference");
-  const orCounterRef = doc(db, "counters", "orNumber");
-  const violationRef = doc(db, "violations", params.violationId);
-  const paymentRef = doc(collection(db, "payments"));
-  const auditRef = doc(collection(db, "auditLogs"));
-
-  return runTransaction(db, async (tx) => {
-    /* Step 1: Reference Number */
-    const counterSnap = await tx.get(counterRef);
-    const lastRef = counterSnap.exists()
-      ? Number(counterSnap.data().lastValue ?? 0)
-      : 0;
-    const nextRef = lastRef + 1;
-    const referenceNumber = `REF-${year}-${String(nextRef).padStart(5, "0")}`;
-
-    /* Step 2: OR Number */
-    const orCounterSnap = await tx.get(orCounterRef);
-    const lastOr = orCounterSnap.exists()
-      ? Number(orCounterSnap.data().lastValue ?? 0)
-      : 0;
-    const nextOr = lastOr + 1;
-    const orNumber = `OR-${year}-${String(nextOr).padStart(5, "0")}`;
-
-    /* Step 3: Persist both counters */
-    tx.set(
-      counterRef,
-      { lastValue: nextRef, prefix: "REF", updatedAt: serverTimestamp() },
-      { merge: true }
-    );
-
-    tx.set(
-      orCounterRef,
-      { lastValue: nextOr, prefix: "OR", updatedAt: serverTimestamp() },
-      { merge: true }
-    );
-
-    /* Step 4: Update violation */
-    tx.update(violationRef, {
-      paymentStatus: "Pending Verification",
-      paymentMethod: "Cash",
-      paymentReference: referenceNumber,
-      referenceNumber,
-      orNumber,
-      totalPaid: params.amountDue,
-      cashReceived: params.amountDue,
-      cashChange: 0,
-      amountInWords: numberToWords(params.amountDue),
-      paymentLocation: params.paymentLocation,
-      paidAt: serverTimestamp(),
-      cashRecordedBy: params.officerName,
-      cashRecordedByRole: "finance",
-      orIssuedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      updatedBy: params.officerName,
-      violatorUid: params.violatorUid,
-      guestId: params.guestId,
-      violatorName: params.violatorName,
-    });
-
-    /* Step 5: Create payment record */
-    tx.set(paymentRef, {
-      violationId: params.violationId,
-      cin: params.cin,
-      plateNo: params.plateNo,
-      violatorUid: params.violatorUid,
-      guestId: params.guestId,
-      violatorName: params.violatorName,
-      amount: params.amountDue,
-      convenienceFee: 0,
-      totalAmount: params.amountDue,
-      cashReceived: params.amountDue,
-      amountInWords: numberToWords(params.amountDue),
-      referenceNumber,
-      orNumber,
-      paymentLocation: params.paymentLocation,
-      method: "Cash",
-      status: "Pending Verification",
-      verificationStatus: null,
-      recordedBy: params.officerName,
-      recordedByRole: "finance",
-      createdAt: serverTimestamp(),
-      orIssuedAt: serverTimestamp(),
-      orIssuedBy: params.officerName,
-    });
-
-    /* Step 6: Audit log */
-    tx.set(auditRef, {
-      userName: params.officerName,
-      userRole: "finance",
-      action: `recorded cash payment for ${params.cin} — OR #${orNumber}, Ref ${referenceNumber}, Location: ${params.paymentLocation}`,
-      record: params.cin,
-      type: "cash-payment",
-      metadata: {
-        cin: params.cin,
-        plateNo: params.plateNo,
-        amountDue: params.amountDue,
-        amountInWords: numberToWords(params.amountDue),
-        referenceNumber,
-        orNumber,
-        paymentLocation: params.paymentLocation,
-        paymentId: paymentRef.id,
-        violatorUid: params.violatorUid,
-        guestId: params.guestId,
-        violatorName: params.violatorName,
-      },
-      timestamp: serverTimestamp(),
-    });
-
-    return {
-      referenceNumber,
-      orNumber,
-      paymentId: paymentRef.id,
-    };
-  });
-};
-
-/* ------------------------------------------------------------------
   COMPONENT: PendingPaymentsFinance
 ------------------------------------------------------------------ */
 export default function PendingPaymentsFinance() {
@@ -432,6 +308,8 @@ export default function PendingPaymentsFinance() {
   const [savedOrNumber, setSavedOrNumber] = useState<string | null>(null);
   const [savedPaymentId, setSavedPaymentId] = useState<string | null>(null);
   const [showPrintSlip, setShowPrintSlip] = useState(false);
+  const [payMethod, setPayMethod] = useState<OnsiteMethod>("Cash");
+  const [gcashRef, setGcashRef] = useState("");
 
   /* Effect: Fetch pending payments (paymentStatus == "Unpaid") */
   useEffect(() => {
@@ -470,7 +348,11 @@ export default function PendingPaymentsFinance() {
               violationNo: generateViolationNo(cin),
               cin,
               plateNo: data.plateNo ?? "—",
-              amount: Number(data.fineAmount ?? 0),
+              fineAmount: Number(data.fineAmount ?? 0),
+              impoundFee: impoundFeeDue(data.impoundStatus, data.impoundFee),
+              amount:
+                Number(data.fineAmount ?? 0) +
+                impoundFeeDue(data.impoundStatus, data.impoundFee),
               recordedAt,
               dueDate,
               daysLeft,
@@ -544,11 +426,15 @@ export default function PendingPaymentsFinance() {
   /* PAYMENT LOCATION — automatic, galing sa assignedLocation ng naka-login
      na Finance staff (users/{uid}.assignedLocation). Hindi na pinipili. */
   const paymentLocation: PaymentLocation | null = currentUser.assignedLocation;
+  /** GCash is Central Finance's (lib/paymentLocation.ts). */
+  const canTakeGcash = paymentLocation === "Central";
 
   /* CASH PAYMENT MODAL HANDLERS */
   const openCashModal = (row: PendingRow) => {
     setCashRow(row);
     setCashError("");
+    setPayMethod("Cash");
+    setGcashRef("");
     setSavedReference(null);
     setSavedOrNumber(null);
     setSavedPaymentId(null);
@@ -575,18 +461,37 @@ export default function PendingPaymentsFinance() {
       return;
     }
 
+    if (payMethod === "GCash" && !canTakeGcash) {
+      setCashError("GCash payments are received by Central Finance only.");
+      return;
+    }
+    if (payMethod === "GCash" && !isValidGcashReference(gcashRef)) {
+      setCashError("Enter the 13-digit reference no. from the payer's GCash receipt.");
+      return;
+    }
+
     setSaving(true);
     try {
-      const result = await recordCashPaymentFinance({
+      if (payMethod === "GCash" && (await isGcashReferenceUsed(gcashRef))) {
+        setCashError("This GCash reference no. was already used for another payment.");
+        return;
+      }
+
+      const result = await recordOnsitePayment({
         violationId: cashRow.id,
         cin: cashRow.cin,
         plateNo: cashRow.plateNo,
-        amountDue: cashRow.amount,
-        paymentLocation,
+        fineAmount: cashRow.fineAmount,
+        impoundFee: cashRow.impoundFee,
+        amountInWords: numberToWords(cashRow.amount),
+        method: payMethod,
+        gcashReference: gcashRef,
+        counterLocation: paymentLocation,
+        recordedByRole: "finance",
+        officerName: currentUser.name,
         violatorUid: cashRow.violatorUid || null,
         guestId: cashRow.guestId || null,
         violatorName: cashRow.violatorName || null,
-        officerName: currentUser.name,
       });
 
       setSavedReference(result.referenceNumber);
@@ -871,7 +776,12 @@ export default function PendingPaymentsFinance() {
                               <span className="cin-pill">{row.cin}</span>
                             </td>
                             <td className="cell-plate">{row.plateNo}</td>
-                            <td className="cell-amount">{formatCurrency(row.amount)}</td>
+                            <td className="cell-amount">
+                              {formatCurrency(row.amount)}
+                              {row.impoundFee > 0 && (
+                                <small className="amount-note">incl. impound fee</small>
+                              )}
+                            </td>
                             <td className="cell-due-date">{formatDate(row.dueDate)}</td>
                             <td className={`cell-days-left ${row.daysLeft < 0 ? "text-red" : ""}`}>
                               {formatTimeLeft(row.dueDate, row.daysLeft)}
@@ -978,9 +888,13 @@ export default function PendingPaymentsFinance() {
                     </div>
                   )}
                   <p className="cash-saved-note">
-                    Cash payment recorded by <strong>{currentUser.name}</strong> (Finance) —{" "}
+                    {payMethod} payment recorded by <strong>{currentUser.name}</strong> (Finance) —{" "}
                     <strong>
-                      {paymentLocation ? PAYMENT_LOCATION_LABELS[paymentLocation] : "—"}
+                      {payMethod === "GCash"
+                        ? "Online (GCash)"
+                        : paymentLocation
+                          ? PAYMENT_LOCATION_LABELS[paymentLocation]
+                          : "—"}
                     </strong>. {cashRow.cin} now appears under
                     Payment Verification for confirmation by a different staff member
                     (segregation of duties).
@@ -1012,6 +926,18 @@ export default function PendingPaymentsFinance() {
                         <strong>{cashRow.violatorName}</strong>
                       </div>
                     )}
+                    {cashRow.impoundFee > 0 && (
+                      <>
+                        <div className="cash-summary-row">
+                          <span>Fine</span>
+                          <strong>{formatCurrency(cashRow.fineAmount)}</strong>
+                        </div>
+                        <div className="cash-summary-row">
+                          <span>Impound Fee</span>
+                          <strong>{formatCurrency(cashRow.impoundFee)}</strong>
+                        </div>
+                      </>
+                    )}
                     <div className="cash-summary-row">
                       <span>Amount Due</span>
                       <strong className="cash-summary-amount">
@@ -1024,13 +950,64 @@ export default function PendingPaymentsFinance() {
                         {numberToWords(cashRow.amount)}
                       </strong>
                     </div>
-                    <div className="cash-summary-row">
-                      <span>Cash Received</span>
-                      <strong className="cash-summary-amount">
-                        {formatCurrency(cashRow.amount)}
-                      </strong>
-                    </div>
+                    {payMethod === "Cash" && (
+                      <div className="cash-summary-row">
+                        <span>Cash Received</span>
+                        <strong className="cash-summary-amount">
+                          {formatCurrency(cashRow.amount)}
+                        </strong>
+                      </div>
+                    )}
                   </div>
+
+                  {/* PAYMENT METHOD — Cash, or GCash paid to the MTPB QR */}
+                  <div className="form-group">
+                    <label>Payment Method</label>
+                    <div className="pay-method-toggle" role="radiogroup">
+                      {(["Cash", "GCash"] as OnsiteMethod[]).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          role="radio"
+                          aria-checked={payMethod === m}
+                          className={`pay-method-option ${payMethod === m ? "is-active" : ""}`}
+                          onClick={() => {
+                            setPayMethod(m);
+                            setCashError("");
+                          }}
+                          disabled={saving || (m === "GCash" && !canTakeGcash)}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                    {!canTakeGcash && (
+                      <small className="form-hint">
+                        GCash is received by Central Finance only.
+                      </small>
+                    )}
+                  </div>
+
+                  {payMethod === "GCash" && (
+                    <div className="form-group">
+                      <label htmlFor="gcashRef">
+                        GCash Reference No. <span className="required">*</span>
+                      </label>
+                      <input
+                        id="gcashRef"
+                        className="form-input"
+                        inputMode="numeric"
+                        placeholder="13-digit reference no."
+                        value={gcashRef}
+                        onChange={(e) => setGcashRef(e.target.value.replace(/[^\d\s]/g, "").slice(0, 16))}
+                        disabled={saving}
+                      />
+                      <small className="form-hint">
+                        From the payer's GCash receipt after paying to the MTPB GCash QR.
+                        Recorded as an Online (GCash) payment.
+                      </small>
+                    </div>
+                  )}
 
                   {/* PAYMENT LOCATION — automatic (assignedLocation ng staff) */}
                   <div className="form-group">
@@ -1109,8 +1086,10 @@ export default function PendingPaymentsFinance() {
           referenceNumber={savedReference || ""}
           cin={cashRow.cin}
           plateNo={cashRow.plateNo}
-          amount={cashRow.amount}
+          amount={cashRow.fineAmount}
+          impoundFee={cashRow.impoundFee}
           totalAmount={cashRow.amount}
+          method={payMethod}
           orNumber={savedOrNumber || ""}
           recordedBy={currentUser.name}
           createdAt={new Date()}

@@ -35,6 +35,10 @@ interface CashPaymentSlipProps {
   createdAt: Date;
   /** Optional: when given and different from the total, Cash Received and Change are shown. */
   cashReceived?: number;
+  /** Optional: impound fee included in the total (₱2,000 when impounded). */
+  impoundFee?: number;
+  /** Optional: "Cash" or "GCash"; shown when given. */
+  method?: string;
   onClose: () => void;
   onPrinted: () => void;
 }
@@ -46,7 +50,7 @@ const slipDate = (date: Date) =>
   `${date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" })} · ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Manila" })}`;
 
 function Slip(props: CashPaymentSlipProps) {
-  const { paymentId, referenceNumber, cin, plateNo, amount, totalAmount, orNumber, recordedBy, createdAt, cashReceived } = props;
+  const { paymentId, referenceNumber, cin, plateNo, amount, totalAmount, orNumber, recordedBy, createdAt, cashReceived, impoundFee, method } = props;
   const showChange = typeof cashReceived === "number" && cashReceived !== totalAmount;
 
   return (
@@ -76,6 +80,12 @@ function Slip(props: CashPaymentSlipProps) {
             <td>Fine Amount</td>
             <td>{peso(amount)}</td>
           </tr>
+          {typeof impoundFee === "number" && impoundFee > 0 && (
+            <tr>
+              <td>Impound Fee</td>
+              <td>{peso(impoundFee)}</td>
+            </tr>
+          )}
           <tr className="cash-slip__total">
             <td>TOTAL PAID</td>
             <td>{peso(totalAmount)}</td>
@@ -103,6 +113,12 @@ function Slip(props: CashPaymentSlipProps) {
             <td>{slipDate(createdAt)}</td>
             <td>{orNumber ? `OR No. ${orNumber}` : ""}</td>
           </tr>
+          {method && (
+            <tr>
+              <td>Payment Method</td>
+              <td>{method}</td>
+            </tr>
+          )}
           <tr>
             <td>Received by</td>
             <td>{recordedBy}</td>

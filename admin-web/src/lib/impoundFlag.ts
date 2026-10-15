@@ -20,12 +20,24 @@ import { db } from "../firebase";
    Active Impounding, ng Impounding Staff pages at ng Impounding Log —
    kung wala ito, hindi makakarating sa impounding side ang sasakyan.
 
-   Ayon sa Firestore rules, OIC lang ang puwedeng gumawa ng
-   impoundRecords. Kapag may record na, update na iyon (Impounding Staff
-   lang), kaya laging i-check muna gamit ang useImpoundRecordIds().
+   Ayon sa Firestore rules, OIC at Impounding Staff ang puwedeng gumawa
+   ng impoundRecords. Kapag may record na, update na iyon (Impounding
+   Staff lang), kaya laging i-check muna gamit ang useImpoundRecordIds().
 ------------------------------------------------------------------ */
 
 export const IMPOUND_FEE = 2000;
+
+/**
+ * Impound fee na sisingilin: ₱2,000 kapag NA-IMPOUND na ang sasakyan
+ * (impoundStatus "Impounded", o "Released" kung na-release na bago
+ * mabayaran). Wala pa kapag "Subject to Impound" o "Scheduled" lang.
+ */
+export const impoundFeeDue = (impoundStatus: unknown, storedFee?: unknown): number => {
+  const status = String(impoundStatus ?? "").toLowerCase().trim();
+  if (status !== "impounded" && status !== "released") return 0;
+  const fee = Number(storedFee);
+  return Number.isFinite(fee) && fee > 0 ? fee : IMPOUND_FEE;
+};
 
 /** Ang kailangang detalye ng violation para gumawa ng impound record. */
 export type ImpoundRecordSource = {

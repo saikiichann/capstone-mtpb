@@ -18,12 +18,19 @@ import { auth, db } from "../../firebase";
 import "./PendingPayments.css";
 import {
   IMPOUND_FEE,
+  impoundFeeDue,
   setImpoundRecord,
   setImpoundRecordInTransaction,
   useImpoundRecordIds,
   type ImpoundRecordSource,
 } from "../../lib/impoundFlag";
 import CashPaymentSlip from "../../components/CashPaymentSlip";
+import {
+  isGcashReferenceUsed,
+  isValidGcashReference,
+  recordOnsitePayment,
+  type OnsiteMethod,
+} from "../../lib/onsitePayment";
 
 // Asset imports
 import mtpbLogo from "../../assets/mtpb-logo.png";
@@ -63,7 +70,10 @@ type PendingRow = {
   violationNo: string;
   cin: string;
   plateNo: string;
+  /** fine + impound fee (kapag Impounded na) */
   amount: number;
+  fineAmount: number;
+  impoundFee: number;
   recordedAt: Timestamp | null;
   dueDate: Timestamp | null;
   daysLeft: number;
@@ -288,144 +298,6 @@ const numberToWords = (num: number): string => {
 };
 
 /* ------------------------------------------------------------------
-  RECORD CASH PAYMENT (OIC)
-  Auto-generates REF + OR numbers. Includes `paymentLocation`.
-  ✅ NOW INCLUDES violatorUid, guestId, violatorName.
------------------------------------------------------------------- */
-const recordCashPaymentOIC = async (params: {
-  violationId: string;
-  cin: string;
-  plateNo: string;
-  amountDue: number;
-  paymentLocation: PaymentLocation;
-  // ⚠️ ADDED: violator identity
-  violatorUid: string | null;
-  guestId: string | null;
-  violatorName: string | null;
-  officerName: string;
-}): Promise<{ referenceNumber: string; orNumber: string; paymentId: string }> => {
-  const year = new Date().getFullYear();
-  const counterRef = doc(db, "counters", "paymentReference");
-  const orCounterRef = doc(db, "counters", "orNumber");
-  const violationRef = doc(db, "violations", params.violationId);
-  const paymentRef = doc(collection(db, "payments"));
-  const auditRef = doc(collection(db, "auditLogs"));
-
-  return runTransaction(db, async (tx) => {
-    /* Step 1: Reference Number */
-    const counterSnap = await tx.get(counterRef);
-    const lastRef = counterSnap.exists()
-      ? Number(counterSnap.data().lastValue ?? 0)
-      : 0;
-    const nextRef = lastRef + 1;
-    const referenceNumber = `REF-${year}-${String(nextRef).padStart(5, "0")}`;
-
-    /* Step 2: OR Number */
-    const orCounterSnap = await tx.get(orCounterRef);
-    const lastOr = orCounterSnap.exists()
-      ? Number(orCounterSnap.data().lastValue ?? 0)
-      : 0;
-    const nextOr = lastOr + 1;
-    const orNumber = `OR-${year}-${String(nextOr).padStart(5, "0")}`;
-
-    /* Step 3: Persist both counters */
-    tx.set(
-      counterRef,
-      { lastValue: nextRef, prefix: "REF", updatedAt: serverTimestamp() },
-      { merge: true }
-    );
-
-    tx.set(
-      orCounterRef,
-      { lastValue: nextOr, prefix: "OR", updatedAt: serverTimestamp() },
-      { merge: true }
-    );
-
-    /* Step 4: Update violation */
-    tx.update(violationRef, {
-      paymentStatus: "Pending Verification",
-      paymentMethod: "Cash",
-      paymentReference: referenceNumber,
-      referenceNumber,
-      orNumber,
-      totalPaid: params.amountDue,
-      cashReceived: params.amountDue,
-      cashChange: 0,
-      amountInWords: numberToWords(params.amountDue),
-      paymentLocation: params.paymentLocation,
-      paidAt: serverTimestamp(),
-      cashRecordedBy: params.officerName,
-      cashRecordedByRole: "oic",
-      orIssuedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      updatedBy: params.officerName,
-      // ⚠️ ADDED: violator identity on violation doc (keeps it in sync)
-      violatorUid: params.violatorUid,
-      guestId: params.guestId,
-      violatorName: params.violatorName,
-    });
-
-    /* Step 5: Create payment record */
-    tx.set(paymentRef, {
-      violationId: params.violationId,
-      cin: params.cin,
-      plateNo: params.plateNo,
-      // ⚠️ ADDED: violator identity
-      violatorUid: params.violatorUid,
-      guestId: params.guestId,
-      violatorName: params.violatorName,
-      // End
-      amount: params.amountDue,
-      convenienceFee: 0,
-      totalAmount: params.amountDue,
-      cashReceived: params.amountDue,
-      amountInWords: numberToWords(params.amountDue),
-      referenceNumber,
-      orNumber,
-      paymentLocation: params.paymentLocation,
-      method: "Cash",
-      status: "Pending Verification",
-      verificationStatus: null,
-      recordedBy: params.officerName,
-      recordedByRole: "oic",
-      createdAt: serverTimestamp(),
-      orIssuedAt: serverTimestamp(),
-      orIssuedBy: params.officerName,
-    });
-
-    /* Step 6: Audit log */
-    tx.set(auditRef, {
-      userName: params.officerName,
-      userRole: "oic",
-      action: `recorded cash payment for ${params.cin} — OR #${orNumber}, Ref ${referenceNumber}, Location: ${params.paymentLocation}`,
-      record: params.cin,
-      type: "cash-payment",
-      metadata: {
-        cin: params.cin,
-        plateNo: params.plateNo,
-        amountDue: params.amountDue,
-        amountInWords: numberToWords(params.amountDue),
-        referenceNumber,
-        orNumber,
-        paymentLocation: params.paymentLocation,
-        paymentId: paymentRef.id,
-        // ⚠️ ADDED: violator identity in audit metadata
-        violatorUid: params.violatorUid,
-        guestId: params.guestId,
-        violatorName: params.violatorName,
-      },
-      timestamp: serverTimestamp(),
-    });
-
-    return {
-      referenceNumber,
-      orNumber,
-      paymentId: paymentRef.id,
-    };
-  });
-};
-
-/* ------------------------------------------------------------------
   COMPONENT: PendingPaymentsOIC
 ------------------------------------------------------------------ */
 export default function PendingPaymentsOIC() {
@@ -456,6 +328,8 @@ export default function PendingPaymentsOIC() {
   const [savedOrNumber, setSavedOrNumber] = useState<string | null>(null);
   const [savedPaymentId, setSavedPaymentId] = useState<string | null>(null);
   const [showPrintSlip, setShowPrintSlip] = useState(false);
+  const [payMethod, setPayMethod] = useState<OnsiteMethod>("Cash");
+  const [gcashRef, setGcashRef] = useState("");
 
   /* Subject-to-Impound modal state */
   const [impoundRow, setImpoundRow] = useState<PendingRow | null>(null);
@@ -530,7 +404,11 @@ export default function PendingPaymentsOIC() {
               violationNo: generateViolationNo(cin),
               cin,
               plateNo: data.plateNo ?? "—",
-              amount: Number(data.fineAmount ?? 0),
+              fineAmount: Number(data.fineAmount ?? 0),
+              impoundFee: impoundFeeDue(data.impoundStatus, data.impoundFee),
+              amount:
+                Number(data.fineAmount ?? 0) +
+                impoundFeeDue(data.impoundStatus, data.impoundFee),
               recordedAt,
               dueDate,
               daysLeft,
@@ -703,6 +581,8 @@ export default function PendingPaymentsOIC() {
   const openCashModal = (row: PendingRow) => {
     setCashRow(row);
     setCashError("");
+    setPayMethod("Cash");
+    setGcashRef("");
     setPaymentLocation("Central");
     setSavedReference(null);
     setSavedOrNumber(null);
@@ -723,20 +603,33 @@ export default function PendingPaymentsOIC() {
     if (!cashRow) return;
     setCashError("");
 
+    if (payMethod === "GCash" && !isValidGcashReference(gcashRef)) {
+      setCashError("Enter the 13-digit reference no. from the payer's GCash receipt.");
+      return;
+    }
+
     setSaving(true);
     try {
-      const result = await recordCashPaymentOIC({
+      if (payMethod === "GCash" && (await isGcashReferenceUsed(gcashRef))) {
+        setCashError("This GCash reference no. was already used for another payment.");
+        return;
+      }
+
+      const result = await recordOnsitePayment({
         violationId: cashRow.id,
         cin: cashRow.cin,
         plateNo: cashRow.plateNo,
-        amountDue: cashRow.amount,
-        paymentLocation,
-        // ⚠️ ADDED: pass violator identity
+        fineAmount: cashRow.fineAmount,
+        impoundFee: cashRow.impoundFee,
+        amountInWords: numberToWords(cashRow.amount),
+        method: payMethod,
+        gcashReference: gcashRef,
+        counterLocation: paymentLocation,
+        recordedByRole: "oic",
+        officerName: currentUser.name,
         violatorUid: cashRow.violatorUid || null,
         guestId: cashRow.guestId || null,
         violatorName: cashRow.violatorName || null,
-        // End
-        officerName: currentUser.name,
       });
 
       setSavedReference(result.referenceNumber);
@@ -1076,7 +969,12 @@ export default function PendingPaymentsOIC() {
                               <span className="cin-pill">{row.cin}</span>
                             </td>
                             <td className="cell-plate">{row.plateNo}</td>
-                            <td className="cell-amount">{formatCurrency(row.amount)}</td>
+                            <td className="cell-amount">
+                              {formatCurrency(row.amount)}
+                              {row.impoundFee > 0 && (
+                                <small className="amount-note">incl. impound fee</small>
+                              )}
+                            </td>
                             <td className="cell-due-date">{formatDate(row.dueDate)}</td>
                             <td className={`cell-days-left ${row.daysLeft < 0 ? "text-red" : ""}`}>
                               {formatTimeLeft(row.dueDate, row.daysLeft)}
@@ -1196,8 +1094,8 @@ export default function PendingPaymentsOIC() {
                     </div>
                   )}
                   <p className="cash-saved-note">
-                    Cash payment recorded by <strong>{currentUser.name}</strong> (OIC) —{" "}
-                    <strong>{paymentLocation}</strong>. {cashRow.cin} now appears under
+                    {payMethod} payment recorded by <strong>{currentUser.name}</strong> (OIC) —{" "}
+                    <strong>{payMethod === "GCash" ? "Online (GCash)" : paymentLocation}</strong>. {cashRow.cin} now appears under
                     Payment Verification.
                   </p>
                   <p className="cash-saved-hint">
@@ -1227,6 +1125,18 @@ export default function PendingPaymentsOIC() {
                         <strong>{cashRow.violatorName}</strong>
                       </div>
                     )}
+                    {cashRow.impoundFee > 0 && (
+                      <>
+                        <div className="cash-summary-row">
+                          <span>Fine</span>
+                          <strong>{formatCurrency(cashRow.fineAmount)}</strong>
+                        </div>
+                        <div className="cash-summary-row">
+                          <span>Impound Fee</span>
+                          <strong>{formatCurrency(cashRow.impoundFee)}</strong>
+                        </div>
+                      </>
+                    )}
                     <div className="cash-summary-row">
                       <span>Amount Due</span>
                       <strong className="cash-summary-amount">
@@ -1239,15 +1149,62 @@ export default function PendingPaymentsOIC() {
                         {numberToWords(cashRow.amount)}
                       </strong>
                     </div>
-                    <div className="cash-summary-row">
-                      <span>Cash Received</span>
-                      <strong className="cash-summary-amount">
-                        {formatCurrency(cashRow.amount)}
-                      </strong>
+                    {payMethod === "Cash" && (
+                      <div className="cash-summary-row">
+                        <span>Cash Received</span>
+                        <strong className="cash-summary-amount">
+                          {formatCurrency(cashRow.amount)}
+                        </strong>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* PAYMENT METHOD — Cash, or GCash paid to the MTPB QR */}
+                  <div className="form-group">
+                    <label>Payment Method</label>
+                    <div className="pay-method-toggle" role="radiogroup">
+                      {(["Cash", "GCash"] as OnsiteMethod[]).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          role="radio"
+                          aria-checked={payMethod === m}
+                          className={`pay-method-option ${payMethod === m ? "is-active" : ""}`}
+                          onClick={() => {
+                            setPayMethod(m);
+                            setCashError("");
+                          }}
+                          disabled={saving}
+                        >
+                          {m}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  {/* PAYMENT LOCATION */}
+                  {payMethod === "GCash" && (
+                    <div className="form-group">
+                      <label htmlFor="gcashRef">
+                        GCash Reference No. <span className="required">*</span>
+                      </label>
+                      <input
+                        id="gcashRef"
+                        className="form-input"
+                        inputMode="numeric"
+                        placeholder="13-digit reference no."
+                        value={gcashRef}
+                        onChange={(e) => setGcashRef(e.target.value.replace(/[^\d\s]/g, "").slice(0, 16))}
+                        disabled={saving}
+                      />
+                      <small className="form-hint">
+                        From the payer's GCash receipt after paying to the MTPB GCash QR.
+                        Recorded as an Online (GCash) payment.
+                      </small>
+                    </div>
+                  )}
+
+                  {/* PAYMENT LOCATION — cash only; GCash is "Online" */}
+                  {payMethod === "Cash" && (
                   <div className="form-group">
                     <label htmlFor="paymentLocation">
                       Payment Location <span className="required">*</span>
@@ -1269,6 +1226,7 @@ export default function PendingPaymentsOIC() {
                       Select where the violator paid — Central (MTPB Office) or City Hall.
                     </small>
                   </div>
+                  )}
 
                   {/* OR NUMBER — Auto-generated */}
                   <div className="form-group">
@@ -1419,8 +1377,10 @@ export default function PendingPaymentsOIC() {
           referenceNumber={savedReference || ""}
           cin={cashRow.cin}
           plateNo={cashRow.plateNo}
-          amount={cashRow.amount}
+          amount={cashRow.fineAmount}
+          impoundFee={cashRow.impoundFee}
           totalAmount={cashRow.amount}
+          method={payMethod}
           orNumber={savedOrNumber || ""}
           recordedBy={currentUser.name}
           createdAt={new Date()}
