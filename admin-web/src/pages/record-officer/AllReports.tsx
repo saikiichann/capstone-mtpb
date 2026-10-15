@@ -20,9 +20,6 @@ import {
   FileText,
   FileSpreadsheet,
   Printer,
-  CalendarDays,
-  CalendarRange,
-  Calendar,
   BarChart3,
   Table2,
   ImageDown,
@@ -35,6 +32,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  LabelList,
   ResponsiveContainer,
 } from "recharts";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
@@ -151,11 +149,6 @@ const NAV_GROUPS: NavGroup[] = [
 
 const REPORT_ORDER: ReportKind[] = ["daily", "weekly", "monthly"];
 
-const REPORT_ICONS: Record<ReportKind, typeof Calendar> = {
-  daily: CalendarDays,
-  weekly: CalendarRange,
-  monthly: Calendar,
-};
 
 /** Chart series — validated categorical pair (blue / orange). */
 const SERIES = { recorded: "#2a78d6", released: "#eb6834" };
@@ -269,6 +262,74 @@ function Breakdown({
   );
 }
 
+/** Horizontal bar chart card for a breakdown (count + share at the bar end). */
+function TopBars({
+  title,
+  rows,
+  limit = 6,
+  onDownload,
+}: {
+  title: string;
+  rows: CountRow[];
+  limit?: number;
+  onDownload: () => void;
+}) {
+  const shown = rows.slice(0, limit).map((r) => ({
+    ...r,
+    label: `${r.count} · ${Math.round(r.share * 100)}%`,
+  }));
+  return (
+    <div className="card rp-chart-card">
+      <div className="rp-section-head">
+        <h3 className="rp-section-title">{title}</h3>
+        {shown.length > 0 && <PngButton onClick={onDownload} label={title} />}
+      </div>
+      {shown.length === 0 ? (
+        <p className="rp-muted">No records for this period.</p>
+      ) : (
+        <div className="rp-chart">
+          <ResponsiveContainer width="100%" height={shown.length * 36 + 12}>
+            <BarChart
+              data={shown}
+              layout="vertical"
+              margin={{ top: 4, right: 72, left: 0, bottom: 4 }}
+              barCategoryGap={10}
+            >
+              <XAxis type="number" hide allowDecimals={false} />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={215}
+                tick={{ fontSize: 12, fill: "#374151" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                cursor={{ fill: "rgba(42, 120, 214, 0.06)" }}
+                contentStyle={{ borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 12 }}
+                formatter={(value) => [value, "Violations"]}
+              />
+              <Bar
+                dataKey="count"
+                name="Violations"
+                fill={SERIES.recorded}
+                radius={[0, 4, 4, 0]}
+                maxBarSize={16}
+                background={{ fill: "#F1F3F5", radius: 4 }}
+              >
+                <LabelList dataKey="label" position="right" style={{ fontSize: 12, fill: "#374151" }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      {rows.length > limit && (
+        <p className="rp-muted rp-more-note">+{rows.length - limit} more in the PDF / Excel</p>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // COMPONENT
 // ---------------------------------------------------------------------------
@@ -276,7 +337,6 @@ export default function AllReports() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const reportRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
@@ -392,6 +452,9 @@ export default function AllReports() {
   const atLatest = isCurrentOrFuture(period);
   const isEmpty =
     report.recorded === 0 && report.settledCount === 0 && report.releasedCount === 0;
+  /** Daily → by hour; weekly / monthly → by day. */
+  const trend = period.kind === "daily" ? report.hours : report.days;
+  const trendTitle = period.kind === "daily" ? "Hour by hour" : "Day by day";
 
   // -----------------------------------------------------------------------
   // HANDLERS
@@ -409,15 +472,6 @@ export default function AllReports() {
       setIsMenuOpen(false);
       navigate("/");
     }
-  };
-
-  const openReport = (kind: ReportKind) => {
-    setPeriod(periodFor(kind, new Date()));
-    setShowAllRecords(false);
-    // Bring the report into view when opened from the list.
-    requestAnimationFrame(() =>
-      reportRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-    );
   };
 
   const changePeriod = (next: ReportPeriod) => {
@@ -583,77 +637,8 @@ export default function AllReports() {
           </header>
 
           <main className="main-content">
-            {/* REPORT LIST */}
-            <div className="card rp-list-card">
-              <p className="card-eyebrow">SECTOR 3</p>
-              <h2 className="card-title">Reports</h2>
-
-              <div className="table-wrapper">
-                <table className="data-table rp-list-table">
-                  <thead>
-                    <tr>
-                      <th>Report</th>
-                      <th>Covers</th>
-                      <th>Formats</th>
-                      <th>Last generated</th>
-                      <th aria-label="Actions"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {REPORT_ORDER.map((kind) => {
-                      const Icon = REPORT_ICONS[kind];
-                      const last = lastGenerated[kind];
-                      const selected = period.kind === kind;
-                      return (
-                        <tr key={kind} className={selected ? "rp-row-selected" : ""}>
-                          <td>
-                            <div className="rp-report-name">
-                              <span className="rp-report-icon">
-                                <Icon size={16} />
-                              </span>
-                              <div>
-                                <p className="rp-report-title">{REPORT_DEFS[kind].title}</p>
-                                <p className="rp-report-desc">{REPORT_DEFS[kind].description}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="rp-nowrap">{REPORT_DEFS[kind].covers}</td>
-                          <td>
-                            <span className="rp-format">PDF</span>
-                            <span className="rp-format">Excel</span>
-                          </td>
-                          <td className="rp-nowrap">
-                            {last ? (
-                              <>
-                                <p className="rp-last-main">{formatAgo(last.at)}</p>
-                                <p className="rp-last-sub">
-                                  {last.period} · {last.format} · {last.by}
-                                </p>
-                              </>
-                            ) : (
-                              <span className="rp-muted">Never</span>
-                            )}
-                          </td>
-                          <td className="rp-action-cell">
-                            <button
-                              type="button"
-                              className={`rp-open-btn ${selected ? "is-selected" : ""}`}
-                              onClick={() => openReport(kind)}
-                              aria-pressed={selected}
-                            >
-                              {selected ? "Viewing" : "Open"}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* REPORT */}
-            <div className="card rp-report-card" ref={reportRef}>
+            {/* FILTERS — pick the report and the period */}
+            <div className="card rp-filter-card">
               <div className="rp-report-head">
                 <div>
                   <p className="rp-print-only rp-print-org">
@@ -664,15 +649,17 @@ export default function AllReports() {
                   <p className="rp-print-only rp-print-meta">
                     Generated {formatDateTime(new Date())} by {currentUser.name} (Record Officer)
                   </p>
+                  <p className="rp-last-generated rp-no-print">
+                    {lastGenerated[period.kind]
+                      ? `Last generated ${formatAgo(lastGenerated[period.kind]!.at)} · ${
+                          lastGenerated[period.kind]!.period
+                        } · ${lastGenerated[period.kind]!.format} · ${lastGenerated[period.kind]!.by}`
+                      : `${def.description}`}
+                  </p>
                 </div>
 
                 <div className="rp-actions">
-                  <button
-                    type="button"
-                    className="rp-btn"
-                    onClick={handlePrint}
-                    disabled={loading}
-                  >
+                  <button type="button" className="rp-btn" onClick={handlePrint} disabled={loading}>
                     <Printer size={15} /> Print
                   </button>
                   <button
@@ -696,93 +683,228 @@ export default function AllReports() {
                 </div>
               </div>
 
-              {/* PERIOD PICKER */}
               <div className="rp-period-bar">
-                <div className="rp-tabs" role="tablist" aria-label="Report">
-                  {REPORT_ORDER.map((kind) => (
-                    <button
-                      key={kind}
-                      type="button"
-                      role="tab"
-                      aria-selected={period.kind === kind}
-                      className={`rp-tab ${period.kind === kind ? "is-active" : ""}`}
-                      onClick={() =>
-                        changePeriod(periodFor(kind, atLatest ? new Date() : period.start))
-                      }
-                    >
-                      {kind === "daily" ? "Daily" : kind === "weekly" ? "Weekly" : "Monthly"}
-                    </button>
-                  ))}
+                <div className="rp-filter-group">
+                  <span className="rp-filter-label">Report</span>
+                  <div className="rp-tabs" role="tablist" aria-label="Report">
+                    {REPORT_ORDER.map((kind) => (
+                      <button
+                        key={kind}
+                        type="button"
+                        role="tab"
+                        aria-selected={period.kind === kind}
+                        className={`rp-tab ${period.kind === kind ? "is-active" : ""}`}
+                        onClick={() =>
+                          changePeriod(periodFor(kind, atLatest ? new Date() : period.start))
+                        }
+                        title={REPORT_DEFS[kind].title}
+                      >
+                        {kind === "daily" ? "Daily" : kind === "weekly" ? "Weekly" : "Monthly"}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="rp-period-nav">
-                  <button
-                    type="button"
-                    className="rp-icon-btn"
-                    onClick={() => changePeriod(shiftPeriod(period, -1))}
-                    aria-label="Previous period"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  {period.kind === "monthly" ? (
-                    <input
-                      type="month"
-                      className="rp-date-input"
-                      value={toMonthInput(period.start)}
-                      max={toMonthInput(new Date())}
-                      onChange={(e) => handlePickDate(`${e.target.value}-01`)}
-                      aria-label="Month"
-                    />
-                  ) : (
-                    <input
-                      type="date"
-                      className="rp-date-input"
-                      value={toDateInput(period.start)}
-                      max={toDateInput(new Date())}
-                      onChange={(e) => handlePickDate(e.target.value)}
-                      aria-label={period.kind === "weekly" ? "Any day in the week" : "Date"}
-                    />
-                  )}
-                  <button
-                    type="button"
-                    className="rp-icon-btn"
-                    onClick={() => changePeriod(shiftPeriod(period, 1))}
-                    disabled={atLatest}
-                    aria-label="Next period"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                  {!atLatest && (
+                <div className="rp-filter-group">
+                  <span className="rp-filter-label">
+                    {period.kind === "daily" ? "Date" : period.kind === "weekly" ? "Week" : "Month"}
+                  </span>
+                  <div className="rp-period-nav">
                     <button
                       type="button"
-                      className="rp-link-btn"
-                      onClick={() => changePeriod(periodFor(period.kind, new Date()))}
+                      className="rp-icon-btn"
+                      onClick={() => changePeriod(shiftPeriod(period, -1))}
+                      aria-label="Previous period"
                     >
-                      {period.kind === "daily"
-                        ? "Today"
-                        : period.kind === "weekly"
-                          ? "This week"
-                          : "This month"}
+                      <ChevronLeft size={16} />
                     </button>
-                  )}
+                    {period.kind === "monthly" ? (
+                      <input
+                        type="month"
+                        className="rp-date-input"
+                        value={toMonthInput(period.start)}
+                        max={toMonthInput(new Date())}
+                        onChange={(e) => handlePickDate(`${e.target.value}-01`)}
+                        aria-label="Month"
+                      />
+                    ) : (
+                      <input
+                        type="date"
+                        className="rp-date-input"
+                        value={toDateInput(period.start)}
+                        max={toDateInput(new Date())}
+                        onChange={(e) => handlePickDate(e.target.value)}
+                        aria-label={period.kind === "weekly" ? "Any day in the week" : "Date"}
+                      />
+                    )}
+                    <button
+                      type="button"
+                      className="rp-icon-btn"
+                      onClick={() => changePeriod(shiftPeriod(period, 1))}
+                      disabled={atLatest}
+                      aria-label="Next period"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                    {!atLatest && (
+                      <button
+                        type="button"
+                        className="rp-link-btn"
+                        onClick={() => changePeriod(periodFor(period.kind, new Date()))}
+                      >
+                        {period.kind === "daily"
+                          ? "Today"
+                          : period.kind === "weekly"
+                            ? "This week"
+                            : "This month"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {loading ? (
+              {atLatest && !loading && (
+                <p className="rp-live-note rp-no-print">
+                  This period isn't over yet — figures update as new records come in.
+                </p>
+              )}
+            </div>
+
+            {loading ? (
+              <div className="card">
                 <div className="table-loading">
                   <p>Loading report data...</p>
                 </div>
-              ) : loadError ? (
+              </div>
+            ) : loadError ? (
+              <div className="card">
                 <div className="rp-error">{loadError}</div>
-              ) : (
-                <>
-                  {atLatest && (
-                    <p className="rp-live-note rp-no-print">
-                      This period isn't over yet — figures update as new records come in.
-                    </p>
+              </div>
+            ) : isEmpty ? (
+              <div className="card">
+                <div className="rp-empty">
+                  <p className="rp-empty-title">No activity for {period.label}</p>
+                  <p className="rp-muted">
+                    No violations were recorded, settled or released in this period. Try an
+                    earlier {period.kind === "monthly" ? "month" : period.kind === "weekly" ? "week" : "day"}.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* CHARTS — first thing to see */}
+                <div className="card rp-chart-card">
+                  <div className="rp-section-head">
+                    <div>
+                      <h3 className="rp-section-title">{trendTitle}</h3>
+                      <p className="rp-chart-sub">Violations recorded vs vehicles released</p>
+                    </div>
+                    <div className="rp-section-tools">
+                      <PngButton
+                        label={trendTitle}
+                        onClick={() =>
+                          downloadChart(trendTitle, (heading) => renderDayChart(trend, heading))
+                        }
+                      />
+                      <div className="rp-toggle rp-no-print" role="group" aria-label="View">
+                        <button
+                          type="button"
+                          className={trendView === "chart" ? "is-active" : ""}
+                          onClick={() => setTrendView("chart")}
+                          aria-pressed={trendView === "chart"}
+                        >
+                          <BarChart3 size={14} /> Chart
+                        </button>
+                        <button
+                          type="button"
+                          className={trendView === "table" ? "is-active" : ""}
+                          onClick={() => setTrendView("table")}
+                          aria-pressed={trendView === "table"}
+                        >
+                          <Table2 size={14} /> Table
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {trendView === "chart" && (
+                    <div className="rp-chart">
+                      <ResponsiveContainer width="100%" height={260}>
+                        <BarChart
+                          data={trend}
+                          margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
+                          barGap={2}
+                          barCategoryGap={period.kind === "weekly" ? "28%" : "18%"}
+                        >
+                          <CartesianGrid vertical={false} stroke="#EEF0F3" />
+                          <XAxis
+                            dataKey="label"
+                            tick={{ fontSize: 11, fill: "#6B7280" }}
+                            axisLine={{ stroke: "#E5E7EB" }}
+                            tickLine={false}
+                            interval={period.kind === "weekly" ? 0 : 2}
+                          />
+                          <YAxis
+                            allowDecimals={false}
+                            tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                            axisLine={false}
+                            tickLine={false}
+                          />
+                          <Tooltip
+                            cursor={{ fill: "rgba(42, 120, 214, 0.06)" }}
+                            contentStyle={{ borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 12 }}
+                          />
+                          <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, color: "#374151" }} />
+                          <Bar dataKey="recorded" name="Recorded" fill={SERIES.recorded} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                          <Bar dataKey="released" name="Released" fill={SERIES.released} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   )}
 
-                  {/* KEY FIGURES */}
+                  <table
+                    className={`rp-mini-table rp-day-table ${
+                      trendView === "chart" ? "rp-print-only" : ""
+                    }`}
+                  >
+                    <thead>
+                      <tr>
+                        <th>{period.kind === "daily" ? "Hour" : "Date"}</th>
+                        <th className="rp-num">Recorded</th>
+                        <th className="rp-num">Settled</th>
+                        <th className="rp-num">Released</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {trend.map((d) => (
+                        <tr key={d.label}>
+                          <td>{d.label}</td>
+                          <td className="rp-num">{d.recorded}</td>
+                          <td className="rp-num">{d.settled}</td>
+                          <td className="rp-num">{d.released}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="rp-chart-grid">
+                  <TopBars
+                    title="Violations by type"
+                    rows={report.byViolation}
+                    onDownload={breakdownDownload("Violations by type", report.byViolation)}
+                  />
+                  <TopBars
+                    title="Top locations"
+                    rows={report.byLocation}
+                    limit={8}
+                    onDownload={breakdownDownload("Top locations", report.byLocation)}
+                  />
+                </div>
+
+                {/* KEY FIGURES */}
+                <div className="card">
+                  <h3 className="rp-section-title">Key figures</h3>
                   <div className="rp-kpis">
                     <div className="rp-kpi">
                       <p className="rp-kpi-label">Violations recorded</p>
@@ -822,237 +944,95 @@ export default function AllReports() {
                       <strong>{report.wentToImpound}</strong> went to impound
                     </span>
                   </div>
+                </div>
 
-                  {isEmpty ? (
-                    <div className="rp-empty">
-                      <p className="rp-empty-title">No activity for {period.label}</p>
-                      <p className="rp-muted">
-                        No violations were recorded, settled or released in this period.
-                        Try an earlier {period.kind === "monthly" ? "month" : period.kind === "weekly" ? "week" : "day"}.
-                      </p>
-                    </div>
+                {/* MORE BREAKDOWNS */}
+                <div className="card">
+                  <div className="rp-breakdown-grid rp-breakdown-grid-top">
+                    <Breakdown
+                      title="By enforcer"
+                      label="Enforcer"
+                      rows={report.byOfficer}
+                      onDownload={breakdownDownload("Violations by enforcer", report.byOfficer)}
+                    />
+                    <Breakdown
+                      title="By vehicle type"
+                      label="Vehicle"
+                      rows={report.byVehicleType}
+                      onDownload={breakdownDownload("Violations by vehicle type", report.byVehicleType)}
+                    />
+                  </div>
+                </div>
+
+                {/* RECORDS */}
+                <div className="card">
+                  <h3 className="rp-section-title">
+                    Violations recorded <span className="rp-count">{report.records.length}</span>
+                  </h3>
+                  {report.records.length === 0 ? (
+                    <p className="rp-muted">No violations were recorded in this period.</p>
                   ) : (
-                    <>
-                      {/* DAY BY DAY */}
-                      {report.days.length > 0 && (
-                        <div className="rp-section">
-                          <div className="rp-section-head">
-                            <h3 className="rp-section-title">Day by day</h3>
-                            <div className="rp-section-tools">
-                            <PngButton
-                              label="Day by day"
-                              onClick={() =>
-                                downloadChart("Day by day", (heading) =>
-                                  renderDayChart(report.days, heading)
-                                )
-                              }
-                            />
-                            <div className="rp-toggle rp-no-print" role="group" aria-label="View">
-                              <button
-                                type="button"
-                                className={trendView === "chart" ? "is-active" : ""}
-                                onClick={() => setTrendView("chart")}
-                                aria-pressed={trendView === "chart"}
-                              >
-                                <BarChart3 size={14} /> Chart
-                              </button>
-                              <button
-                                type="button"
-                                className={trendView === "table" ? "is-active" : ""}
-                                onClick={() => setTrendView("table")}
-                                aria-pressed={trendView === "table"}
-                              >
-                                <Table2 size={14} /> Table
-                              </button>
-                            </div>
-                            </div>
-                          </div>
-
-                          {trendView === "chart" ? (
-                            <div className="rp-chart">
-                              <ResponsiveContainer width="100%" height={240}>
-                                <BarChart
-                                  data={report.days}
-                                  margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
-                                  barGap={2}
-                                  barCategoryGap={period.kind === "weekly" ? "28%" : "18%"}
-                                >
-                                  <CartesianGrid vertical={false} stroke="#EEF0F3" />
-                                  <XAxis
-                                    dataKey="label"
-                                    tick={{ fontSize: 11, fill: "#6B7280" }}
-                                    axisLine={{ stroke: "#E5E7EB" }}
-                                    tickLine={false}
-                                    interval={period.kind === "monthly" ? 2 : 0}
-                                  />
-                                  <YAxis
-                                    allowDecimals={false}
-                                    tick={{ fontSize: 11, fill: "#9CA3AF" }}
-                                    axisLine={false}
-                                    tickLine={false}
-                                  />
-                                  <Tooltip
-                                    cursor={{ fill: "rgba(42, 120, 214, 0.06)" }}
-                                    contentStyle={{
-                                      borderRadius: 8,
-                                      border: "1px solid #E5E7EB",
-                                      fontSize: 12,
-                                    }}
-                                  />
-                                  <Legend
-                                    iconType="circle"
-                                    iconSize={8}
-                                    wrapperStyle={{ fontSize: 12, color: "#374151" }}
-                                  />
-                                  <Bar
-                                    dataKey="recorded"
-                                    name="Recorded"
-                                    fill={SERIES.recorded}
-                                    radius={[4, 4, 0, 0]}
-                                    maxBarSize={22}
-                                  />
-                                  <Bar
-                                    dataKey="released"
-                                    name="Released"
-                                    fill={SERIES.released}
-                                    radius={[4, 4, 0, 0]}
-                                    maxBarSize={22}
-                                  />
-                                </BarChart>
-                              </ResponsiveContainer>
-                            </div>
-                          ) : null}
-
-                          <table
-                            className={`rp-mini-table rp-day-table ${
-                              trendView === "chart" ? "rp-print-only" : ""
-                            }`}
-                          >
-                            <thead>
-                              <tr>
-                                <th>Date</th>
-                                <th className="rp-num">Recorded</th>
-                                <th className="rp-num">Settled</th>
-                                <th className="rp-num">Released</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {report.days.map((d) => (
-                                <tr key={d.label}>
-                                  <td>{d.label}</td>
-                                  <td className="rp-num">{d.recorded}</td>
-                                  <td className="rp-num">{d.settled}</td>
-                                  <td className="rp-num">{d.released}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-
-                      {/* BREAKDOWNS */}
-                      <div className="rp-breakdown-grid">
-                        <Breakdown
-                          title="By violation type"
-                          label="Violation"
-                          rows={report.byViolation}
-                          onDownload={breakdownDownload("Violations by type", report.byViolation)}
-                        />
-                        <Breakdown
-                          title="Top locations"
-                          label="Location"
-                          rows={report.byLocation}
-                          limit={8}
-                          onDownload={breakdownDownload("Top locations", report.byLocation)}
-                        />
-                        <Breakdown
-                          title="By enforcer"
-                          label="Enforcer"
-                          rows={report.byOfficer}
-                          onDownload={breakdownDownload("Violations by enforcer", report.byOfficer)}
-                        />
-                        <Breakdown
-                          title="By vehicle type"
-                          label="Vehicle"
-                          rows={report.byVehicleType}
-                          onDownload={breakdownDownload("Violations by vehicle type", report.byVehicleType)}
-                        />
-                      </div>
-
-                      {/* RECORDS */}
-                      <div className="rp-section">
-                        <h3 className="rp-section-title">
-                          Violations recorded <span className="rp-count">{report.records.length}</span>
-                        </h3>
-                        {report.records.length === 0 ? (
-                          <p className="rp-muted">No violations were recorded in this period.</p>
-                        ) : (
-                          <div className="table-wrapper">
-                            <table className="data-table rp-records-table">
-                              <thead>
-                                <tr>
-                                  <th>CIN</th>
-                                  <th>Plate No.</th>
-                                  <th>Violation</th>
-                                  <th>Location</th>
-                                  <th>Enforcer</th>
-                                  <th>Recorded</th>
-                                  <th className="rp-num">Amount</th>
-                                  <th>Payment</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {shownRecords.map((r, i) => (
-                                  <tr key={`${r.cin}-${i}`}>
-                                    <td>
-                                      <span className="cin-pill">{r.cin}</span>
-                                    </td>
-                                    <td className="cell-plate">{r.plateNo}</td>
-                                    <td>{r.violation}</td>
-                                    <td className="rp-cell-location">{r.location}</td>
-                                    <td>{r.officer}</td>
-                                    <td className="rp-nowrap">{formatDateTime(r.recordedAt)}</td>
-                                    <td className="rp-num rp-nowrap">{peso(r.amount)}</td>
-                                    <td>
-                                      <span className={paymentClass(r.payment)}>{r.payment}</span>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                        {report.records.length > RECORDS_PREVIEW && (
-                          <button
-                            type="button"
-                            className="rp-link-btn rp-show-all rp-no-print"
-                            onClick={() => setShowAllRecords((v) => !v)}
-                          >
-                            {showAllRecords
-                              ? "Show fewer"
-                              : `Show all ${report.records.length} violations`}
-                          </button>
-                        )}
-                      </div>
-
-                      {/* SIGNATURES (print) */}
-                      <div className="rp-signatures rp-print-only">
-                        <div>
-                          <p className="rp-sig-caption">Prepared by</p>
-                          <p className="rp-sig-name">{currentUser.name}</p>
-                          <p className="rp-sig-role">Record Officer</p>
-                        </div>
-                        <div>
-                          <p className="rp-sig-caption">Noted by</p>
-                          <p className="rp-sig-name">&nbsp;</p>
-                          <p className="rp-sig-role">Officer in Charge</p>
-                        </div>
-                      </div>
-                    </>
+                    <div className="table-wrapper">
+                      <table className="data-table rp-records-table">
+                        <thead>
+                          <tr>
+                            <th>CIN</th>
+                            <th>Plate No.</th>
+                            <th>Violation</th>
+                            <th>Location</th>
+                            <th>Enforcer</th>
+                            <th>Recorded</th>
+                            <th className="rp-num">Amount</th>
+                            <th>Payment</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {shownRecords.map((r, i) => (
+                            <tr key={`${r.cin}-${i}`}>
+                              <td>
+                                <span className="cin-pill">{r.cin}</span>
+                              </td>
+                              <td className="cell-plate">{r.plateNo}</td>
+                              <td>{r.violation}</td>
+                              <td className="rp-cell-location">{r.location}</td>
+                              <td>{r.officer}</td>
+                              <td className="rp-nowrap">{formatDateTime(r.recordedAt)}</td>
+                              <td className="rp-num rp-nowrap">{peso(r.amount)}</td>
+                              <td>
+                                <span className={paymentClass(r.payment)}>{r.payment}</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
-                </>
-              )}
-            </div>
+                  {report.records.length > RECORDS_PREVIEW && (
+                    <button
+                      type="button"
+                      className="rp-link-btn rp-show-all rp-no-print"
+                      onClick={() => setShowAllRecords((v) => !v)}
+                    >
+                      {showAllRecords ? "Show fewer" : `Show all ${report.records.length} violations`}
+                    </button>
+                  )}
+
+                  {/* SIGNATURES (print) */}
+                  <div className="rp-signatures rp-print-only">
+                    <div>
+                      <p className="rp-sig-caption">Prepared by</p>
+                      <p className="rp-sig-name">{currentUser.name}</p>
+                      <p className="rp-sig-role">Record Officer</p>
+                    </div>
+                    <div>
+                      <p className="rp-sig-caption">Noted by</p>
+                      <p className="rp-sig-name">&nbsp;</p>
+                      <p className="rp-sig-role">Officer in Charge</p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </main>
         </div>
       </div>

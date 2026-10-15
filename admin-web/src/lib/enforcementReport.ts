@@ -164,7 +164,10 @@ export type ReportData = {
   byLocation: CountRow[];
   byOfficer: CountRow[];
   byVehicleType: CountRow[];
+  /** Weekly / monthly: one row per day */
   days: DayRow[];
+  /** Daily: one row per hour (12 AM – 11 PM) */
+  hours: DayRow[];
   records: RecordRow[];
 };
 
@@ -254,6 +257,23 @@ export const buildReport = (violations: Violation[], period: ReportPeriod): Repo
     }
   }
 
+  // Hour-by-hour rows (daily)
+  const hours: DayRow[] = [];
+  if (period.kind === "daily") {
+    for (let h = 0; h < 24; h++) {
+      const from = new Date(period.start.getFullYear(), period.start.getMonth(), period.start.getDate(), h);
+      const to = from.getTime() + 3600000;
+      const within = (x: Date | null) => !!x && x.getTime() >= from.getTime() && x.getTime() < to;
+      hours.push({
+        date: from,
+        label: from.toLocaleTimeString("en-US", { hour: "numeric" }),
+        recorded: recorded.filter((v) => within(toDate(v.recordedAt))).length,
+        settled: settled.filter((v) => within(toDate(v.verifiedAt) ?? toDate(v.paidAt))).length,
+        released: released.filter((v) => within(toDate(v.releasedAt))).length,
+      });
+    }
+  }
+
   const enforcementLabel = (v: Violation) => {
     const t = String(v.enforcementType ?? "").toLowerCase();
     if (t === "clamped") return "Clamped";
@@ -290,6 +310,7 @@ export const buildReport = (violations: Violation[], period: ReportPeriod): Repo
     byOfficer: countBy(recorded, (v) => text(v.officer, "Unassigned")),
     byVehicleType: countBy(recorded, (v) => text(v.vehicleType, "Unspecified")),
     days,
+    hours,
     records: recorded
       .map((v) => ({
         cin: text(v.cin),
@@ -482,6 +503,8 @@ export const downloadReportPdf = (data: ReportData, preparedBy: string): void =>
 
   if (data.days.length) {
     chart("Day by day: recorded vs released", safeChart(() => renderDayChart(data.days, { height: 330 })));
+  } else if (data.hours.some((h) => h.recorded || h.released)) {
+    chart("Hour by hour: recorded vs released", safeChart(() => renderDayChart(data.hours, { height: 300 })));
   }
 
   const breakdown = (
@@ -646,6 +669,20 @@ export const downloadReportExcel = (data: ReportData, preparedBy: string): void 
         [18, 10, 10, 10]
       ),
       "Day by Day"
+    );
+  }
+
+  if (data.hours.length) {
+    XLSX.utils.book_append_sheet(
+      wb,
+      sheet(
+        [
+          ["Hour", "Recorded", "Settled", "Released"],
+          ...data.hours.map((h) => [h.label, h.recorded, h.settled, h.released]),
+        ],
+        [10, 10, 10, 10]
+      ),
+      "Hour by Hour"
     );
   }
 

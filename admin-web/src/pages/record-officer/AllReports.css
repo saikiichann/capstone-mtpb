@@ -21,102 +21,6 @@
 }
 
 /* ==================================================================
-   REPORT LIST
-================================================================== */
-.reports-page .rp-list-table td {
-  vertical-align: middle;
-}
-
-.reports-page .rp-row-selected td {
-  background: #F5F9FF;
-}
-
-.reports-page .rp-report-name {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.reports-page .rp-report-icon {
-  flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: #EFF6FF;
-  color: #1D4ED8;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.reports-page .rp-report-title {
-  margin: 0;
-  font-weight: 600;
-  color: #111827;
-  font-size: 14px;
-}
-
-.reports-page .rp-report-desc {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: #6B7280;
-  max-width: 420px;
-}
-
-.reports-page .rp-format {
-  display: inline-block;
-  padding: 2px 8px;
-  margin-right: 4px;
-  border-radius: 999px;
-  background: #F3F4F6;
-  color: #374151;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.reports-page .rp-last-main {
-  margin: 0;
-  font-size: 13px;
-  color: #111827;
-}
-
-.reports-page .rp-last-sub {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: #9CA3AF;
-}
-
-.reports-page .rp-action-cell {
-  text-align: right;
-  width: 1%;
-}
-
-.reports-page .rp-open-btn {
-  padding: 6px 16px;
-  border-radius: 8px;
-  border: 1px solid #D1D5DB;
-  background: #fff;
-  color: #111827;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s;
-}
-
-.reports-page .rp-open-btn:hover {
-  background: #F9FAFB;
-  border-color: #9CA3AF;
-}
-
-.reports-page .rp-open-btn.is-selected {
-  background: #1D4ED8;
-  border-color: #1D4ED8;
-  color: #fff;
-  cursor: default;
-}
-
-/* ==================================================================
    REPORT HEADER + ACTIONS
 ================================================================== */
 .reports-page .rp-report-card {
@@ -594,7 +498,6 @@
 
   .reports-page .sidebar,
   .reports-page .main-header,
-  .reports-page .rp-list-card,
   .reports-page .rp-actions,
   .reports-page .rp-period-bar,
   .reports-page .rp-no-print {
@@ -719,4 +622,72 @@
 .reports-page .rp-png-btn:hover {
   background: #F9FAFB;
   border-color: #9CA3AF;
+}
+
+/* ==================================================================
+   FILTER BAR + CHARTS ON TOP
+================================================================== */
+.reports-page .rp-filter-card .rp-period-bar {
+  margin-bottom: 0;
+}
+
+.reports-page .rp-filter-card .rp-live-note {
+  margin: 10px 0 0;
+}
+
+.reports-page .rp-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reports-page .rp-filter-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #6B7280;
+}
+
+.reports-page .rp-last-generated {
+  margin: 0;
+  font-size: 12px;
+  color: #6B7280;
+}
+
+.reports-page .rp-chart-card .rp-section-head {
+  margin-bottom: 12px;
+}
+
+.reports-page .rp-chart-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #6B7280;
+}
+
+.reports-page .rp-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.reports-page .rp-breakdown-grid-top {
+  margin-top: 0;
+}
+
+@media (max-width: 1100px) {
+  .reports-page .rp-chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  .reports-page .rp-chart-grid {
+    display: block;
+  }
+
+  .reports-page .rp-chart-card {
+    break-inside: avoid;
+    margin-bottom: 16px;
+  }
 }
