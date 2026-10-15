@@ -635,3 +635,56 @@
       justify-content: center;
     }
   }
+  /* ==================================================================
+    SUPERVISOR — Edit action (class names are the Supervisor's own, so
+    the OIC page's identical .impound-log-page rules are not affected)
+  ================================================================== */
+  .impound-log-page .sup-cell-action {
+    text-align: right;
+    width: 100px;
+    white-space: nowrap;
+  }
+
+  .impound-log-page .sup-btn-edit {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: #EFF6FF;
+    color: #1E40AF;
+    border: 1px solid #BFDBFE;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .impound-log-page .sup-btn-edit:hover:not(:disabled) {
+    background: #DBEAFE;
+    border-color: #93C5FD;
+  }
+
+  .impound-log-page .sup-btn-edit:disabled {
+    opacity: 0.6;
+    cursor: wait;
+  }
+
+  .impound-log-page .sup-action-none {
+    color: #9CA3AF;
+  }
+
+  .impound-log-page .sup-edit-notice {
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    background: #ECFDF5;
+    color: #065F46;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
+  .impound-log-page .sup-edit-notice.is-error {
+    background: #FEF2F2;
+    color: #991B1B;
+  }

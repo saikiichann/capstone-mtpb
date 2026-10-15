@@ -5,7 +5,9 @@
    with the Supervisor's sidebar (no Payment/Finance; links stay on
    /supervisor/...). The Supervisor monitors operations and approves
    vehicle release; payments are not handled here.
-   Monitoring.
+   The Supervisor can edit the record of a vehicle that is already
+   Impounded (Edit button → ./EditImpoundModal.tsx). CIN and status stay
+   as they are; release still goes through payment and the release queue.
    Styles: ./ImpoundingLog.css (a copy of the OIC page's CSS).
 ------------------------------------------------------------------ */
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -16,6 +18,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Pencil,
 } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
@@ -29,6 +32,9 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./ImpoundingLog.css";
+import SupervisorEditImpoundModal, {
+  type ImpoundRecordData,
+} from "./EditImpoundModal";
 
 import logo from "../../assets/mtpb-logo.png";
 import avatarImg from "../../assets/user.png";
@@ -77,6 +83,8 @@ type ImpoundLogRow = {
   officer: string;
   recordedAt: Timestamp | null;
   status: LogStatus;
+  /** impoundRecords doc id — only rows that have a record can be edited */
+  recordId?: string;
 };
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
@@ -247,6 +255,35 @@ export default function SupervisorImpoundingLog() {
   const [violationFilter, setViolationFilter] = useState(ALL_VIOLATIONS);
   const [currentPage, setCurrentPage] = useState(1);
 
+  /** Impound record open in the Edit modal */
+  const [editing, setEditing] = useState<ImpoundRecordData | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
+
+  /** Loads the latest saved record, then opens the Edit modal. */
+  const openEdit = async (recordId: string) => {
+    setOpeningId(recordId);
+    setNotice(null);
+    try {
+      const snap = await getDoc(doc(db, "impoundRecords", recordId));
+      if (!snap.exists()) {
+        setNotice({ text: "This impound record no longer exists.", ok: false });
+        return;
+      }
+      const data = snap.data();
+      if (normalizeImpoundStatus(data.status) !== "Impounded") {
+        setNotice({ text: "Only records of impounded vehicles can be edited.", ok: false });
+        return;
+      }
+      setEditing({ id: snap.id, ...data } as ImpoundRecordData);
+    } catch (err) {
+      console.error("Failed to open impound record:", err);
+      setNotice({ text: "Could not load the impound record.", ok: false });
+    } finally {
+      setOpeningId(null);
+    }
+  };
+
   /* Current user */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
@@ -365,6 +402,7 @@ export default function SupervisorImpoundingLog() {
           const data = d.data();
           return {
             id: d.id,
+            recordId: d.id,
             linkedViolationId: (data.sourceViolationId as string) || d.id,
             reference:
               (data.referenceNumber as string) ??
@@ -639,6 +677,12 @@ export default function SupervisorImpoundingLog() {
                 Impounding Log
               </h2>
 
+              {notice && (
+                <div className={`sup-edit-notice${notice.ok ? "" : " is-error"}`}>
+                  {notice.text}
+                </div>
+              )}
+
               {loading ? (
                 <div className="table-loading">
                   <p>Loading impounding log...</p>
@@ -662,6 +706,7 @@ export default function SupervisorImpoundingLog() {
                         <th>Impounded by</th>
                         <th>Time</th>
                         <th>Status</th>
+                        <th className="sup-cell-action">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -688,6 +733,22 @@ export default function SupervisorImpoundingLog() {
                             >
                               {row.status}
                             </span>
+                          </td>
+                          <td className="sup-cell-action">
+                            {row.recordId && row.status === "Impounded" ? (
+                              <button
+                                type="button"
+                                className="sup-btn-edit"
+                                onClick={() => openEdit(row.recordId!)}
+                                disabled={openingId === row.recordId}
+                                title="Edit impound record"
+                              >
+                                <Pencil size={13} />
+                                {openingId === row.recordId ? "Opening..." : "Edit"}
+                              </button>
+                            ) : (
+                              <span className="sup-action-none">—</span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -731,6 +792,17 @@ export default function SupervisorImpoundingLog() {
           </main>
         </div>
       </div>
+
+      {editing && (
+        <SupervisorEditImpoundModal
+          record={editing}
+          currentUserName={currentUser.name}
+          onClose={() => setEditing(null)}
+          onSaved={() =>
+            setNotice({ text: `Impound record ${editing.cin ?? ""} updated.`, ok: true })
+          }
+        />
+      )}
     </div>
   );
 }
