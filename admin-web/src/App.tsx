@@ -93,10 +93,11 @@
               Payment/Finance routes here are OIC-only, so typing those URLs
               as a Supervisor redirects back to /supervisor.
 
-              Flagging "Subject to Impound" is OIC-only: the Clamping Log
-              auto-flag runs for role "oic" only, and the Firestore rules
-              allow impoundStatus and impoundRecords writes to the OIC
-              (and Impounding Staff for Scheduled / Impounded / Released).
+              Impounding is its own process now (UOVR / Blue Ticket), not
+              derived from clamping: Impounding Staff encode the UOVR
+              ticket in impoundRecords, OIC receives the impounding fee
+              and releases the vehicle. Firestore rules scope who may
+              create/update impoundRecords and payments accordingly.
           ================================================================ */}
           <Route
             path="/dashboard"
@@ -238,8 +239,9 @@
               Its own pages in pages/supervisor/ (same content as the OIC's,
               with the Supervisor's sidebar and its own CSS files).
               Can: approve/reject release requests, Release Queue actions,
-              Operation Scheduler. Cannot: payments,
-              or flag "Subject to Impound" (OIC-only, also in Firestore rules).
+              Operation Scheduler, and edit impound (UOVR) records with a
+              reason. Cannot: payments — receiving the impounding fee and
+              releasing a vehicle is OIC-only, also in Firestore rules.
           ================================================================ */}
           <Route
             path="/supervisor"

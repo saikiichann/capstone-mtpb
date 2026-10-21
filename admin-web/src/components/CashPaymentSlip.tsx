@@ -41,6 +41,14 @@ interface CashPaymentSlipProps {
   overdueFee?: number;
   /** Optional: "Cash" or "GCash"; shown when given. */
   method?: string;
+  /**
+   * "impound": impounding fee paid at the lot (UOVR / Blue Ticket). No QR or
+   * account box (the violator app is for clamps), the ticket is shown as
+   * "UOVR No.", the fee row uses feeLabel, and the status reads "Paid".
+   */
+  variant?: "clamp" | "impound";
+  /** Fee row label for the impound variant, e.g. "Impounding Fee (Light)" */
+  feeLabel?: string;
   onClose: () => void;
   onPrinted: () => void;
 }
@@ -59,10 +67,11 @@ const COPY_LABEL: Record<SlipCopy, string> = {
 };
 
 function Slip(props: CashPaymentSlipProps & { copy: SlipCopy }) {
-  const { copy, paymentId, referenceNumber, cin, plateNo, amount, totalAmount, orNumber, recordedBy, createdAt, cashReceived, overdueFee, method } = props;
+  const { copy, paymentId, referenceNumber, cin, plateNo, amount, totalAmount, orNumber, recordedBy, createdAt, cashReceived, overdueFee, method, variant = "clamp", feeLabel } = props;
+  const impound = variant === "impound";
   // Cash: always show Cash Received and Change (₱0.00 when exact).
   const showCash = typeof cashReceived === "number";
-  const violation = `${cin}${plateNo ? ` · ${plateNo}` : ""}`;
+  const violation = `${impound ? "UOVR No. " : ""}${cin}${plateNo ? ` · ${plateNo}` : ""}`;
 
   return (
     <article className={`cash-slip cash-slip--${copy}`} aria-label={`Payment slip, ${COPY_LABEL[copy].toLowerCase()}`}>
@@ -75,7 +84,13 @@ function Slip(props: CashPaymentSlipProps & { copy: SlipCopy }) {
         <p className="cash-slip__title">PAYMENT ACKNOWLEDGMENT</p>
       </header>
 
-      {copy === "violator" ? (
+      {copy === "violator" && impound ? (
+        <>
+          <p className="cash-slip__ref-label">REFERENCE NUMBER</p>
+          <p className="cash-slip__ref-big">{referenceNumber}</p>
+          <p className="cash-slip__violation">{violation}</p>
+        </>
+      ) : copy === "violator" ? (
         <>
           <div className="cash-slip__qr">
             <QRCodeSVG value={`${PAYMENT_CHECK_URL}${encodeURIComponent(paymentId)}`} size={136} level="M" />
@@ -96,7 +111,12 @@ function Slip(props: CashPaymentSlipProps & { copy: SlipCopy }) {
 
       <table className="cash-slip__rows">
         <tbody>
-          {typeof overdueFee === "number" && overdueFee > 0 ? (
+          {impound ? (
+            <tr>
+              <td>{feeLabel ?? "Impounding Fee"}</td>
+              <td>{peso(amount)}</td>
+            </tr>
+          ) : typeof overdueFee === "number" && overdueFee > 0 ? (
             // Past 24 hours: the overdue fee replaces the clamp fine.
             <tr>
               <td>Overdue Clamp Fee</td>
@@ -147,14 +167,20 @@ function Slip(props: CashPaymentSlipProps & { copy: SlipCopy }) {
           </tr>
           <tr>
             <td>Status</td>
-            <td>For verification</td>
+            <td>{impound ? "Paid · Released" : "For verification"}</td>
           </tr>
         </tbody>
       </table>
 
       <hr className="cash-slip__rule" />
 
-      {copy === "violator" ? (
+      {copy === "violator" && impound ? (
+        <p className="cash-slip__footer">
+          <strong>Keep this slip.</strong> Present it at the impound lot to claim your vehicle.
+          <br />
+          For concerns: mtpbovrdivision@gmail.com
+        </p>
+      ) : copy === "violator" ? (
         <>
           <div className="cash-slip__account">
             <p className="cash-slip__account-title">Add this to your MTPB account.</p>

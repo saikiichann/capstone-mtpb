@@ -1,19 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  serverTimestamp,
-  updateDoc,
-  Timestamp,
-} from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../firebase";
-import { syncClampImpound } from "../../lib/impoundFlag";
+import ImpoundRecordsPanel from "../../components/impound/ImpoundRecordsPanel";
+import ChangePasswordModal from "../../components/ChangePasswordModal";
+import { daysInLot, pesoText, useImpoundRecords } from "../../lib/impoundRecords";
 import "./ActiveImpounding.css";
 
 // Assets
@@ -43,32 +36,6 @@ type CurrentUser = {
   role: RoleSlug;
 };
 
-type ImpoundStatus =
-  | "Scheduled for Impounding"
-  | "Subject to Impound"
-  | "Impounded"
-  | "Released"
-  | "On Patrol";
-
-type ImpoundRow = {
-  id: string;
-  cin: string;
-  plateNo: string;
-  location: string;
-  clampedBy: string;
-  clampedAt: Timestamp | null;
-  hoursOverdue: number;
-  status: ImpoundStatus;
-  /** violations doc id ng clamp (para i-sync ang impoundStatus) */
-  violationId: string;
-};
-
-type Metrics = {
-  subjectToImpound: number;
-  scheduled: number;
-  avgHoursOverdue: number;
-};
-
 type NavItem = {
   label: string;
   icon: string;
@@ -84,7 +51,6 @@ type NavGroup = {
 /* ------------------------------------------------------------------
    CONSTANTS
 ------------------------------------------------------------------ */
-const ITEMS_PER_PAGE = 10;
 
 const ROLE_LABELS: Record<RoleSlug, string> = {
   oic: "Officer in Charge",
@@ -96,14 +62,6 @@ const ROLE_LABELS: Record<RoleSlug, string> = {
   "clamping-staff": "Clamping Staff",
   "impounding-staff": "Impounding Staff",
 };
-
-const STATUS_OPTIONS: ImpoundStatus[] = [
-  "On Patrol",
-  "Scheduled for Impounding",
-  "Subject to Impound",
-  "Impounded",
-  "Released",
-];
 
 const navGroups: NavGroup[] = [
   {
@@ -143,163 +101,6 @@ const navGroups: NavGroup[] = [
 /* ------------------------------------------------------------------
    HELPERS
 ------------------------------------------------------------------ */
-const formatDateTime = (ts: Timestamp | null): string => {
-  if (!ts) return "—";
-  try {
-    return ts.toDate().toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return "—";
-  }
-};
-
-const millis = (ts: Timestamp | null): number => {
-  try {
-    return ts ? ts.toMillis() : 0;
-  } catch {
-    return 0;
-  }
-};
-
-const computeHoursOverdue = (ts: Timestamp | null): number => {
-  if (!ts) return 0;
-  try {
-    const date = ts.toDate();
-    const now = new Date();
-    return Math.max(0, Math.floor((now.getTime() - date.getTime()) / 3600000));
-  } catch {
-    return 0;
-  }
-};
-
-const getStatusClass = (status: ImpoundStatus): string => {
-  const map: Record<ImpoundStatus, string> = {
-    "Scheduled for Impounding": "status-scheduled",
-    "Subject to Impound": "status-subject",
-    Impounded: "status-impounded",
-    Released: "status-released",
-    "On Patrol": "status-patrol",
-  };
-  return map[status] ?? "";
-};
-
-/* ------------------------------------------------------------------
-   UPDATE MODAL
------------------------------------------------------------------- */
-type UpdateModalProps = {
-  row: ImpoundRow;
-  onClose: () => void;
-  onSave: (newStatus: ImpoundStatus) => Promise<void>;
-};
-
-function UpdateModal({ row, onClose, onSave }: UpdateModalProps) {
-  const [newStatus, setNewStatus] = useState<ImpoundStatus>(row.status);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSave = async () => {
-    setError("");
-    setSaving(true);
-    try {
-      await onSave(newStatus);
-    } catch (err: any) {
-      console.error("Update error:", err);
-      setError(err.message || "Failed to update status.");
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">{row.cin}</h2>
-          <button
-            type="button"
-            className="modal-close"
-            onClick={onClose}
-            disabled={saving}
-            aria-label="Close"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <div className="info-box">
-            <div className="info-row">
-              <span className="info-label">Plate:</span>
-              <span className="info-value">{row.plateNo}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Officer:</span>
-              <span className="info-value">{row.clampedBy}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Location:</span>
-              <span className="info-value">{row.location}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Clamped:</span>
-              <span className="info-value">
-                {formatDateTime(row.clampedAt)}
-              </span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Hours past redemption window:</span>
-              <span className="info-value">{row.hoursOverdue} hrs</span>
-            </div>
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="update-status">Update Status</label>
-            <select
-              id="update-status"
-              value={newStatus}
-              onChange={(e) => setNewStatus(e.target.value as ImpoundStatus)}
-              disabled={saving}
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {error && <p className="modal-error">{error}</p>}
-        </div>
-
-        <div className="modal-footer">
-          <button
-            type="button"
-            className="btn-cancel"
-            onClick={onClose}
-            disabled={saving}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn-save"
-            onClick={handleSave}
-            disabled={saving || newStatus === row.status}
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------
-   MAIN COMPONENT
------------------------------------------------------------------- */
 export default function ActiveImpounding() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -310,10 +111,8 @@ export default function ActiveImpounding() {
     role: "impounding-staff",
   });
 
-  const [rows, setRows] = useState<ImpoundRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedRow, setSelectedRow] = useState<ImpoundRow | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const { records } = useImpoundRecords();
 
   /* Fetch current user */
   useEffect(() => {
@@ -344,52 +143,6 @@ export default function ActiveImpounding() {
     return () => unsubscribe();
   }, []);
 
-  /**
-   * Fetch impound records — active ones only (not Released).
-   *
-   * No orderBy() on purpose: Firestore silently drops documents that lack
-   * the ordered field, so a record without clampedAt would never show up.
-   * Newest-first sorting happens client-side instead.
-   */
-  useEffect(() => {
-    const unsubscribe = onSnapshot(
-      collection(db, "impoundRecords"),
-      (snap) => {
-        const activeRows: ImpoundRow[] = snap.docs
-          .map((d) => {
-            const data = d.data();
-            const clampedAt: Timestamp | null = data.clampedAt ?? null;
-            const hoursOverdue: number =
-              typeof data.hoursOverdue === "number"
-                ? data.hoursOverdue
-                : computeHoursOverdue(clampedAt);
-
-            return {
-              id: d.id,
-              cin: data.cin ?? "—",
-              plateNo: data.plateNo ?? "—",
-              location: data.location ?? "—",
-              clampedBy: data.clampedBy ?? "—",
-              clampedAt,
-              hoursOverdue,
-              status: (data.status ?? "Subject to Impound") as ImpoundStatus,
-              // Mga lumang record: doc id = violation id
-              violationId: (data.sourceViolationId as string) || d.id,
-            };
-          })
-          .filter((r) => r.status !== "Released")
-          .sort((a, b) => millis(b.clampedAt) - millis(a.clampedAt));
-
-        setRows(activeRows);
-        setLoading(false);
-      },
-      (err) => {
-        console.warn("Active impound fetch failed:", err.code);
-        setLoading(false);
-      }
-    );
-    return () => unsubscribe();
-  }, []);
 
   /* Click outside dropdown */
   useEffect(() => {
@@ -405,44 +158,15 @@ export default function ActiveImpounding() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  /* Escape key for modal */
-  useEffect(() => {
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && selectedRow) {
-        setSelectedRow(null);
-      }
-    }
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [selectedRow]);
-
-  /* Metrics are derived from all active rows, not just the visible page */
-  const metrics: Metrics = useMemo(() => {
-    let subject = 0;
-    let scheduled = 0;
-    let totalHours = 0;
-
-    rows.forEach((row) => {
-      if (row.status === "Subject to Impound") subject++;
-      if (row.status === "Scheduled for Impounding") scheduled++;
-      totalHours += row.hoursOverdue;
-    });
-
+  /* Vehicles still in the lot (impounding fee not yet paid) */
+  const metrics = useMemo(() => {
+    const inLot = records.filter((r) => r.status === "For Payment");
     return {
-      subjectToImpound: subject,
-      scheduled,
-      avgHoursOverdue: rows.length > 0 ? Math.round(totalHours / rows.length) : 0,
+      inLot: inLot.length,
+      feesDue: inLot.reduce((sum, r) => sum + r.impoundFee, 0),
+      longest: inLot.reduce((max, r) => Math.max(max, daysInLot(r)), 0),
     };
-  }, [rows]);
-
-  /* Pagination */
-  const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedRows = rows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+  }, [records]);
 
   const handleLogout = async () => {
     try {
@@ -460,74 +184,25 @@ export default function ActiveImpounding() {
   };
 
   const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
     setIsMenuOpen(false);
-  };
-
-  /* Update status in Firestore */
-  const handleUpdateStatus = async (newStatus: ImpoundStatus) => {
-    if (!selectedRow) return;
-
-    const previousStatus = selectedRow.status;
-    const rowRef = doc(db, "impoundRecords", selectedRow.id);
-
-    await updateDoc(rowRef, {
-      status: newStatus,
-      updatedAt: serverTimestamp(),
-      updatedBy: currentUser.name,
-    });
-
-    // Sabayan sa violation para tama ang Clamping Log at Pending Payments.
-    // Best effort — paper tickets na walang violation ay lalaktawan lang.
-    if (
-      newStatus === "Scheduled for Impounding" ||
-      newStatus === "Impounded" ||
-      newStatus === "Released"
-    ) {
-      try {
-        await updateDoc(doc(db, "violations", selectedRow.violationId), {
-          impoundStatus: newStatus,
-          updatedAt: serverTimestamp(),
-          updatedBy: currentUser.name,
-        });
-      } catch (syncErr) {
-        console.warn("Impound status not synced to the violation:", syncErr);
-      }
-      await syncClampImpound(selectedRow.violationId, newStatus);
-    }
-
-    await addDoc(collection(db, "auditLogs"), {
-      userName: currentUser.name,
-      action: `updated active impound ${selectedRow.cin} (${previousStatus} → ${newStatus})`,
-      record: selectedRow.cin,
-      type: "active-impound",
-      metadata: {
-        cin: selectedRow.cin,
-        oldStatus: previousStatus,
-        newStatus,
-      },
-      timestamp: serverTimestamp(),
-    });
-
-    console.log(`Updated ${selectedRow.cin}: ${previousStatus} → ${newStatus}`);
-    setSelectedRow(null);
+    setShowChangePassword(true);
   };
 
   const metricCards = [
     {
-      title: "Subject to impound",
-      value: String(metrics.subjectToImpound),
-      subtitle: "24-hr redemption window expired, unpaid",
+      title: "In the impound lot",
+      value: String(metrics.inLot),
+      subtitle: "UOVR tickets waiting for payment",
     },
     {
-      title: "Scheduled",
-      value: String(metrics.scheduled),
-      subtitle: "Queued for manual impounding",
+      title: "Impounding fees to collect",
+      value: pesoText(metrics.feesDue),
+      subtitle: "Paid to the OIC to release",
     },
     {
-      title: "Avg. hours overdue",
-      value: `${metrics.avgHoursOverdue}h`,
-      subtitle: "",
+      title: "Longest stay",
+      value: `${metrics.longest} day${metrics.longest === 1 ? "" : "s"}`,
+      subtitle: "Since the ticket date",
     },
   ];
 
@@ -632,117 +307,13 @@ export default function ActiveImpounding() {
               ))}
             </div>
 
-            {/* ACTIVE IMPOUNDING OPERATIONS TABLE */}
-            <div className="card active-card">
-              <div className="active-header">
-                <p className="card-eyebrow">Auto-flagged reminder</p>
-                <h2 className="card-title">Active Impounding Operations</h2>
-              </div>
-
-              {loading ? (
-                <div className="table-loading">
-                  <p>Loading active operations...</p>
-                </div>
-              ) : rows.length === 0 ? (
-                <div className="table-empty">
-                  <p>No active impounding operations.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="impound-table-wrapper">
-                    <table className="impound-table">
-                      <thead>
-                        <tr>
-                          <th>CIN</th>
-                          <th>Plate No.</th>
-                          <th>Location</th>
-                          <th>Clamped by</th>
-                          <th>Clamped</th>
-                          <th>Hours Overdue</th>
-                          <th>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginatedRows.map((row) => (
-                          <tr
-                            key={row.id}
-                            onClick={() => setSelectedRow(row)}
-                            className="impound-row-clickable"
-                          >
-                            <td>
-                              <span className="cin-pill">{row.cin}</span>
-                            </td>
-                            <td className="cell-plate">{row.plateNo}</td>
-                            <td className="cell-location">{row.location}</td>
-                            <td className="cell-clamped-by">
-                              {row.clampedBy}
-                            </td>
-                            <td className="cell-time">
-                              {formatDateTime(row.clampedAt)}
-                            </td>
-                            <td className="cell-overdue">
-                              {row.hoursOverdue}h
-                            </td>
-                            <td>
-                              <span
-                                className={`status-pill ${getStatusClass(
-                                  row.status
-                                )}`}
-                              >
-                                {row.status}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* PAGINATION */}
-                  <div className="pagination">
-                    <button
-                      type="button"
-                      className="pagination-btn"
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft size={16} />
-                      Previous
-                    </button>
-
-                    <div className="pagination-info">
-                      <span className="pagination-page">{currentPage}</span>
-                      <span className="pagination-sep">
-                        of {totalPages} pages
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="pagination-btn"
-                      onClick={() =>
-                        setCurrentPage((p) => Math.min(totalPages, p + 1))
-                      }
-                      disabled={currentPage === totalPages}
-                    >
-                      Next
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+            <ImpoundRecordsPanel mode="staff-active" currentUserName={currentUser.name} />
           </main>
         </div>
       </div>
 
-      {/* UPDATE MODAL */}
-      {selectedRow && (
-        <UpdateModal
-          row={selectedRow}
-          onClose={() => setSelectedRow(null)}
-          onSave={handleUpdateStatus}
-        />
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
       )}
     </div>
   );

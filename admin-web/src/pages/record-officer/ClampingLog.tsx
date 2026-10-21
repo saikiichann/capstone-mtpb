@@ -69,12 +69,6 @@ type ClampingRow = {
   officer: string;
   recordedAt: Timestamp | null;
   status: ClampStatus;
-  /** True once "Subject to Impound" has been set (auto or manual). */
-  alreadyFlagged: boolean;
-  /** True kapag auto-flagged ng system (24hr expired). */
-  autoFlagged: boolean;
-  /** The impound status field from Firestore. */
-  impoundStatus: string | null;
   /** Hours since clamping. */
   hoursSinceClamp: number;
   /** What the owner pays now: ₱900, or ₱2,000 past 24 hours (lib/clampFee.ts) */
@@ -378,9 +372,6 @@ export default function ClampingLog() {
               officer: data.officer ?? "—",
               recordedAt,
               status: deriveStatus(data.releaseStatus),
-              alreadyFlagged: data.impoundStatus === "Subject to Impound",
-              autoFlagged: data.impoundAutoFlagged ?? false,
-              impoundStatus: data.impoundStatus ?? null,
               hoursSinceClamp,
               amountDue: amountDueFor(data),
               overdue: isClampOverdue(data),

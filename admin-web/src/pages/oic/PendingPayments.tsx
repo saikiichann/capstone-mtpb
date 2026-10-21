@@ -12,6 +12,8 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import ImpoundRecordsPanel from "../../components/impound/ImpoundRecordsPanel";
+import { useImpoundRecords } from "../../lib/impoundRecords";
 import "./PendingPayments.css";
 import { amountDueFor, overdueFeeFor } from "../../lib/clampFee";
 import CashPaymentSlip from "../../components/CashPaymentSlip";
@@ -289,6 +291,11 @@ export default function PendingPaymentsOIC() {
   const [currentPage, setCurrentPage] = useState(1);
 
   /* Search + Filter state */
+  /** Clamp fines, or impounding fees encoded by the Impounding Staff */
+  const [paymentTab, setPaymentTab] = useState<"clamp" | "impound">("clamp");
+  const { records: impoundRecords } = useImpoundRecords();
+  const impoundForPayment = impoundRecords.filter((r) => r.status === "For Payment").length;
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [sortOption, setSortOption] = useState<SortOption>("oldest");
@@ -644,172 +651,201 @@ export default function PendingPaymentsOIC() {
           </header>
 
           <main className="main-content">
-            <div className="metric-grid-three">
-              {metricCards.map((card) => (
-                <div key={card.title} className="card metric-card">
-                  <p className="metric-title">{card.title}</p>
-                  <p className="metric-value">{card.value}</p>
-                </div>
-              ))}
+            {/* Clamp fines (violator payments) and impounding fees (UOVR) */}
+            <div className="ir-tabs" role="tablist" aria-label="Payment type">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={paymentTab === "clamp"}
+                className={`ir-tab ${paymentTab === "clamp" ? "is-active" : ""}`}
+                onClick={() => setPaymentTab("clamp")}
+              >
+                Clamp Fines
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={paymentTab === "impound"}
+                className={`ir-tab ${paymentTab === "impound" ? "is-active" : ""}`}
+                onClick={() => setPaymentTab("impound")}
+              >
+                Impounding Fees (UOVR)
+                {impoundForPayment > 0 && <span className="ir-tab-count">{impoundForPayment}</span>}
+              </button>
             </div>
 
-            <div className="card">
-              <p className="card-eyebrow">Sector 3</p>
-              <h2 className="card-title">Pending Payments</h2>
-
-              {/* TOOLBAR */}
-              <div className="table-toolbar">
-                <div className="toolbar-search">
-                  <Search size={16} className="toolbar-search-icon" />
-                  <input
-                    type="text"
-                    className="toolbar-search-input"
-                    placeholder="Search by CIN, plate no., or violation no..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      className="toolbar-search-clear"
-                      onClick={() => setSearchQuery("")}
-                      title="Clear search"
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-
-                <select
-                  className="toolbar-select"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-                >
-                  {STATUS_FILTERS.map((s) => (
-                    <option key={s} value={s}>
-                      {s === "All" ? "All Statuses" : s}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  className="toolbar-select"
-                  value={sortOption}
-                  onChange={(e) => setSortOption(e.target.value as SortOption)}
-                >
-                  {SORT_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+            {paymentTab === "impound" ? (
+              <ImpoundRecordsPanel mode="oic-payments" currentUserName={currentUser.name} />
+            ) : (
+              <>
+              <div className="metric-grid-three">
+                {metricCards.map((card) => (
+                  <div key={card.title} className="card metric-card">
+                    <p className="metric-title">{card.title}</p>
+                    <p className="metric-value">{card.value}</p>
+                  </div>
+                ))}
               </div>
 
-              {!loading && rows.length > 0 && (
-                <p className="toolbar-result-count">
-                  Showing <strong>{filteredRows.length}</strong> of{" "}
-                  <strong>{rows.length}</strong> pending payment
-                  {rows.length === 1 ? "" : "s"}
-                  {searchQuery || statusFilter !== "All" ? " (filtered)" : ""}
-                </p>
-              )}
+              <div className="card">
+                <p className="card-eyebrow">Sector 3</p>
+                <h2 className="card-title">Pending Payments</h2>
 
-              {loading ? (
-                <div className="table-loading">
-                  <p>Loading pending payments...</p>
-                </div>
-              ) : rows.length === 0 ? (
-                <div className="table-empty">
-                  <p>No pending payments.</p>
-                </div>
-              ) : filteredRows.length === 0 ? (
-                <div className="table-empty">
-                  <p>No payments match your search or filters.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="table-wrapper">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Violation No.</th>
-                          <th>CIN</th>
-                          <th>Plate No.</th>
-                          <th>Amount</th>
-                          <th>Due Date</th>
-                          <th>Days Left</th>
-                          <th>Status</th>
-                          <th>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginatedRows.map((row) => (
-                          <tr key={row.id}>
-                            <td className="cell-violation-no">{row.violationNo}</td>
-                            <td>
-                              <span className="cin-pill">{row.cin}</span>
-                            </td>
-                            <td className="cell-plate">{row.plateNo}</td>
-                            <td className="cell-amount">
-                              {formatCurrency(row.amount)}
-                              {row.overdueFee > 0 && (
-                                <small className="amount-note">overdue clamp fee</small>
-                              )}
-                            </td>
-                            <td className="cell-due-date">{formatDate(row.dueDate)}</td>
-                            <td className={`cell-days-left ${row.daysLeft < 0 ? "text-red" : ""}`}>
-                              {formatTimeLeft(row.dueDate, row.daysLeft)}
-                            </td>
-                            <td>
-                              <span className={`status-pill ${getStatusClass(row.status)}`}>
-                                {row.status}
-                              </span>
-                            </td>
-                            <td className="cell-action">
-                              <button
-                                type="button"
-                                className="btn-cash-payment"
-                                onClick={() => openCashModal(row)}
-                              >
-                                Cash Payment
-                              </button>
-
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {/* TOOLBAR */}
+                <div className="table-toolbar">
+                  <div className="toolbar-search">
+                    <Search size={16} className="toolbar-search-icon" />
+                    <input
+                      type="text"
+                      className="toolbar-search-input"
+                      placeholder="Search by CIN, plate no., or violation no..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        className="toolbar-search-clear"
+                        onClick={() => setSearchQuery("")}
+                        title="Clear search"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
                   </div>
 
-                  <div className="pagination">
-                    <button
-                      type="button"
-                      className="pagination-btn"
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      disabled={safePage === 1}
-                    >
-                      <ChevronLeft size={16} />
-                      Previous
-                    </button>
+                  <select
+                    className="toolbar-select"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                  >
+                    {STATUS_FILTERS.map((s) => (
+                      <option key={s} value={s}>
+                        {s === "All" ? "All Statuses" : s}
+                      </option>
+                    ))}
+                  </select>
 
-                    <div className="pagination-info">
-                      <span className="pagination-page">{safePage}</span>
-                      <span className="pagination-sep">of {totalPages} pages</span>
+                  <select
+                    className="toolbar-select"
+                    value={sortOption}
+                    onChange={(e) => setSortOption(e.target.value as SortOption)}
+                  >
+                    {SORT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {!loading && rows.length > 0 && (
+                  <p className="toolbar-result-count">
+                    Showing <strong>{filteredRows.length}</strong> of{" "}
+                    <strong>{rows.length}</strong> pending payment
+                    {rows.length === 1 ? "" : "s"}
+                    {searchQuery || statusFilter !== "All" ? " (filtered)" : ""}
+                  </p>
+                )}
+
+                {loading ? (
+                  <div className="table-loading">
+                    <p>Loading pending payments...</p>
+                  </div>
+                ) : rows.length === 0 ? (
+                  <div className="table-empty">
+                    <p>No pending payments.</p>
+                  </div>
+                ) : filteredRows.length === 0 ? (
+                  <div className="table-empty">
+                    <p>No payments match your search or filters.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="table-wrapper">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Violation No.</th>
+                            <th>CIN</th>
+                            <th>Plate No.</th>
+                            <th>Amount</th>
+                            <th>Due Date</th>
+                            <th>Days Left</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedRows.map((row) => (
+                            <tr key={row.id}>
+                              <td className="cell-violation-no">{row.violationNo}</td>
+                              <td>
+                                <span className="cin-pill">{row.cin}</span>
+                              </td>
+                              <td className="cell-plate">{row.plateNo}</td>
+                              <td className="cell-amount">
+                                {formatCurrency(row.amount)}
+                                {row.overdueFee > 0 && (
+                                  <small className="amount-note">overdue clamp fee</small>
+                                )}
+                              </td>
+                              <td className="cell-due-date">{formatDate(row.dueDate)}</td>
+                              <td className={`cell-days-left ${row.daysLeft < 0 ? "text-red" : ""}`}>
+                                {formatTimeLeft(row.dueDate, row.daysLeft)}
+                              </td>
+                              <td>
+                                <span className={`status-pill ${getStatusClass(row.status)}`}>
+                                  {row.status}
+                                </span>
+                              </td>
+                              <td className="cell-action">
+                                <button
+                                  type="button"
+                                  className="btn-cash-payment"
+                                  onClick={() => openCashModal(row)}
+                                >
+                                  Cash Payment
+                                </button>
+
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
 
-                    <button
-                      type="button"
-                      className="pagination-btn"
-                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={safePage === totalPages}
-                    >
-                      Next
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+                    <div className="pagination">
+                      <button
+                        type="button"
+                        className="pagination-btn"
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        disabled={safePage === 1}
+                      >
+                        <ChevronLeft size={16} />
+                        Previous
+                      </button>
+
+                      <div className="pagination-info">
+                        <span className="pagination-page">{safePage}</span>
+                        <span className="pagination-sep">of {totalPages} pages</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="pagination-btn"
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={safePage === totalPages}
+                      >
+                        Next
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+              </>
+            )}
           </main>
         </div>
       </div>

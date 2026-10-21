@@ -1,23 +1,15 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   KeyRound,
-  Search,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
-  collection,
   doc,
   getDoc,
-  onSnapshot,
-  query,
-  where,
-  Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import ImpoundRecordsPanel from "../../components/impound/ImpoundRecordsPanel";
 import ChangePasswordModal from "../../components/ChangePasswordModal";
 import "./ImpoundingLog.css";
 
@@ -48,32 +40,12 @@ type RoleSlug =
 
 type CurrentUser = { name: string; role: RoleSlug };
 
-type LogStatus =
-  | "Subject to Impound"
-  | "Scheduled for Impounding"
-  | "Impounded"
-  | "Released";
-
-type ImpoundLogRow = {
-  id: string;
-  reference: string | null;
-  cin: string;
-  plateNo: string;
-  violation: string;
-  location: string;
-  officer: string;
-  recordedAt: Timestamp | null;
-  status: LogStatus;
-};
-
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
 /* ------------------------------------------------------------------
    CONSTANTS
 ------------------------------------------------------------------ */
-const ITEMS_PER_PAGE = 10;
-const ALL_VIOLATIONS = "All Violations";
 
 const ROLE_LABELS: Record<RoleSlug, string> = {
   oic: "Officer in Charge",
@@ -136,56 +108,6 @@ const NAV_GROUPS: NavGroup[] = [
 /* ------------------------------------------------------------------
    HELPERS
 ------------------------------------------------------------------ */
-const formatDateTime = (ts: Timestamp | null): string => {
-  if (!ts) return "—";
-  try {
-    return ts.toDate().toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return "—";
-  }
-};
-
-const millis = (ts: Timestamp | null): number => {
-  try {
-    return ts ? ts.toMillis() : 0;
-  } catch {
-    return 0;
-  }
-};
-
-/**
- * Same rule as OIC/ImpoundingLog.tsx — "Released" once the release flow
- * has actually released it (releaseStatus === "Released", written by
- * markViolationAsReleased in lib/release.ts). "Impounded" for everything
- * before that.
- */
-const deriveLogStatus = (releaseStatus: unknown): LogStatus =>
-  releaseStatus === "Released" ? "Released" : "Impounded";
-
-/** Status from impoundRecords.status or violations.impoundStatus. */
-const normalizeImpoundStatus = (value: unknown): LogStatus => {
-  const v = String(value ?? "").toLowerCase().trim();
-  if (v === "released") return "Released";
-  if (v === "impounded") return "Impounded";
-  if (v === "scheduled for impounding") return "Scheduled for Impounding";
-  return "Subject to Impound";
-};
-
-const STATUS_CLASS: Record<LogStatus, string> = {
-  "Subject to Impound": "status-subject-pill",
-  "Scheduled for Impounding": "status-scheduled-pill",
-  Impounded: "status-impounded-pill",
-  Released: "status-released-pill",
-};
-
-const getStatusClass = (status: LogStatus): string => STATUS_CLASS[status];
-
-
 /* ------------------------------------------------------------------
    COMPONENT
 ------------------------------------------------------------------ */
@@ -200,12 +122,7 @@ export default function RecordOfficerImpoundingLog() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
 
-  const [rows, setRows] = useState<ImpoundLogRow[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [violationFilter, setViolationFilter] = useState(ALL_VIOLATIONS);
-  const [currentPage, setCurrentPage] = useState(1);
 
   /* Current user */
   useEffect(() => {
@@ -230,121 +147,6 @@ export default function RecordOfficerImpoundingLog() {
     return () => unsubscribe();
   }, []);
 
-  /**
-   * Two sources, merged into one log:
-   *
-   *   A. violations with enforcementType == "impounded" — vehicles towed
-   *      directly by the enforcer.
-   *   B. impoundRecords — the impounding side's own records: clamped
-   *      vehicles flagged from the Clamping Log (doc id = violation id) and
-   *      paper tickets encoded by Impounding Staff. Its status (Subject to
-   *      Impound → Scheduled → Impounded → Released) is kept up to date by
-   *      Impounding Staff, so it wins over the violation's impoundStatus.
-   *   (Clamped vehicles are no longer flagged for impound: an overdue
-   *   clamp stays clamped and is charged ₱2,000 — see lib/clampFee.ts.)
-   *
-   * No orderBy() on purpose: Firestore silently drops documents that lack
-   * the ordered field, so a record without recordedAt would vanish instead
-   * of showing up out of order. Sorting happens client-side.
-   */
-  useEffect(() => {
-    let impoundedRows: ImpoundLogRow[] = [];
-    let recordRows: (ImpoundLogRow & { linkedViolationId: string })[] = [];
-    let pending = 2;
-
-    const merge = () => {
-      const impoundedIds = new Set(impoundedRows.map((r) => r.id));
-
-      const merged: ImpoundLogRow[] = [
-        ...impoundedRows,
-        // A direct tow already has its own row from source A.
-        ...recordRows
-          .filter((r) => !impoundedIds.has(r.linkedViolationId))
-          .map(({ linkedViolationId: _linked, ...row }) => row),
-      ].sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
-
-      setRows(merged);
-      if (pending <= 0) setLoading(false);
-    };
-
-    const loaded = (() => {
-      const seen = new Set<string>();
-      return (source: string) => {
-        if (!seen.has(source)) {
-          seen.add(source);
-          pending -= 1;
-        }
-      };
-    })();
-
-    const onError = (source: string) => (err: { code: string }) => {
-      console.warn(`Impounding log (${source}) fetch failed:`, err.code);
-      loaded(source);
-      merge();
-    };
-
-    // A. Direct impounds
-    const unsubImpounded = onSnapshot(
-      query(collection(db, "violations"), where("enforcementType", "==", "impounded")),
-      (snap) => {
-        impoundedRows = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            reference:
-              (data.referenceNumber as string) ??
-              (data.paymentReference as string) ??
-              null,
-            cin: data.cin ?? "—",
-            plateNo: data.plateNo ?? "—",
-            violation: data.violationType ?? "—",
-            location: data.location ?? "—",
-            officer: data.officer ?? "—",
-            recordedAt: (data.recordedAt as Timestamp) ?? null,
-            status: deriveLogStatus(data.releaseStatus),
-          };
-        });
-        loaded("impounded");
-        merge();
-      },
-      onError("impounded")
-    );
-
-    // B. Impound records
-    const unsubRecords = onSnapshot(
-      collection(db, "impoundRecords"),
-      (snap) => {
-        recordRows = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            linkedViolationId: (data.sourceViolationId as string) || d.id,
-            reference:
-              (data.referenceNumber as string) ??
-              (data.paymentReference as string) ??
-              null,
-            cin: data.cin ?? "—",
-            plateNo: data.plateNo ?? "—",
-            violation:
-              data.initialViolation ?? data.violationType ?? data.violation ?? "—",
-            location: data.location ?? "—",
-            officer: data.clampedBy ?? data.towedBy ?? data.impoundedBy ?? "—",
-            recordedAt: (data.clampedAt as Timestamp) ?? null,
-            status: normalizeImpoundStatus(data.status),
-          };
-        });
-        loaded("records");
-        merge();
-      },
-      onError("records")
-    );
-
-
-    return () => {
-      unsubImpounded();
-      unsubRecords();
-    };
-  }, []);
 
   /* Click outside */
   useEffect(() => {
@@ -374,53 +176,6 @@ export default function RecordOfficerImpoundingLog() {
       navigate("/", { replace: true });
     }
   };
-
-  /* Violation filter options come from the data itself */
-  const violationOptions = useMemo(() => {
-    const unique = new Set<string>();
-    rows.forEach((row) => {
-      if (row.violation && row.violation !== "—") unique.add(row.violation);
-    });
-    return [ALL_VIOLATIONS, ...Array.from(unique).sort()];
-  }, [rows]);
-
-  /* Search + filter */
-  const filteredRows = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    return rows.filter((row) => {
-      const matchesSearch =
-        !q ||
-        row.cin.toLowerCase().includes(q) ||
-        row.plateNo.toLowerCase().includes(q) ||
-        row.location.toLowerCase().includes(q) ||
-        row.violation.toLowerCase().includes(q);
-      const matchesViolation =
-        violationFilter === ALL_VIOLATIONS || row.violation === violationFilter;
-      return matchesSearch && matchesViolation;
-    });
-  }, [rows, searchQuery, violationFilter]);
-
-  const impoundedCount = useMemo(
-    () => rows.filter((r) => r.status === "Impounded").length,
-    [rows]
-  );
-  const awaitingCount = useMemo(
-    () =>
-      rows.filter(
-        (r) => r.status === "Subject to Impound" || r.status === "Scheduled for Impounding"
-      ).length,
-    [rows]
-  );
-
-  /* Pagination */
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
-  const safePage = Math.min(currentPage, totalPages);
-  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
-  const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, violationFilter]);
 
   return (
     <div className="record-page impound-log-page">
@@ -514,138 +269,7 @@ export default function RecordOfficerImpoundingLog() {
           </header>
 
           <main className="main-content impounding-body">
-            {/* SEARCH + FILTER */}
-            <div className="search-filter-row">
-              <div className="search-bar-container">
-                <Search size={18} className="search-bar-icon" />
-                <input
-                  type="text"
-                  className="search-bar-input"
-                  placeholder="Search CIN, plate no., location..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-
-              <div className="filter-select-wrap">
-                <select
-                  className="filter-select"
-                  value={violationFilter}
-                  onChange={(e) => setViolationFilter(e.target.value)}
-                  aria-label="Filter by violation"
-                >
-                  {violationOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={18} className="filter-select-icon" />
-              </div>
-            </div>
-
-            {/* TABLE */}
-            <div className="card impounding-card">
-              <div className="log-header">
-                <p className="card-eyebrow">Sector 3</p>
-                <div className="log-header-meta">
-                  <strong>{impoundedCount}</strong> impounded ·{" "}
-                  <strong>{awaitingCount}</strong> awaiting impound
-                </div>
-              </div>
-              <h2 className="card-title" style={{ marginBottom: 16 }}>
-                Impounding Log
-              </h2>
-
-              {loading ? (
-                <div className="table-loading">
-                  <p>Loading impounding log...</p>
-                </div>
-              ) : paginatedRows.length === 0 ? (
-                <div className="impounding-empty">
-                  {rows.length === 0
-                    ? "No impounding records found."
-                    : "No records match your search or filter."}
-                </div>
-              ) : (
-                <div className="impounding-table-wrap">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Reference</th>
-                        <th>CIN</th>
-                        <th>Plate No.</th>
-                        <th>Violation</th>
-                        <th>Location</th>
-                        <th>Impounded by</th>
-                        <th>Time</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedRows.map((row) => (
-                        <tr key={row.id}>
-                          <td className="cell-reference">
-                            {row.reference ?? "—"}
-                          </td>
-                          <td>
-                            <span className="cin-pill">{row.cin}</span>
-                          </td>
-                          <td className="cell-plate">{row.plateNo}</td>
-                          <td className="cell-violation">{row.violation}</td>
-                          <td className="cell-location">{row.location}</td>
-                          <td className="cell-officer">{row.officer}</td>
-                          <td className="cell-time">
-                            {formatDateTime(row.recordedAt)}
-                          </td>
-                          <td>
-                            <span
-                              className={`status-pill ${getStatusClass(
-                                row.status
-                              )}`}
-                            >
-                              {row.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* PAGINATION */}
-              {!loading && paginatedRows.length > 0 && (
-                <div className="pagination">
-                  <button
-                    type="button"
-                    className="pagination-btn"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={safePage === 1}
-                  >
-                    <ChevronLeft size={16} />
-                    Previous
-                  </button>
-
-                  <div className="pagination-info">
-                    <span className="pagination-page">{safePage}</span>
-                    <span className="pagination-sep">of {totalPages} pages</span>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="pagination-btn"
-                    onClick={() =>
-                      setCurrentPage((p) => Math.min(totalPages, p + 1))
-                    }
-                    disabled={safePage === totalPages}
-                  >
-                    Next
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              )}
-            </div>
+            <ImpoundRecordsPanel mode="records" currentUserName={currentUser.name} />
           </main>
         </div>
       </div>

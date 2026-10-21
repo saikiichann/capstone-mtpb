@@ -5,36 +5,25 @@
    with the Supervisor's sidebar (no Payment/Finance; links stay on
    /supervisor/...). The Supervisor monitors operations and approves
    vehicle release; payments are not handled here.
-   The Supervisor can edit the record of a vehicle that is already
-   Impounded (Edit button → ./EditImpoundModal.tsx). CIN and status stay
-   as they are; release still goes through payment and the release queue.
+   Lists the UOVR (Blue Ticket) records from the Impounding Staff. The
+   Supervisor can edit a record's details (Edit → reason required); the
+   impounding fee is received by the OIC, not here.
+   Table and forms: components/impound/ImpoundRecordsPanel.tsx.
    Styles: ./ImpoundingLog.css (a copy of the OIC page's CSS).
 ------------------------------------------------------------------ */
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   KeyRound,
-  Search,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Pencil,
 } from "lucide-react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
-  collection,
   doc,
   getDoc,
-  onSnapshot,
-  query,
-  where,
-  Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import ImpoundRecordsPanel from "../../components/impound/ImpoundRecordsPanel";
 import "./ImpoundingLog.css";
-import SupervisorEditImpoundModal, {
-  type ImpoundRecordData,
-} from "./EditImpoundModal";
 
 import logo from "../../assets/mtpb-logo.png";
 import avatarImg from "../../assets/user.png";
@@ -67,34 +56,12 @@ type RoleSlug =
 
 type CurrentUser = { name: string; role: RoleSlug };
 
-type LogStatus =
-  | "Subject to Impound"
-  | "Scheduled for Impounding"
-  | "Impounded"
-  | "Released";
-
-type ImpoundLogRow = {
-  id: string;
-  reference: string | null;
-  cin: string;
-  plateNo: string;
-  violation: string;
-  location: string;
-  officer: string;
-  recordedAt: Timestamp | null;
-  status: LogStatus;
-  /** impoundRecords doc id — only rows that have a record can be edited */
-  recordId?: string;
-};
-
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
 /* ------------------------------------------------------------------
    CONSTANTS
 ------------------------------------------------------------------ */
-const ITEMS_PER_PAGE = 10;
-const ALL_VIOLATIONS = "All Violations";
 
 const ROLE_LABELS: Record<RoleSlug, string> = {
   oic: "Officer in Charge",
@@ -181,58 +148,6 @@ const NAV_GROUPS: NavGroup[] = [
 /* ------------------------------------------------------------------
    HELPERS
 ------------------------------------------------------------------ */
-const formatDateTime = (ts: Timestamp | null): string => {
-  if (!ts) return "—";
-  try {
-    return ts.toDate().toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return "—";
-  }
-};
-
-const millis = (ts: Timestamp | null): number => {
-  try {
-    return ts ? ts.toMillis() : 0;
-  } catch {
-    return 0;
-  }
-};
-
-/**
- * This page reads the same `violations` collection as oic/ClampingLog.tsx,
- * just filtered to enforcementType == "impounded" instead of "clamped" —
- * but unlike that page, the status word here is "Impounded", not
- * "Clamped", confirmed against the Figma design. "Released" once the
- * release flow has actually released it (releaseStatus === "Released");
- * "Impounded" for everything before that.
- */
-const deriveLogStatus = (releaseStatus: unknown): LogStatus =>
-  releaseStatus === "Released" ? "Released" : "Impounded";
-
-/** Status from impoundRecords.status or violations.impoundStatus. */
-const normalizeImpoundStatus = (value: unknown): LogStatus => {
-  const v = String(value ?? "").toLowerCase().trim();
-  if (v === "released") return "Released";
-  if (v === "impounded") return "Impounded";
-  if (v === "scheduled for impounding") return "Scheduled for Impounding";
-  return "Subject to Impound";
-};
-
-const STATUS_CLASS: Record<LogStatus, string> = {
-  "Subject to Impound": "status-subject",
-  "Scheduled for Impounding": "status-scheduled",
-  Impounded: "status-impounded",
-  Released: "status-released",
-};
-
-const getStatusClass = (status: LogStatus): string => STATUS_CLASS[status];
-
-
 /* ------------------------------------------------------------------
    COMPONENT
 ------------------------------------------------------------------ */
@@ -246,41 +161,7 @@ export default function SupervisorImpoundingLog() {
   });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const [rows, setRows] = useState<ImpoundLogRow[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [violationFilter, setViolationFilter] = useState(ALL_VIOLATIONS);
-  const [currentPage, setCurrentPage] = useState(1);
-
-  /** Impound record open in the Edit modal */
-  const [editing, setEditing] = useState<ImpoundRecordData | null>(null);
-  const [openingId, setOpeningId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
-
-  /** Loads the latest saved record, then opens the Edit modal. */
-  const openEdit = async (recordId: string) => {
-    setOpeningId(recordId);
-    setNotice(null);
-    try {
-      const snap = await getDoc(doc(db, "impoundRecords", recordId));
-      if (!snap.exists()) {
-        setNotice({ text: "This impound record no longer exists.", ok: false });
-        return;
-      }
-      const data = snap.data();
-      if (normalizeImpoundStatus(data.status) !== "Impounded") {
-        setNotice({ text: "Only records of impounded vehicles can be edited.", ok: false });
-        return;
-      }
-      setEditing({ id: snap.id, ...data } as ImpoundRecordData);
-    } catch (err) {
-      console.error("Failed to open impound record:", err);
-      setNotice({ text: "Could not load the impound record.", ok: false });
-    } finally {
-      setOpeningId(null);
-    }
-  };
 
   /* Current user */
   useEffect(() => {
@@ -305,122 +186,6 @@ export default function SupervisorImpoundingLog() {
     return () => unsubscribe();
   }, []);
 
-  /**
-   * Two sources, merged into one log:
-   *
-   *   A. violations with enforcementType == "impounded" — vehicles towed
-   *      directly by the enforcer.
-   *   B. impoundRecords — the impounding side's own records: clamped
-   *      vehicles flagged from the Clamping Log (doc id = violation id) and
-   *      paper tickets encoded by Impounding Staff. Its status (Subject to
-   *      Impound → Scheduled → Impounded → Released) is kept up to date by
-   *      Impounding Staff, so it wins over the violation's impoundStatus.
-   *   (Clamped vehicles are no longer flagged for impound: an overdue
-   *   clamp stays clamped and is charged ₱2,000 — see lib/clampFee.ts.)
-   *
-   * No orderBy() on purpose: Firestore silently drops documents that lack
-   * the ordered field, so a record without recordedAt would vanish instead
-   * of showing up out of order. Sorting happens client-side.
-   */
-  useEffect(() => {
-    let impoundedRows: ImpoundLogRow[] = [];
-    let recordRows: (ImpoundLogRow & { linkedViolationId: string })[] = [];
-    let pending = 2;
-
-    const merge = () => {
-      const impoundedIds = new Set(impoundedRows.map((r) => r.id));
-
-      const merged: ImpoundLogRow[] = [
-        ...impoundedRows,
-        // A direct tow already has its own row from source A.
-        ...recordRows
-          .filter((r) => !impoundedIds.has(r.linkedViolationId))
-          .map(({ linkedViolationId: _linked, ...row }) => row),
-      ].sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
-
-      setRows(merged);
-      if (pending <= 0) setLoading(false);
-    };
-
-    const loaded = (() => {
-      const seen = new Set<string>();
-      return (source: string) => {
-        if (!seen.has(source)) {
-          seen.add(source);
-          pending -= 1;
-        }
-      };
-    })();
-
-    const onError = (source: string) => (err: { code: string }) => {
-      console.warn(`Impounding log (${source}) fetch failed:`, err.code);
-      loaded(source);
-      merge();
-    };
-
-    // A. Direct impounds
-    const unsubImpounded = onSnapshot(
-      query(collection(db, "violations"), where("enforcementType", "==", "impounded")),
-      (snap) => {
-        impoundedRows = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            reference:
-              (data.referenceNumber as string) ??
-              (data.paymentReference as string) ??
-              null,
-            cin: data.cin ?? "—",
-            plateNo: data.plateNo ?? "—",
-            violation: data.violationType ?? "—",
-            location: data.location ?? "—",
-            officer: data.officer ?? "—",
-            recordedAt: (data.recordedAt as Timestamp) ?? null,
-            status: deriveLogStatus(data.releaseStatus),
-          };
-        });
-        loaded("impounded");
-        merge();
-      },
-      onError("impounded")
-    );
-
-    // B. Impound records
-    const unsubRecords = onSnapshot(
-      collection(db, "impoundRecords"),
-      (snap) => {
-        recordRows = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            recordId: d.id,
-            linkedViolationId: (data.sourceViolationId as string) || d.id,
-            reference:
-              (data.referenceNumber as string) ??
-              (data.paymentReference as string) ??
-              null,
-            cin: data.cin ?? "—",
-            plateNo: data.plateNo ?? "—",
-            violation:
-              data.initialViolation ?? data.violationType ?? data.violation ?? "—",
-            location: data.location ?? "—",
-            officer: data.clampedBy ?? data.towedBy ?? data.impoundedBy ?? "—",
-            recordedAt: (data.clampedAt as Timestamp) ?? null,
-            status: normalizeImpoundStatus(data.status),
-          };
-        });
-        loaded("records");
-        merge();
-      },
-      onError("records")
-    );
-
-
-    return () => {
-      unsubImpounded();
-      unsubRecords();
-    };
-  }, []);
 
   /* Click outside */
   useEffect(() => {
@@ -460,58 +225,6 @@ export default function SupervisorImpoundingLog() {
       ),
     [currentUser.role]
   );
-
-  /* Violation filter options come from the data itself */
-  const violationOptions = useMemo(() => {
-    const unique = new Set<string>();
-    rows.forEach((row) => {
-      if (row.violation && row.violation !== "—") unique.add(row.violation);
-    });
-    return [ALL_VIOLATIONS, ...Array.from(unique).sort()];
-  }, [rows]);
-
-  /* Search + filter */
-  const filteredRows = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    return rows.filter((row) => {
-      const matchesSearch =
-        !q ||
-        row.cin.toLowerCase().includes(q) ||
-        row.plateNo.toLowerCase().includes(q) ||
-        row.location.toLowerCase().includes(q) ||
-        row.violation.toLowerCase().includes(q);
-      const matchesViolation =
-        violationFilter === ALL_VIOLATIONS || row.violation === violationFilter;
-      return matchesSearch && matchesViolation;
-    });
-  }, [rows, searchQuery, violationFilter]);
-
-  const impoundedCount = useMemo(
-    () => rows.filter((r) => r.status === "Impounded").length,
-    [rows]
-  );
-
-  const subjectCount = useMemo(
-    () =>
-      rows.filter(
-        (r) =>
-          r.status === "Subject to Impound" ||
-          r.status === "Scheduled for Impounding"
-      ).length,
-    [rows]
-  );
-
-  /* Pagination */
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
-  // Clamped here, during render, instead of a useEffect that "corrects"
-  // state after the fact — same fix applied to ClampingLog.tsx.
-  const safePage = Math.min(currentPage, totalPages);
-  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
-  const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, violationFilter]);
 
   return (
     <div className="oic-page impound-log-page">
@@ -599,174 +312,11 @@ export default function SupervisorImpoundingLog() {
           </header>
 
           <main className="main-content impounding-body">
-            {/* SEARCH + FILTER */}
-            <div className="search-filter-row">
-              <div className="search-bar-container">
-                <Search size={18} className="search-bar-icon" />
-                <input
-                  type="text"
-                  className="search-bar-input"
-                  placeholder="Search CIN, Plate No..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-
-              <div className="filter-select-wrap">
-                <select
-                  className="filter-select"
-                  value={violationFilter}
-                  onChange={(e) => setViolationFilter(e.target.value)}
-                  aria-label="Filter by violation"
-                >
-                  {violationOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={18} className="filter-select-icon" />
-              </div>
-            </div>
-
-            {/* TABLE */}
-            <div className="card impounding-card">
-              <div className="log-header">
-                <p className="card-eyebrow">Sector 3</p>
-                <div className="log-header-meta">
-                  Subject to impound: {subjectCount} · Impounded: {impoundedCount}
-                </div>
-              </div>
-              <h2 className="card-title" style={{ marginBottom: 16 }}>
-                Impounding Log
-              </h2>
-
-              {notice && (
-                <div className={`sup-edit-notice${notice.ok ? "" : " is-error"}`}>
-                  {notice.text}
-                </div>
-              )}
-
-              {loading ? (
-                <div className="table-loading">
-                  <p>Loading impounding log...</p>
-                </div>
-              ) : paginatedRows.length === 0 ? (
-                <div className="impounding-empty">
-                  {rows.length === 0
-                    ? "No impounding records found."
-                    : "No records match your search or filter."}
-                </div>
-              ) : (
-                <div className="impounding-table-wrap">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Reference</th>
-                        <th>CIN</th>
-                        <th>Plate No.</th>
-                        <th>Violation</th>
-                        <th>Location</th>
-                        <th>Impounded by</th>
-                        <th>Time</th>
-                        <th>Status</th>
-                        <th className="sup-cell-action">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedRows.map((row) => (
-                        <tr key={row.id}>
-                          <td className="cell-reference">
-                            {row.reference ?? "—"}
-                          </td>
-                          <td>
-                            <span className="cin-pill">{row.cin}</span>
-                          </td>
-                          <td className="cell-plate">{row.plateNo}</td>
-                          <td className="cell-violation">{row.violation}</td>
-                          <td className="cell-location">{row.location}</td>
-                          <td className="cell-officer">{row.officer}</td>
-                          <td className="cell-time">
-                            {formatDateTime(row.recordedAt)}
-                          </td>
-                          <td>
-                            <span
-                              className={`status-pill ${getStatusClass(
-                                row.status
-                              )}`}
-                            >
-                              {row.status}
-                            </span>
-                          </td>
-                          <td className="sup-cell-action">
-                            {row.recordId && row.status === "Impounded" ? (
-                              <button
-                                type="button"
-                                className="sup-btn-edit"
-                                onClick={() => openEdit(row.recordId!)}
-                                disabled={openingId === row.recordId}
-                                title="Edit impound record"
-                              >
-                                <Pencil size={13} />
-                                {openingId === row.recordId ? "Opening..." : "Edit"}
-                              </button>
-                            ) : (
-                              <span className="sup-action-none">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* PAGINATION */}
-              {!loading && paginatedRows.length > 0 && (
-                <div className="pagination">
-                  <button
-                    type="button"
-                    className="pagination-btn"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={safePage === 1}
-                  >
-                    <ChevronLeft size={16} />
-                    Previous
-                  </button>
-
-                  <div className="pagination-info">
-                    <span className="pagination-page">{safePage}</span>
-                    <span className="pagination-sep">of {totalPages} pages</span>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="pagination-btn"
-                    onClick={() =>
-                      setCurrentPage((p) => Math.min(totalPages, p + 1))
-                    }
-                    disabled={safePage === totalPages}
-                  >
-                    Next
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              )}
-            </div>
+            <ImpoundRecordsPanel mode="supervisor" currentUserName={currentUser.name} />
           </main>
         </div>
       </div>
 
-      {editing && (
-        <SupervisorEditImpoundModal
-          record={editing}
-          currentUserName={currentUser.name}
-          onClose={() => setEditing(null)}
-          onSaved={() =>
-            setNotice({ text: `Impound record ${editing.cin ?? ""} updated.`, ok: true })
-          }
-        />
-      )}
     </div>
   );
 }

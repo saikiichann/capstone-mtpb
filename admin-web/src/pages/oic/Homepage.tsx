@@ -451,7 +451,8 @@ function Homepage() {
   ================================================================ */
   useEffect(() => {
     const ref = collection(db, "impoundRecords");
-    const q = query(ref, where("status", "==", "impounded"));
+    // UOVR records still in the impound lot (impounding fee not yet paid)
+    const q = query(ref, where("status", "==", "For Payment"));
 
     const unsubscribe = onSnapshot(
       q,
@@ -604,7 +605,7 @@ function Homepage() {
       value: violationsToday,
       colorClass: "text-green",
     },
-    { title: "Impounded", value: impounded },
+    { title: "In Impound Lot", value: impounded },
     { title: "Pending Release", value: pendingRelease },
     { title: "Pending Payments", value: pendingPayments },
     { title: "Revenue Today", value: revenueToday },
