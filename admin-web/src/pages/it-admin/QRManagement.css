@@ -435,6 +435,17 @@
   color: #166534;
 }
 
+/* Impound flow (lib/impoundFlag.ts → clamps.impoundStatus) */
+.it-admin-page .status-subject {
+  background: #FFEDD5;
+  color: #9A3412;
+}
+
+.it-admin-page .status-impounded {
+  background: #1F2937;
+  color: #FFFFFF;
+}
+
 /* ==================================================================
    ACTION BUTTONS (3-dots menu)
 ================================================================== */

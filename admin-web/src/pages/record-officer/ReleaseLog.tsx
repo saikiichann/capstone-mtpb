@@ -17,6 +17,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import ChangePasswordModal from "../../components/ChangePasswordModal";
 import "../../pages/record-officer/ReleaseLog.css";
 
 // Asset imports
@@ -172,6 +173,7 @@ const formatCurrency = (amount: number | null): string => {
 // ---------------------------------------------------------------------------
 export default function ReleaseLog() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -299,8 +301,8 @@ export default function ReleaseLog() {
   };
 
   const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
     setIsMenuOpen(false);
+    setShowChangePassword(true);
   };
 
   // -----------------------------------------------------------------------
@@ -452,7 +454,10 @@ export default function ReleaseLog() {
                   <h2 className="card-title">Release Log</h2>
                 </div>
                 <p className="log-total">
-                  Released Today: <strong>{releasedToday} vehicles</strong>
+                  Released today:{" "}
+                  <strong>
+                    {releasedToday} {releasedToday === 1 ? "vehicle" : "vehicles"}
+                  </strong>
                 </p>
               </div>
 
@@ -544,6 +549,10 @@ export default function ReleaseLog() {
           </main>
         </div>
       </div>
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </div>
   );
 }

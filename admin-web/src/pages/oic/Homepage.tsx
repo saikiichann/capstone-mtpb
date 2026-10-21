@@ -43,8 +43,6 @@ import transactionIcon from "../../assets/transaction.png";
 import revenueIcon from "../../assets/revenue.png";
 import releaseRequestIcon from "../../assets/releaserequest.png";
 import releaseLogIcon from "../../assets/releaselog.png";
-import clampingTeamsIcon from "../../assets/clampingteams.png";
-import towTruckIcon from "../../assets/tow-truck.png";
 import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
 import logoutIcon from "../../assets/logout.png";
@@ -236,16 +234,6 @@ const navGroups: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      {
-        label: "Active Clamping Teams",
-        icon: clampingTeamsIcon,
-        path: "/dashboard/clamping-teams",
-      },
-      {
-        label: "Active Impounding",
-        icon: towTruckIcon,
-        path: "/dashboard/active-impounding",
-      },
       {
         label: "Field Updates",
         icon: fieldUpdateIcon,
@@ -463,7 +451,8 @@ function Homepage() {
   ================================================================ */
   useEffect(() => {
     const ref = collection(db, "impoundRecords");
-    const q = query(ref, where("status", "==", "impounded"));
+    // UOVR records still in the impound lot (impounding fee not yet paid)
+    const q = query(ref, where("status", "==", "For Payment"));
 
     const unsubscribe = onSnapshot(
       q,
@@ -616,7 +605,7 @@ function Homepage() {
       value: violationsToday,
       colorClass: "text-green",
     },
-    { title: "Impounded", value: impounded },
+    { title: "In Impound Lot", value: impounded },
     { title: "Pending Release", value: pendingRelease },
     { title: "Pending Payments", value: pendingPayments },
     { title: "Revenue Today", value: revenueToday },

@@ -15,12 +15,17 @@ import {
   onSnapshot,
   query,
   where,
-  writeBatch,
-  serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import ChangePasswordModal from "../../components/ChangePasswordModal";
 import "./ClampingLog.css";
+import {
+  CLAMP_OVERDUE_FEE,
+  amountDueFor,
+  graceHoursLeft,
+  isClampOverdue,
+} from "../../lib/clampFee";
 
 // Asset imports
 import mtpbLogo from "../../assets/mtpb-logo.png";
@@ -64,14 +69,16 @@ type ClampingRow = {
   officer: string;
   recordedAt: Timestamp | null;
   status: ClampStatus;
-  /** True once "Subject to Impound" has been set (auto or manual). */
-  alreadyFlagged: boolean;
-  /** True kapag auto-flagged ng system (24hr expired). */
-  autoFlagged: boolean;
-  /** The impound status field from Firestore. */
-  impoundStatus: string | null;
   /** Hours since clamping. */
   hoursSinceClamp: number;
+  /** What the owner pays now: ₱900, or ₱2,000 past 24 hours (lib/clampFee.ts) */
+  amountDue: number;
+  /** Past 24 hours and not yet paid */
+  overdue: boolean;
+  /** Payment recorded (pending verification or verified) */
+  paid: boolean;
+  /** Hours left in the 24-hour grace period */
+  graceLeft: number;
 };
 
 type NavItem = {
@@ -91,8 +98,6 @@ type NavGroup = {
 // ---------------------------------------------------------------------------
 const ITEMS_PER_PAGE = 10;
 const ALL_VIOLATIONS = "All Violations";
-const GRACE_PERIOD_HOURS = 24;
-const IMPOUND_FEE = 2000;
 
 const MASTER_VIOLATIONS = [
   "Illegal Parking",
@@ -252,11 +257,44 @@ const deriveStatus = (releaseStatus: unknown): ClampStatus =>
 const getStatusClass = (status: ClampStatus): string =>
   status === "Released" ? "status-released-clamp" : "status-active-clamp";
 
+/**
+ * The fee as it stands: ₱900 within 24 hours, a fixed ₱2,000 after
+ * (lib/clampFee.ts). A clamp stays clamped — it is not sent to impound.
+ */
+function FeeCell({ row }: { row: ClampingRow }) {
+  if (row.status === "Released") {
+    return <span className="action-placeholder">—</span>;
+  }
+  if (row.paid) {
+    return (
+      <span className="badge-impounded" title="Payment recorded">
+        Paid · ₱{row.amountDue.toLocaleString()}
+      </span>
+    );
+  }
+  if (row.overdue) {
+    return (
+      <span
+        className="badge-grace-ended"
+        title="Past the 24-hour grace period: the fee is now a fixed ₱2,000 (replaces the fine). The vehicle stays clamped."
+      >
+        Overdue · ₱{CLAMP_OVERDUE_FEE.toLocaleString()}
+      </span>
+    );
+  }
+  return (
+    <span className="impound-pending" title="Within the 24-hour grace period">
+      ₱{row.amountDue.toLocaleString()} · {Math.max(1, Math.ceil(row.graceLeft))}h left
+    </span>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // COMPONENT
 // ---------------------------------------------------------------------------
 export default function ClampingLog() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -334,10 +372,13 @@ export default function ClampingLog() {
               officer: data.officer ?? "—",
               recordedAt,
               status: deriveStatus(data.releaseStatus),
-              alreadyFlagged: data.impoundStatus === "Subject to Impound",
-              autoFlagged: data.impoundAutoFlagged ?? false,
-              impoundStatus: data.impoundStatus ?? null,
               hoursSinceClamp,
+              amountDue: amountDueFor(data),
+              overdue: isClampOverdue(data),
+              paid: ["verified", "pending verification"].includes(
+                String(data.paymentStatus ?? "").toLowerCase()
+              ),
+              graceLeft: graceHoursLeft(data),
             };
           })
           .sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
@@ -353,77 +394,9 @@ export default function ClampingLog() {
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // AUTO-FLAG OVERDUE VIOLATIONS (Client-Side)
-  //
-  // Runs on every page load. Finds clamped violations that have exceeded
-  // the 24-hour grace period and auto-flags them as "Subject to Impound"
-  // with a fixed impound fee of ₱2,000.
-  // -----------------------------------------------------------------------
-  useEffect(() => {
-    if (loading || rows.length === 0) return;
-
-    const autoFlagOverdue = async () => {
-      const overdueRows = rows.filter(
-        (row) =>
-          row.status === "Clamped" &&
-          row.hoursSinceClamp >= GRACE_PERIOD_HOURS &&
-          row.impoundStatus !== "Subject to Impound" &&
-          row.impoundStatus !== "Impounded"
-      );
-
-      if (overdueRows.length === 0) return;
-
-      console.log(
-        `[auto-flag] Found ${overdueRows.length} overdue clamped violation(s) to flag`
-      );
-
-      try {
-        const batch = writeBatch(db);
-
-        overdueRows.forEach((row) => {
-          const violationRef = doc(db, "violations", row.id);
-          const auditRef = doc(collection(db, "auditLogs"));
-
-          batch.update(violationRef, {
-            impoundStatus: "Subject to Impound",
-            impoundFlaggedAt: serverTimestamp(),
-            impoundFlaggedBy: "system",
-            impoundFlaggedByRole: "system",
-            impoundAutoFlagged: true,
-            impoundFee: IMPOUND_FEE,
-            updatedAt: serverTimestamp(),
-            updatedBy: "system",
-          });
-
-          batch.set(auditRef, {
-            userName: "System",
-            userRole: "system",
-            action: `auto-flagged violation ${row.cin} as Subject to Impound (24hr grace period expired)`,
-            record: row.cin,
-            type: "impound-flag-auto",
-            metadata: {
-              cin: row.cin,
-              plateNo: row.plateNo,
-              hoursSinceClamp: Math.round(row.hoursSinceClamp),
-              impoundFee: IMPOUND_FEE,
-              method: "client-side",
-            },
-            timestamp: serverTimestamp(),
-          });
-        });
-
-        await batch.commit();
-        console.log(
-          `[auto-flag] Successfully flagged ${overdueRows.length} violation(s)`
-        );
-      } catch (err) {
-        console.error("[auto-flag] Failed to flag overdue violations:", err);
-      }
-    };
-
-    autoFlagOverdue();
-  }, [loading, rows]);
+  // Clamps are not sent to impound: past 24 hours an unpaid clamp stays
+  // clamped and is charged a fixed ₱2,000 (lib/clampFee.ts). The Fee
+  // column shows where each clamp stands.
 
   // -----------------------------------------------------------------------
   // EFFECT: Click-outside for dropdown
@@ -457,8 +430,8 @@ export default function ClampingLog() {
   };
 
   const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
     setIsMenuOpen(false);
+    setShowChangePassword(true);
   };
 
   const violationOptions = useMemo(() => {
@@ -649,7 +622,7 @@ export default function ClampingLog() {
                         <th>Clamped by</th>
                         <th>Time</th>
                         <th>Status</th>
-                        <th>Impound</th>
+                        <th>Fee</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -678,40 +651,7 @@ export default function ClampingLog() {
                             </span>
                           </td>
                           <td>
-                            {/* AUTO-FLAG INDICATOR */}
-                            {row.status === "Clamped" &&
-                              row.hoursSinceClamp < GRACE_PERIOD_HOURS &&
-                              row.impoundStatus !== "Subject to Impound" &&
-                              row.impoundStatus !== "Impounded" && (
-                                <span className="impound-pending">
-                                  Within {GRACE_PERIOD_HOURS}hr grace
-                                </span>
-                              )}
-
-                            {row.impoundStatus === "Subject to Impound" && (
-                              <span
-                                className={`badge-impound ${
-                                  row.autoFlagged ? "badge-impound-auto" : ""
-                                }`}
-                                title={
-                                  row.autoFlagged
-                                    ? "Auto-flagged by system (24hr grace period expired)"
-                                    : "Flagged as Subject to Impound"
-                                }
-                              >
-                                {row.autoFlagged
-                                  ? `🤖 Auto-flagged (₱${IMPOUND_FEE.toLocaleString()})`
-                                  : `Subject to Impound (₱${IMPOUND_FEE.toLocaleString()})`}
-                              </span>
-                            )}
-
-                            {row.impoundStatus === "Impounded" && (
-                              <span className="badge-impounded">Impounded</span>
-                            )}
-
-                            {row.status === "Released" && (
-                              <span className="action-placeholder">—</span>
-                            )}
+                            <FeeCell row={row} />
                           </td>
                         </tr>
                       ))}
@@ -755,6 +695,10 @@ export default function ClampingLog() {
           </main>
         </div>
       </div>
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </div>
   );
 }

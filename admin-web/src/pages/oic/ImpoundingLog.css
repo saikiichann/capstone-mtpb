@@ -509,6 +509,18 @@
     color: #166534;
   }
 
+  .impound-log-page .status-subject {
+    background: #FEF9C3;
+    border-color: #EAB308;
+    color: #854D0E;
+  }
+
+  .impound-log-page .status-scheduled {
+    background: #FFEDD5;
+    border-color: #F97316;
+    color: #9A3412;
+  }
+
   /* ---- Empty state (as supplied) ---- */
   .impound-log-page .impounding-empty {
     padding: 32px 0;

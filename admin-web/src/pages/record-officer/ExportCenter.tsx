@@ -27,6 +27,7 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { auth, db } from "../../firebase";
+import ChangePasswordModal from "../../components/ChangePasswordModal";
 import {
   derivePaymentLocation,
   PAYMENT_LOCATION_LABELS,
@@ -599,6 +600,7 @@ const downloadPdf = (
 // ---------------------------------------------------------------------------
 export default function ExportCenter() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -712,8 +714,8 @@ export default function ExportCenter() {
   };
 
   const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
     setIsMenuOpen(false);
+    setShowChangePassword(true);
   };
 
   const handleExport = async (format: ExportFormat) => {
@@ -1107,6 +1109,10 @@ export default function ExportCenter() {
           </main>
         </div>
       </div>
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </div>
   );
 }

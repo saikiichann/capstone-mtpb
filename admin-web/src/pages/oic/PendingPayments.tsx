@@ -8,15 +8,16 @@ import {
   getDoc,
   onSnapshot,
   query,
-  runTransaction,
-  serverTimestamp,
   where,
-  writeBatch,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import ImpoundRecordsPanel from "../../components/impound/ImpoundRecordsPanel";
+import { useImpoundRecords } from "../../lib/impoundRecords";
 import "./PendingPayments.css";
+import { amountDueFor, overdueFeeFor } from "../../lib/clampFee";
 import CashPaymentSlip from "../../components/CashPaymentSlip";
+import { recordOnsitePayment } from "../../lib/onsitePayment";
 
 // Asset imports
 import mtpbLogo from "../../assets/mtpb-logo.png";
@@ -34,8 +35,6 @@ import queueIcon from "../../assets/queue.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import mapIcon from "../../assets/map.png";
 import sectorAnalyticsIcon from "../../assets/sectoranalytics.png";
-import clampingTeamsIcon from "../../assets/clampingteams.png";
-import towTruckIcon from "../../assets/tow-truck.png";
 import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
 import logoutIcon from "../../assets/logout.png";
@@ -56,14 +55,16 @@ type PendingRow = {
   violationNo: string;
   cin: string;
   plateNo: string;
+  /** babayaran: ₱900 fine sa loob ng 24 oras, ₱2,000 kapag lumagpas (lib/clampFee.ts) */
   amount: number;
+  fineAmount: number;
+  /** ₱2,000 once the clamp is past 24 hours (replaces the fine), else 0 */
+  overdueFee: number;
   recordedAt: Timestamp | null;
   dueDate: Timestamp | null;
   daysLeft: number;
   status: PendingStatus;
-  impoundStatus: string | null;
-  impoundAutoFlagged: boolean;
-  impoundFlaggedBy: string | null;
+  enforcementType: string;
   // ⚠️ ADDED: violator identity fields
   violatorUid: string | null;
   guestId: string | null;
@@ -73,7 +74,7 @@ type PendingRow = {
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
-type StatusFilter = "All" | "Unpaid" | "Overdue" | "Subject to Impound" | "Impounded";
+type StatusFilter = "All" | "Unpaid" | "Overdue";
 type SortOption = "oldest" | "newest" | "amount-high" | "amount-low" | "plate-asc";
 
 /* ------------------------------------------------------------------
@@ -81,7 +82,6 @@ type SortOption = "oldest" | "newest" | "amount-high" | "amount-low" | "plate-as
 ------------------------------------------------------------------ */
 const ITEMS_PER_PAGE = 10;
 const PAYMENT_DUE_HOURS = 24;
-const IMPOUND_FEE = 2000;
 
 const PAYMENT_LOCATIONS: { value: PaymentLocation; label: string }[] = [
   { value: "Central", label: "Central (MTPB Office)" },
@@ -100,8 +100,6 @@ const STATUS_FILTERS: StatusFilter[] = [
   "All",
   "Unpaid",
   "Overdue",
-  "Subject to Impound",
-  "Impounded",
 ];
 
 /* ------------------------------------------------------------------
@@ -157,8 +155,6 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { label: "Active Clamping Teams", icon: clampingTeamsIcon, path: "/dashboard/clamping-teams" },
-      { label: "Active Impounding", icon: towTruckIcon, path: "/dashboard/active-impounding" },
       { label: "Field Updates", icon: fieldUpdateIcon, path: "/dashboard/field-updates" },
       { label: "Operation Scheduler", icon: operationSchedulerIcon, path: "/dashboard/operation-scheduler" },
     ],
@@ -187,13 +183,44 @@ const formatDate = (ts: Timestamp | null): string => {
   }
 };
 
+/**
+ * Ilang araw pa bago ang due date. Negative kapag lumampas na — kahit
+ * ilang oras pa lang. (Dati Math.ceil lang, kaya ang -0.2 araw ay naging
+ * "0 days / Due Today" kahit overdue na at naka-auto-flag na.)
+ */
 const computeDaysLeft = (ts: Timestamp | null): number => {
   if (!ts) return 0;
   try {
-    return Math.ceil((ts.toDate().getTime() - new Date().getTime()) / 86400000);
+    const diffDays = (ts.toDate().getTime() - new Date().getTime()) / 86400000;
+    return diffDays < 0 ? Math.floor(diffDays) : Math.ceil(diffDays);
   } catch {
     return 0;
   }
+};
+
+/** True kapag ngayong araw ang due date at hindi pa lumalampas. */
+const isDueToday = (ts: Timestamp | null): boolean => {
+  if (!ts) return false;
+  try {
+    const due = ts.toDate();
+    const now = new Date();
+    return due.getTime() >= now.getTime() && due.toDateString() === now.toDateString();
+  } catch {
+    return false;
+  }
+};
+
+/** "Overdue", "5 hrs" kapag wala nang isang araw, o "2 days". */
+const formatTimeLeft = (ts: Timestamp | null, daysLeft: number): string => {
+  if (daysLeft < 0) return "Overdue";
+  if (!ts) return "—";
+  try {
+    const hours = Math.ceil((ts.toDate().getTime() - Date.now()) / 3600000);
+    if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"}`;
+  } catch {
+    return "—";
+  }
+  return `${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
 };
 
 const getStatusClass = (status: PendingStatus): string =>
@@ -247,144 +274,6 @@ const numberToWords = (num: number): string => {
 };
 
 /* ------------------------------------------------------------------
-  RECORD CASH PAYMENT (OIC)
-  Auto-generates REF + OR numbers. Includes `paymentLocation`.
-  ✅ NOW INCLUDES violatorUid, guestId, violatorName.
------------------------------------------------------------------- */
-const recordCashPaymentOIC = async (params: {
-  violationId: string;
-  cin: string;
-  plateNo: string;
-  amountDue: number;
-  paymentLocation: PaymentLocation;
-  // ⚠️ ADDED: violator identity
-  violatorUid: string | null;
-  guestId: string | null;
-  violatorName: string | null;
-  officerName: string;
-}): Promise<{ referenceNumber: string; orNumber: string; paymentId: string }> => {
-  const year = new Date().getFullYear();
-  const counterRef = doc(db, "counters", "paymentReference");
-  const orCounterRef = doc(db, "counters", "orNumber");
-  const violationRef = doc(db, "violations", params.violationId);
-  const paymentRef = doc(collection(db, "payments"));
-  const auditRef = doc(collection(db, "auditLogs"));
-
-  return runTransaction(db, async (tx) => {
-    /* Step 1: Reference Number */
-    const counterSnap = await tx.get(counterRef);
-    const lastRef = counterSnap.exists()
-      ? Number(counterSnap.data().lastValue ?? 0)
-      : 0;
-    const nextRef = lastRef + 1;
-    const referenceNumber = `REF-${year}-${String(nextRef).padStart(5, "0")}`;
-
-    /* Step 2: OR Number */
-    const orCounterSnap = await tx.get(orCounterRef);
-    const lastOr = orCounterSnap.exists()
-      ? Number(orCounterSnap.data().lastValue ?? 0)
-      : 0;
-    const nextOr = lastOr + 1;
-    const orNumber = `OR-${year}-${String(nextOr).padStart(5, "0")}`;
-
-    /* Step 3: Persist both counters */
-    tx.set(
-      counterRef,
-      { lastValue: nextRef, prefix: "REF", updatedAt: serverTimestamp() },
-      { merge: true }
-    );
-
-    tx.set(
-      orCounterRef,
-      { lastValue: nextOr, prefix: "OR", updatedAt: serverTimestamp() },
-      { merge: true }
-    );
-
-    /* Step 4: Update violation */
-    tx.update(violationRef, {
-      paymentStatus: "Pending Verification",
-      paymentMethod: "Cash",
-      paymentReference: referenceNumber,
-      referenceNumber,
-      orNumber,
-      totalPaid: params.amountDue,
-      cashReceived: params.amountDue,
-      cashChange: 0,
-      amountInWords: numberToWords(params.amountDue),
-      paymentLocation: params.paymentLocation,
-      paidAt: serverTimestamp(),
-      cashRecordedBy: params.officerName,
-      cashRecordedByRole: "oic",
-      orIssuedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      updatedBy: params.officerName,
-      // ⚠️ ADDED: violator identity on violation doc (keeps it in sync)
-      violatorUid: params.violatorUid,
-      guestId: params.guestId,
-      violatorName: params.violatorName,
-    });
-
-    /* Step 5: Create payment record */
-    tx.set(paymentRef, {
-      violationId: params.violationId,
-      cin: params.cin,
-      plateNo: params.plateNo,
-      // ⚠️ ADDED: violator identity
-      violatorUid: params.violatorUid,
-      guestId: params.guestId,
-      violatorName: params.violatorName,
-      // End
-      amount: params.amountDue,
-      convenienceFee: 0,
-      totalAmount: params.amountDue,
-      cashReceived: params.amountDue,
-      amountInWords: numberToWords(params.amountDue),
-      referenceNumber,
-      orNumber,
-      paymentLocation: params.paymentLocation,
-      method: "Cash",
-      status: "Pending Verification",
-      verificationStatus: null,
-      recordedBy: params.officerName,
-      recordedByRole: "oic",
-      createdAt: serverTimestamp(),
-      orIssuedAt: serverTimestamp(),
-      orIssuedBy: params.officerName,
-    });
-
-    /* Step 6: Audit log */
-    tx.set(auditRef, {
-      userName: params.officerName,
-      userRole: "oic",
-      action: `recorded cash payment for ${params.cin} — OR #${orNumber}, Ref ${referenceNumber}, Location: ${params.paymentLocation}`,
-      record: params.cin,
-      type: "cash-payment",
-      metadata: {
-        cin: params.cin,
-        plateNo: params.plateNo,
-        amountDue: params.amountDue,
-        amountInWords: numberToWords(params.amountDue),
-        referenceNumber,
-        orNumber,
-        paymentLocation: params.paymentLocation,
-        paymentId: paymentRef.id,
-        // ⚠️ ADDED: violator identity in audit metadata
-        violatorUid: params.violatorUid,
-        guestId: params.guestId,
-        violatorName: params.violatorName,
-      },
-      timestamp: serverTimestamp(),
-    });
-
-    return {
-      referenceNumber,
-      orNumber,
-      paymentId: paymentRef.id,
-    };
-  });
-};
-
-/* ------------------------------------------------------------------
   COMPONENT: PendingPaymentsOIC
 ------------------------------------------------------------------ */
 export default function PendingPaymentsOIC() {
@@ -402,6 +291,11 @@ export default function PendingPaymentsOIC() {
   const [currentPage, setCurrentPage] = useState(1);
 
   /* Search + Filter state */
+  /** Clamp fines, or impounding fees encoded by the Impounding Staff */
+  const [paymentTab, setPaymentTab] = useState<"clamp" | "impound">("clamp");
+  const { records: impoundRecords } = useImpoundRecords();
+  const impoundForPayment = impoundRecords.filter((r) => r.status === "For Payment").length;
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [sortOption, setSortOption] = useState<SortOption>("oldest");
@@ -415,11 +309,11 @@ export default function PendingPaymentsOIC() {
   const [savedOrNumber, setSavedOrNumber] = useState<string | null>(null);
   const [savedPaymentId, setSavedPaymentId] = useState<string | null>(null);
   const [showPrintSlip, setShowPrintSlip] = useState(false);
+  /** Cash handed over by the payer (blank = exact amount) */
+  const [cashGiven, setCashGiven] = useState("");
+  /** Cash received as saved, for the printed slip */
+  const [savedCashReceived, setSavedCashReceived] = useState<number | null>(null);
 
-  /* Subject-to-Impound modal state */
-  const [impoundRow, setImpoundRow] = useState<PendingRow | null>(null);
-  const [impoundNotes, setImpoundNotes] = useState("");
-  const [impoundSaving, setImpoundSaving] = useState(false);
 
   /* Effect: Fetch current user profile */
   useEffect(() => {
@@ -486,14 +380,14 @@ export default function PendingPaymentsOIC() {
               violationNo: generateViolationNo(cin),
               cin,
               plateNo: data.plateNo ?? "—",
-              amount: Number(data.fineAmount ?? 0),
+              fineAmount: Number(data.fineAmount ?? 0),
+              overdueFee: overdueFeeFor(data),
+              amount: amountDueFor(data),
               recordedAt,
               dueDate,
               daysLeft,
               status: (daysLeft < 0 ? "Overdue" : "Unpaid") as PendingStatus,
-              impoundStatus: data.impoundStatus ?? null,
-              impoundAutoFlagged: data.impoundAutoFlagged ?? false,
-              impoundFlaggedBy: data.impoundFlaggedBy ?? null,
+              enforcementType: String(data.enforcementType ?? "clamped").toLowerCase(),
               // ⚠️ ADDED: violator identity (with null-safe fallbacks)
               violatorUid: data.violatorUid ?? null,
               guestId: data.guestId ?? null,
@@ -517,62 +411,6 @@ export default function PendingPaymentsOIC() {
     return () => unsubscribe();
   }, []);
 
-  /* AUTO-FLAG OVERDUE VIOLATIONS */
-  useEffect(() => {
-    if (loading || rows.length === 0) return;
-
-    const autoFlagOverdue = async () => {
-      const overdueRows = rows.filter(
-        (row) =>
-          row.daysLeft < 0 &&
-          row.impoundStatus !== "Subject to Impound" &&
-          row.impoundStatus !== "Impounded"
-      );
-
-      if (overdueRows.length === 0) return;
-
-      try {
-        const batch = writeBatch(db);
-        overdueRows.forEach((row) => {
-          const violationRef = doc(db, "violations", row.id);
-          const auditRef = doc(collection(db, "auditLogs"));
-
-          batch.update(violationRef, {
-            impoundStatus: "Subject to Impound",
-            impoundFlaggedAt: serverTimestamp(),
-            impoundFlaggedBy: "system",
-            impoundFlaggedByRole: "system",
-            impoundAutoFlagged: true,
-            impoundFee: IMPOUND_FEE,
-            updatedAt: serverTimestamp(),
-            updatedBy: "system",
-          });
-
-          batch.set(auditRef, {
-            userName: "System",
-            userRole: "system",
-            action: `auto-flagged violation ${row.cin} as Subject to Impound (24hr grace period expired)`,
-            record: row.cin,
-            type: "impound-flag-auto",
-            metadata: {
-              cin: row.cin,
-              plateNo: row.plateNo,
-              daysOverdue: Math.abs(row.daysLeft),
-              impoundFee: IMPOUND_FEE,
-              method: "client-side",
-            },
-            timestamp: serverTimestamp(),
-          });
-        });
-
-        await batch.commit();
-      } catch (err) {
-        console.error("[auto-flag] Failed to flag overdue violations:", err);
-      }
-    };
-
-    autoFlagOverdue();
-  }, [loading, rows]);
 
   /* Click outside */
   useEffect(() => {
@@ -605,6 +443,8 @@ export default function PendingPaymentsOIC() {
   const openCashModal = (row: PendingRow) => {
     setCashRow(row);
     setCashError("");
+    setCashGiven("");
+    setSavedCashReceived(null);
     setPaymentLocation("Central");
     setSavedReference(null);
     setSavedOrNumber(null);
@@ -625,22 +465,31 @@ export default function PendingPaymentsOIC() {
     if (!cashRow) return;
     setCashError("");
 
+    const cashReceivedValue = cashGiven.trim() === "" ? cashRow.amount : Number(cashGiven);
+    if (!Number.isFinite(cashReceivedValue) || cashReceivedValue < cashRow.amount) {
+      setCashError(`Cash received must be at least ${formatCurrency(cashRow.amount)}.`);
+      return;
+    }
+
     setSaving(true);
     try {
-      const result = await recordCashPaymentOIC({
+      const result = await recordOnsitePayment({
         violationId: cashRow.id,
         cin: cashRow.cin,
         plateNo: cashRow.plateNo,
-        amountDue: cashRow.amount,
-        paymentLocation,
-        // ⚠️ ADDED: pass violator identity
+        fineAmount: cashRow.fineAmount,
+        overdueFee: cashRow.overdueFee,
+        amountInWords: numberToWords(cashRow.amount),
+        cashReceived: cashReceivedValue,
+        counterLocation: paymentLocation,
+        recordedByRole: "oic",
+        officerName: currentUser.name,
         violatorUid: cashRow.violatorUid || null,
         guestId: cashRow.guestId || null,
         violatorName: cashRow.violatorName || null,
-        // End
-        officerName: currentUser.name,
       });
 
+      setSavedCashReceived(cashReceivedValue);
       setSavedReference(result.referenceNumber);
       setSavedOrNumber(result.orNumber);
       setSavedPaymentId(result.paymentId);
@@ -652,63 +501,6 @@ export default function PendingPaymentsOIC() {
     }
   };
 
-  /* SUBJECT-TO-IMPOUND MODAL HANDLERS */
-  const openImpoundModal = (row: PendingRow) => {
-    setImpoundRow(row);
-    setImpoundNotes("");
-  };
-
-  const closeImpoundModal = () => {
-    setImpoundRow(null);
-    setImpoundNotes("");
-  };
-
-  const handleMarkSubjectToImpound = async () => {
-    if (!impoundRow) return;
-
-    setImpoundSaving(true);
-    try {
-      const violationRef = doc(db, "violations", impoundRow.id);
-      const auditRef = doc(collection(db, "auditLogs"));
-
-      await runTransaction(db, async (tx) => {
-        tx.update(violationRef, {
-          impoundStatus: "Subject to Impound",
-          impoundFlaggedAt: serverTimestamp(),
-          impoundFlaggedBy: currentUser.name,
-          impoundFlaggedByRole: "oic",
-          impoundFee: IMPOUND_FEE,
-          impoundNotes: impoundNotes.trim() || null,
-          updatedAt: serverTimestamp(),
-          updatedBy: currentUser.name,
-        });
-
-        tx.set(auditRef, {
-          userName: currentUser.name,
-          userRole: "oic",
-          action: `marked violation ${impoundRow.cin} as Subject to Impound (24hr grace period expired)`,
-          record: impoundRow.cin,
-          type: "impound-flag",
-          metadata: {
-            cin: impoundRow.cin,
-            plateNo: impoundRow.plateNo,
-            daysOverdue: Math.abs(impoundRow.daysLeft),
-            impoundFee: IMPOUND_FEE,
-            notes: impoundNotes.trim() || null,
-          },
-          timestamp: serverTimestamp(),
-        });
-      });
-
-      alert(`✅ ${impoundRow.violationNo} marked as Subject to Impound.`);
-      closeImpoundModal();
-    } catch (err: any) {
-      console.error("Failed to mark:", err);
-      alert(err.message || "Failed to mark violation.");
-    } finally {
-      setImpoundSaving(false);
-    }
-  };
 
   /* FILTERED + SORTED ROWS */
   const filteredRows = useMemo(() => {
@@ -728,10 +520,6 @@ export default function PendingPaymentsOIC() {
       result = result.filter((row) => {
         if (statusFilter === "Unpaid") return row.status === "Unpaid";
         if (statusFilter === "Overdue") return row.status === "Overdue";
-        if (statusFilter === "Subject to Impound")
-          return row.impoundStatus === "Subject to Impound";
-        if (statusFilter === "Impounded")
-          return row.impoundStatus === "Impounded";
         return true;
       });
     }
@@ -761,7 +549,7 @@ export default function PendingPaymentsOIC() {
   const metrics = useMemo(() => {
     const totalPending = rows.length;
     const overdue = rows.filter((r) => r.daysLeft < 0).length;
-    const dueToday = rows.filter((r) => r.daysLeft === 0).length;
+    const dueToday = rows.filter((r) => r.daysLeft >= 0 && isDueToday(r.dueDate)).length;
     return { totalPending, overdue, dueToday };
   }, [rows]);
 
@@ -863,199 +651,201 @@ export default function PendingPaymentsOIC() {
           </header>
 
           <main className="main-content">
-            <div className="metric-grid-three">
-              {metricCards.map((card) => (
-                <div key={card.title} className="card metric-card">
-                  <p className="metric-title">{card.title}</p>
-                  <p className="metric-value">{card.value}</p>
-                </div>
-              ))}
+            {/* Clamp fines (violator payments) and impounding fees (UOVR) */}
+            <div className="ir-tabs" role="tablist" aria-label="Payment type">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={paymentTab === "clamp"}
+                className={`ir-tab ${paymentTab === "clamp" ? "is-active" : ""}`}
+                onClick={() => setPaymentTab("clamp")}
+              >
+                Clamp Fines
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={paymentTab === "impound"}
+                className={`ir-tab ${paymentTab === "impound" ? "is-active" : ""}`}
+                onClick={() => setPaymentTab("impound")}
+              >
+                Impounding Fees (UOVR)
+                {impoundForPayment > 0 && <span className="ir-tab-count">{impoundForPayment}</span>}
+              </button>
             </div>
 
-            <div className="card">
-              <p className="card-eyebrow">Sector 3</p>
-              <h2 className="card-title">Pending Payments</h2>
-
-              {/* TOOLBAR */}
-              <div className="table-toolbar">
-                <div className="toolbar-search">
-                  <Search size={16} className="toolbar-search-icon" />
-                  <input
-                    type="text"
-                    className="toolbar-search-input"
-                    placeholder="Search by CIN, plate no., or violation no..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      className="toolbar-search-clear"
-                      onClick={() => setSearchQuery("")}
-                      title="Clear search"
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-
-                <select
-                  className="toolbar-select"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-                >
-                  {STATUS_FILTERS.map((s) => (
-                    <option key={s} value={s}>
-                      {s === "All" ? "All Statuses" : s}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  className="toolbar-select"
-                  value={sortOption}
-                  onChange={(e) => setSortOption(e.target.value as SortOption)}
-                >
-                  {SORT_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+            {paymentTab === "impound" ? (
+              <ImpoundRecordsPanel mode="oic-payments" currentUserName={currentUser.name} />
+            ) : (
+              <>
+              <div className="metric-grid-three">
+                {metricCards.map((card) => (
+                  <div key={card.title} className="card metric-card">
+                    <p className="metric-title">{card.title}</p>
+                    <p className="metric-value">{card.value}</p>
+                  </div>
+                ))}
               </div>
 
-              {!loading && rows.length > 0 && (
-                <p className="toolbar-result-count">
-                  Showing <strong>{filteredRows.length}</strong> of{" "}
-                  <strong>{rows.length}</strong> pending payment
-                  {rows.length === 1 ? "" : "s"}
-                  {searchQuery || statusFilter !== "All" ? " (filtered)" : ""}
-                </p>
-              )}
+              <div className="card">
+                <p className="card-eyebrow">Sector 3</p>
+                <h2 className="card-title">Pending Payments</h2>
 
-              {loading ? (
-                <div className="table-loading">
-                  <p>Loading pending payments...</p>
-                </div>
-              ) : rows.length === 0 ? (
-                <div className="table-empty">
-                  <p>No pending payments.</p>
-                </div>
-              ) : filteredRows.length === 0 ? (
-                <div className="table-empty">
-                  <p>No payments match your search or filters.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="table-wrapper">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Violation No.</th>
-                          <th>CIN</th>
-                          <th>Plate No.</th>
-                          <th>Amount</th>
-                          <th>Due Date</th>
-                          <th>Days Left</th>
-                          <th>Status</th>
-                          <th>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginatedRows.map((row) => (
-                          <tr key={row.id}>
-                            <td className="cell-violation-no">{row.violationNo}</td>
-                            <td>
-                              <span className="cin-pill">{row.cin}</span>
-                            </td>
-                            <td className="cell-plate">{row.plateNo}</td>
-                            <td className="cell-amount">{formatCurrency(row.amount)}</td>
-                            <td className="cell-due-date">{formatDate(row.dueDate)}</td>
-                            <td className={`cell-days-left ${row.daysLeft < 0 ? "text-red" : ""}`}>
-                              {row.daysLeft < 0
-                                ? "Overdue"
-                                : `${row.daysLeft} day${row.daysLeft === 1 ? "" : "s"}`}
-                            </td>
-                            <td>
-                              <span className={`status-pill ${getStatusClass(row.status)}`}>
-                                {row.status}
-                              </span>
-                            </td>
-                            <td className="cell-action">
-                              <button
-                                type="button"
-                                className="btn-cash-payment"
-                                onClick={() => openCashModal(row)}
-                              >
-                                Cash Payment
-                              </button>
-
-                              {row.status === "Overdue" &&
-                                row.impoundStatus !== "Subject to Impound" &&
-                                row.impoundStatus !== "Impounded" && (
-                                  <button
-                                    type="button"
-                                    className="btn-subject-impound"
-                                    onClick={() => openImpoundModal(row)}
-                                  >
-                                    Subject to Impound
-                                  </button>
-                                )}
-
-                              {row.impoundStatus === "Subject to Impound" && (
-                                <span
-                                  className={`badge-impound ${
-                                    row.impoundAutoFlagged ? "badge-impound-auto" : ""
-                                  }`}
-                                  title={
-                                    row.impoundAutoFlagged
-                                      ? "Automatically flagged by system (24hr grace period expired)"
-                                      : `Flagged by ${row.impoundFlaggedBy ?? "OIC"}`
-                                  }
-                                >
-                                  {row.impoundAutoFlagged ? "🤖 Auto-flagged" : "Subject to Impound"}
-                                </span>
-                              )}
-
-                              {row.impoundStatus === "Impounded" && (
-                                <span className="badge-impounded">Impounded</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {/* TOOLBAR */}
+                <div className="table-toolbar">
+                  <div className="toolbar-search">
+                    <Search size={16} className="toolbar-search-icon" />
+                    <input
+                      type="text"
+                      className="toolbar-search-input"
+                      placeholder="Search by CIN, plate no., or violation no..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        className="toolbar-search-clear"
+                        onClick={() => setSearchQuery("")}
+                        title="Clear search"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
                   </div>
 
-                  <div className="pagination">
-                    <button
-                      type="button"
-                      className="pagination-btn"
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      disabled={safePage === 1}
-                    >
-                      <ChevronLeft size={16} />
-                      Previous
-                    </button>
+                  <select
+                    className="toolbar-select"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                  >
+                    {STATUS_FILTERS.map((s) => (
+                      <option key={s} value={s}>
+                        {s === "All" ? "All Statuses" : s}
+                      </option>
+                    ))}
+                  </select>
 
-                    <div className="pagination-info">
-                      <span className="pagination-page">{safePage}</span>
-                      <span className="pagination-sep">of {totalPages} pages</span>
+                  <select
+                    className="toolbar-select"
+                    value={sortOption}
+                    onChange={(e) => setSortOption(e.target.value as SortOption)}
+                  >
+                    {SORT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {!loading && rows.length > 0 && (
+                  <p className="toolbar-result-count">
+                    Showing <strong>{filteredRows.length}</strong> of{" "}
+                    <strong>{rows.length}</strong> pending payment
+                    {rows.length === 1 ? "" : "s"}
+                    {searchQuery || statusFilter !== "All" ? " (filtered)" : ""}
+                  </p>
+                )}
+
+                {loading ? (
+                  <div className="table-loading">
+                    <p>Loading pending payments...</p>
+                  </div>
+                ) : rows.length === 0 ? (
+                  <div className="table-empty">
+                    <p>No pending payments.</p>
+                  </div>
+                ) : filteredRows.length === 0 ? (
+                  <div className="table-empty">
+                    <p>No payments match your search or filters.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="table-wrapper">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Violation No.</th>
+                            <th>CIN</th>
+                            <th>Plate No.</th>
+                            <th>Amount</th>
+                            <th>Due Date</th>
+                            <th>Days Left</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedRows.map((row) => (
+                            <tr key={row.id}>
+                              <td className="cell-violation-no">{row.violationNo}</td>
+                              <td>
+                                <span className="cin-pill">{row.cin}</span>
+                              </td>
+                              <td className="cell-plate">{row.plateNo}</td>
+                              <td className="cell-amount">
+                                {formatCurrency(row.amount)}
+                                {row.overdueFee > 0 && (
+                                  <small className="amount-note">overdue clamp fee</small>
+                                )}
+                              </td>
+                              <td className="cell-due-date">{formatDate(row.dueDate)}</td>
+                              <td className={`cell-days-left ${row.daysLeft < 0 ? "text-red" : ""}`}>
+                                {formatTimeLeft(row.dueDate, row.daysLeft)}
+                              </td>
+                              <td>
+                                <span className={`status-pill ${getStatusClass(row.status)}`}>
+                                  {row.status}
+                                </span>
+                              </td>
+                              <td className="cell-action">
+                                <button
+                                  type="button"
+                                  className="btn-cash-payment"
+                                  onClick={() => openCashModal(row)}
+                                >
+                                  Cash Payment
+                                </button>
+
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
 
-                    <button
-                      type="button"
-                      className="pagination-btn"
-                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={safePage === totalPages}
-                    >
-                      Next
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+                    <div className="pagination">
+                      <button
+                        type="button"
+                        className="pagination-btn"
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        disabled={safePage === 1}
+                      >
+                        <ChevronLeft size={16} />
+                        Previous
+                      </button>
+
+                      <div className="pagination-info">
+                        <span className="pagination-page">{safePage}</span>
+                        <span className="pagination-sep">of {totalPages} pages</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="pagination-btn"
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={safePage === totalPages}
+                      >
+                        Next
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+              </>
+            )}
           </main>
         </div>
       </div>
@@ -1121,6 +911,22 @@ export default function PendingPaymentsOIC() {
                         <strong>{cashRow.violatorName}</strong>
                       </div>
                     )}
+                    {cashRow.overdueFee > 0 ? (
+                      <div className="cash-summary-row">
+                        <span>
+                          Overdue Clamp Fee
+                          <small className="amount-note">
+                            Past 24 hours — replaces the {formatCurrency(cashRow.fineAmount)} fine
+                          </small>
+                        </span>
+                        <strong>{formatCurrency(cashRow.overdueFee)}</strong>
+                      </div>
+                    ) : (
+                      <div className="cash-summary-row">
+                        <span>Fine</span>
+                        <strong>{formatCurrency(cashRow.fineAmount)}</strong>
+                      </div>
+                    )}
                     <div className="cash-summary-row">
                       <span>Amount Due</span>
                       <strong className="cash-summary-amount">
@@ -1134,11 +940,37 @@ export default function PendingPaymentsOIC() {
                       </strong>
                     </div>
                     <div className="cash-summary-row">
-                      <span>Cash Received</span>
+                      <span>Change</span>
                       <strong className="cash-summary-amount">
-                        {formatCurrency(cashRow.amount)}
+                        {formatCurrency(
+                          Math.max(
+                            0,
+                            (cashGiven.trim() === "" ? cashRow.amount : Number(cashGiven) || 0) -
+                              cashRow.amount
+                          )
+                        )}
                       </strong>
                     </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="cashGiven">Cash Received</label>
+                    <input
+                      id="cashGiven"
+                      className="form-input"
+                      type="number"
+                      inputMode="decimal"
+                      min={cashRow.amount}
+                      step="0.01"
+                      placeholder={cashRow.amount.toFixed(2)}
+                      value={cashGiven}
+                      onChange={(e) => setCashGiven(e.target.value)}
+                      disabled={saving}
+                    />
+                    <small className="form-hint">
+                      Amount handed over by the payer. Leave blank if exact. GCash is paid
+                      online through the violator app.
+                    </small>
                   </div>
 
                   {/* PAYMENT LOCATION */}
@@ -1213,99 +1045,6 @@ export default function PendingPaymentsOIC() {
         </div>
       )}
 
-      {/* SUBJECT TO IMPOUND MODAL */}
-      {impoundRow && (
-        <div
-          className="modal-overlay"
-          onClick={impoundSaving ? undefined : closeImpoundModal}
-        >
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">Mark Subject to Impound</h3>
-              <button
-                type="button"
-                className="modal-close-btn"
-                onClick={closeImpoundModal}
-                disabled={impoundSaving}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="impound-warning">
-                <p>
-                  ⚠️ This violation has exceeded the <strong>24-hour grace period</strong>{" "}
-                  and remains unpaid.
-                </p>
-                <p>
-                  Once marked, the vehicle becomes <strong>subject to impound</strong> by
-                  the Impounding Staff.
-                </p>
-              </div>
-
-              <div className="cash-summary">
-                <div className="cash-summary-row">
-                  <span>CIN</span>
-                  <strong>{impoundRow.cin}</strong>
-                </div>
-                <div className="cash-summary-row">
-                  <span>Plate No.</span>
-                  <strong>{impoundRow.plateNo}</strong>
-                </div>
-                <div className="cash-summary-row">
-                  <span>Days Overdue</span>
-                  <strong className="text-red">{Math.abs(impoundRow.daysLeft)} day(s)</strong>
-                </div>
-                <div className="cash-summary-row">
-                  <span>Original Fine</span>
-                  <strong>{formatCurrency(impoundRow.amount)}</strong>
-                </div>
-                <div className="cash-summary-row">
-                  <span>Impound Fee</span>
-                  <strong className="cash-summary-amount">{formatCurrency(IMPOUND_FEE)}</strong>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="impoundNotes">Notes (Optional)</label>
-                <textarea
-                  id="impoundNotes"
-                  className="form-input"
-                  rows={3}
-                  placeholder="e.g. Vehicle location, additional remarks..."
-                  value={impoundNotes}
-                  onChange={(e) => setImpoundNotes(e.target.value)}
-                  disabled={impoundSaving}
-                />
-              </div>
-
-              <p className="modal-note">
-                Marked by <strong>{currentUser.name}</strong> (OIC). This action will be
-                logged in the audit trail.
-              </p>
-            </div>
-
-            <div className="modal-footer">
-              <button
-                className="btn-secondary"
-                onClick={closeImpoundModal}
-                disabled={impoundSaving}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn-danger"
-                onClick={handleMarkSubjectToImpound}
-                disabled={impoundSaving}
-              >
-                {impoundSaving ? "Marking..." : "Confirm Subject to Impound"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* PRINT SLIP MODAL */}
       {showPrintSlip && savedPaymentId && cashRow && (
         <CashPaymentSlip
@@ -1313,8 +1052,10 @@ export default function PendingPaymentsOIC() {
           referenceNumber={savedReference || ""}
           cin={cashRow.cin}
           plateNo={cashRow.plateNo}
-          amount={cashRow.amount}
+          amount={cashRow.overdueFee > 0 ? 0 : cashRow.fineAmount}
+          overdueFee={cashRow.overdueFee}
           totalAmount={cashRow.amount}
+          cashReceived={savedCashReceived ?? undefined}
           orNumber={savedOrNumber || ""}
           recordedBy={currentUser.name}
           createdAt={new Date()}
@@ -1330,4 +1071,4 @@ export default function PendingPaymentsOIC() {
       )}
     </div>
   );
-}
+}
