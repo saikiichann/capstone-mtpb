@@ -38,10 +38,13 @@ export function RequirePayer() {
   }
   // Anonymous sign-in happens for everyone who scans a QR code, so an
   // anonymous user who never chose to pay as a guest is sent back to the
-  // violation, where the Pay Now dialog asks them to decide.
-  if (user?.isGuest && !guestChoseCheckout) {
-    const violationRef = location.pathname.split('/')[2]
-    return <Navigate to={violationRef ? `/v/${violationRef}` : '/welcome'} replace />
+  // violation, where the Pay Now dialog asks them to decide. Only before
+  // paying (/v/<ref>/pay...): the success and receipt pages after GCash are
+  // never bounced, since the server only shows a payment to the session
+  // that made it.
+  const violationRef = location.pathname.match(/^\/v\/([^/]+)\/pay/)?.[1]
+  if (user?.isGuest && !guestChoseCheckout && violationRef) {
+    return <Navigate to={`/v/${violationRef}`} replace />
   }
   if (!user) {
     return <Navigate to="/welcome" replace state={{ returnTo }} />

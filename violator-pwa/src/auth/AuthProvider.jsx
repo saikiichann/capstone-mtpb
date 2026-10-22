@@ -18,22 +18,27 @@ import { AuthContext } from './auth-context'
 // Reading a violation signs the scanner in anonymously, because the shared
 // project only lets signed-in users read violations and clamps. That makes
 // everyone look like a guest — so "is anonymous" can't mean "chose to pay as
-// a guest". This flag records the actual choice, and is kept for the tab so
-// it survives the trip out to PayMongo and back.
+// a guest". This flag records the actual choice.
+//
+// It's kept for the whole browser (localStorage), not just the tab: GCash
+// often finishes in a new tab, which used to lose it and bounce the guest
+// away from their receipt (demo, 2026-10-16). It stores the guest's uid, so
+// it only counts for that same guest session, and it's cleared on log out
+// and when an account signs in.
 const GUEST_CHOICE_KEY = 'mtpb-guest-checkout'
 
 function readGuestChoice() {
   try {
-    return sessionStorage.getItem(GUEST_CHOICE_KEY) === '1'
+    return localStorage.getItem(GUEST_CHOICE_KEY)
   } catch {
-    return false
+    return null
   }
 }
 
-function writeGuestChoice(chosen) {
+function writeGuestChoice(uid) {
   try {
-    if (chosen) sessionStorage.setItem(GUEST_CHOICE_KEY, '1')
-    else sessionStorage.removeItem(GUEST_CHOICE_KEY)
+    if (uid) localStorage.setItem(GUEST_CHOICE_KEY, uid)
+    else localStorage.removeItem(GUEST_CHOICE_KEY)
   } catch {
     // Private mode: the choice just won't survive a reload.
   }
@@ -81,7 +86,8 @@ export default function AuthProvider({ children }) {
 
 function FirebaseAuthProvider({ children }) {
   const [state, setState] = useState({ status: 'loading', user: null, profile: null })
-  const [guestChose, setGuestChose] = useState(readGuestChoice)
+  // The uid of the guest who chose "Pay now as guest", if any.
+  const [guestChoseUid, setGuestChoseUid] = useState(readGuestChoice)
   // While signIn/signUp are running they set the state themselves, so the
   // listener must not sign the user out before their document exists.
   const busyRef = useRef(false)
@@ -124,6 +130,8 @@ function FirebaseAuthProvider({ children }) {
     busyRef.current = true
     try {
       const { user, profile } = await signInViolator(credentials)
+      writeGuestChoice(null)
+      setGuestChoseUid(null)
       setState({ status: 'ready', user: snapshotUser(user), profile })
     } finally {
       busyRef.current = false
@@ -134,6 +142,8 @@ function FirebaseAuthProvider({ children }) {
     busyRef.current = true
     try {
       const { user, profile } = await signUpViolator(details)
+      writeGuestChoice(null)
+      setGuestChoseUid(null)
       setState({ status: 'ready', user: snapshotUser(user), profile })
     } finally {
       busyRef.current = false
@@ -141,8 +151,8 @@ function FirebaseAuthProvider({ children }) {
   }, [])
 
   const signOut = useCallback(() => {
-    writeGuestChoice(false)
-    setGuestChose(false)
+    writeGuestChoice(null)
+    setGuestChoseUid(null)
     return signOutUser()
   }, [])
 
@@ -152,8 +162,8 @@ function FirebaseAuthProvider({ children }) {
     busyRef.current = true
     try {
       const { user } = await signInAsGuest()
-      writeGuestChoice(true)
-      setGuestChose(true)
+      writeGuestChoice(user.uid)
+      setGuestChoseUid(user.uid)
       setState({ status: 'ready', user: snapshotUser(user), profile: null })
     } finally {
       busyRef.current = false
@@ -184,7 +194,7 @@ function FirebaseAuthProvider({ children }) {
       isDemo: false,
       // True only once someone has tapped "Pay now as guest". Anonymous
       // sign-in alone doesn't count — see GUEST_CHOICE_KEY above.
-      guestChoseCheckout: guestChose,
+      guestChoseCheckout: Boolean(state.user?.isGuest && guestChoseUid && guestChoseUid === state.user.uid),
       updateProfile,
       continueAsGuest,
       signIn,
@@ -194,7 +204,7 @@ function FirebaseAuthProvider({ children }) {
       resendVerification: resendVerificationEmail,
       sendPasswordReset: sendResetEmail,
     }),
-    [state, guestChose, signIn, signUp, signOut, refreshUser, updateProfile, continueAsGuest],
+    [state, guestChoseUid, signIn, signUp, signOut, refreshUser, updateProfile, continueAsGuest],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
