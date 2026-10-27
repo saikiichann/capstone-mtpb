@@ -47,7 +47,7 @@
   /* Layout */
   --app-max-width: 430px;
   --page-gutter: 17px; /* 52 */
-  --header-height: 137px; /* 429 in Figma (141px); 4px shorter at Marco's request, 2026-10-28 */
+  --header-height: 130px; /* 429 in Figma (141px); shortened at Marco's request, 2026-10-28 */
 
   --font-sans: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
