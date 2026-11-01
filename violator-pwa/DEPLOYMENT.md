@@ -41,6 +41,8 @@ Server (from `.env.server.example`), Production only:
 - [ ] `FIREBASE_SERVICE_ACCOUNT` (the whole JSON key, as one value)
 - [ ] `APP_URL`: `https://mtpb-violators-pwa.vercel.app`
 - [ ] `ALLOWED_ORIGINS`: the same URL (comma-separate if there are more)
+  - plus the **admin dashboard's** address (and `http://localhost:5173` while testing it) — its
+    "Forgot password?" and IT Admin password reset call `/api/staff-password` here.
 - [ ] `GMAIL_USER`: `mtpb.violatorportal@gmail.com` (sends the MTPB receipt email; optional)
 - [ ] `GMAIL_APP_PASSWORD`: an **app password** for that Gmail (Google Account → Security → 2-Step
   Verification on → App passwords), marked Sensitive. Without these two, payments still work and no email is

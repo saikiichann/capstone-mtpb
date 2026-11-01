@@ -20,7 +20,7 @@ import { config } from './config.js'
 // counter, so everything written there copies what its own cash payments
 // write (admin-web/src/pages/finance/PendingPayments.tsx, recordCashPayment).
 
-function adminApp() {
+export function adminApp() {
   if (getApps().length) return getApps()[0]
   return initializeApp({ credential: cert(JSON.parse(config.firebaseServiceAccount)) })
 }
