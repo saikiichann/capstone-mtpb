@@ -8,9 +8,10 @@ import {
   normalizeViolation,
   PLATE_FIELDS,
 } from '../src/firebase/mapping.js'
-import { COLLECTIONS, PAYMENT_COUNTER_ID } from '../src/firebase/schema.js'
+import { COLLECTIONS, PAYMENT_COUNTER_ID, RELEASE_COUNTER_ID } from '../src/firebase/schema.js'
 import { plateSpellings } from '../src/utils/plates.js'
 import { config } from './config.js'
+import { impoundReleaseWrites, isImpoundPayment } from './impound-release.js'
 
 // Firestore adapter for the payment service, using the Firebase Admin SDK.
 // Admin writes skip the security rules, which is why payments can only be
@@ -40,11 +41,28 @@ function manilaYear(date) {
   return Number(new Intl.DateTimeFormat('en-US', { year: 'numeric', timeZone: 'Asia/Manila' }).format(date))
 }
 
-export function createFirestoreStore() {
-  const db = getFirestore(adminApp())
+// `db` is for tests (an in-memory stand-in); normally the shared project.
+export function createFirestoreStore({ db = getFirestore(adminApp()) } = {}) {
   const attempts = db.collection(COLLECTIONS.checkoutAttempts)
   const payments = db.collection(COLLECTIONS.payments)
   const counterRef = db.collection(COLLECTIONS.counters).doc(PAYMENT_COUNTER_ID)
+  const releaseCounterRef = db.collection(COLLECTIONS.counters).doc(RELEASE_COUNTER_ID)
+
+  // The impound record of an impound violation, read inside the payment's
+  // transaction: the violation's impoundRecordId (Add Impound Record sets
+  // it), else the record whose sourceViolationId is this violation, else the
+  // record with the violation's id. Null if there's none.
+  async function findImpoundRecord(tx, violationId, violation) {
+    const records = db.collection(COLLECTIONS.impoundRecords)
+    if (violation.impoundRecordId) {
+      const doc = await tx.get(records.doc(String(violation.impoundRecordId)))
+      if (doc.exists) return doc.ref
+    }
+    const linked = await tx.get(records.where('sourceViolationId', '==', violationId).limit(1))
+    if (!linked.empty) return linked.docs[0].ref
+    const direct = await tx.get(records.doc(violationId))
+    return direct.exists ? direct.ref : null
+  }
 
   return {
     // Violations go through the same field mapping as the app (mapping.js),
@@ -123,6 +141,14 @@ export function createFirestoreStore() {
       const byId = new Map()
       for (const snap of snaps) for (const doc of snap.docs) byId.set(doc.id, normalizeViolation(doc.id, doc.data()))
       return [...byId.values()]
+    },
+
+    // Impound desk QR (server/violation-access.js): every violation the
+    // impounding staff recorded. The plate is matched in code (samePlate),
+    // since it may be typed "ABC 1234" or "ABC-1234".
+    async listImpoundedViolations() {
+      const snap = await db.collection(COLLECTIONS.violations).where('enforcementType', '==', 'impounded').get()
+      return snap.docs.map((doc) => normalizeViolation(doc.id, doc.data()))
     },
 
     // Violations linked to this account (server/account-links.js): the ones
@@ -326,6 +352,43 @@ export function createFirestoreStore() {
         const next = Number(counterDoc.exists ? (counterDoc.data().lastValue ?? 0) : 0) + 1
         const referenceNumber = `REF-${manilaYear(patch.paidAt)}-${String(next).padStart(5, '0')}`
         const paymentRef = payments.doc()
+
+        // Impound: paid = verified + released right away (server/impound-release.js).
+        // Its extra reads come first, before anything is written.
+        if (isImpoundPayment(attempt, violation)) {
+          const releaseCounterDoc = await tx.get(releaseCounterRef)
+          const impoundRecordRef = await findImpoundRecord(tx, attempt.violationId, violation)
+          const nextOrder = Number(releaseCounterDoc.exists ? (releaseCounterDoc.data().lastValue ?? 0) : 0) + 1
+          const releaseOrderId = `ORD-${manilaYear(patch.paidAt)}-${String(nextOrder).padStart(5, '0')}`
+          const writes = impoundReleaseWrites({
+            attempt,
+            attemptId,
+            violation,
+            patch,
+            referenceNumber,
+            releaseOrderId,
+            serverTime: FieldValue.serverTimestamp(),
+          })
+
+          tx.set(counterRef, { lastValue: next, prefix: 'REF', ...stamp }, { merge: true })
+          tx.set(releaseCounterRef, { lastValue: nextOrder, prefix: 'ORD', ...stamp }, { merge: true })
+          tx.update(violationRef, writes.violation)
+          tx.set(paymentRef, writes.payment)
+          tx.set(db.collection(COLLECTIONS.releaseLog).doc(), writes.releaseLog)
+          if (impoundRecordRef) tx.update(impoundRecordRef, writes.impoundRecord)
+          tx.update(attemptRef, {
+            ...patch,
+            ...stamp,
+            status: 'paid',
+            referenceNumber,
+            paymentId: paymentRef.id,
+            releaseOrderId,
+            // No separate "verified" / "released" emails: the receipt says
+            // both (server/status-notifier.js).
+            releasedOnPayment: true,
+          })
+          return 'paid'
+        }
 
         tx.set(counterRef, { lastValue: next, prefix: 'REF', ...stamp }, { merge: true })
 

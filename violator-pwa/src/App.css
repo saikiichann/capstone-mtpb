@@ -4349,3 +4349,12 @@ div.settings-row {
   line-height: 1.5;
   text-align: center;
 }
+
+/* ---------- Impound desk QR (/pay-impound) ---------- */
+.impound-form,
+.impound-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 24px;
+}

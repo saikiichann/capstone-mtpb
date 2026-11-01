@@ -7,6 +7,9 @@ import { CONTACT_LINE, renderEmail } from './email-layout.js'
 // they have no account to find the receipt in later.
 
 export function buildReceiptEmail(attempt) {
+  // Online impound payments are verified and released when paid
+  // (server/impound-release.js). No OR number, so not an "official" receipt.
+  if (attempt.releasedOnPayment) return buildImpoundReceiptEmail(attempt)
   const email = renderEmail({
     heading: 'OFFICIAL RECEIPT',
     // No test-mode notice (Marco's choice, 2026-10-11): receipts look the same
@@ -32,6 +35,29 @@ export function buildReceiptEmail(attempt) {
     ],
   })
   return { subject: `MTPB payment received – ${attempt.referenceNumber}`, ...email }
+}
+
+function buildImpoundReceiptEmail(attempt) {
+  const email = renderEmail({
+    heading: 'PAYMENT RECEIPT',
+    message:
+      'Your impound fee is paid and your vehicle is released. Show your Blue Ticket and a valid ID at the impound desk to get your vehicle.',
+    rows: [
+      ['Reference Number', attempt.referenceNumber],
+      ['Release Order', attempt.releaseOrderId],
+      ['Date & Time', formatDateTime(attempt.paidAt)],
+      ['Violation Number', attempt.cin],
+      ['Plate Number', attempt.plateNo],
+      ['Payment Method', 'GCash'],
+      ['Status', 'Paid and released'],
+      ['Impound Fee', formatPeso(attempt.impoundFee ?? attempt.fineAmount)],
+      ['Convenience Fee', formatPeso(attempt.convenienceFee)],
+      ['Total Paid', formatPeso(attempt.totalAmount)],
+    ],
+    emphasizeLast: true,
+    closing: ['Keep this email as proof of payment.', CONTACT_LINE],
+  })
+  return { subject: `MTPB impound fee paid – ${attempt.referenceNumber}`, ...email }
 }
 
 // Sent to the account's registered email when someone adds a cash payment

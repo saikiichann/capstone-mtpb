@@ -45,6 +45,7 @@ const FIELDS = {
   // Set by the admin app's impound flow (admin-web/src/lib/impoundFlag.ts).
   impoundStatus: ['impoundStatus'],
   impoundFee: ['impoundFee'],
+  impoundLocation: ['impoundLocation', 'impoundLot'],
 }
 
 // Field names a violation's plate might be stored under. Firestore can't
@@ -148,6 +149,8 @@ export function normalizeViolation(id, data) {
     fineAmount,
     impoundStatus,
     impoundFee,
+    // The yard the vehicle was towed to (Add Impound Record).
+    impoundLocation: pick(data, FIELDS.impoundLocation, ''),
     // What the violator pays: the clamp fine, or the impound fee instead of
     // it once impounded. Pay Now, History and the checkout all use this.
     amountDue: impoundFee > 0 ? impoundFee : fineAmount,

@@ -9,6 +9,7 @@ import Home from './pages/Home'
 import ImpoundLocation from './pages/ImpoundLocation'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
+import PayImpound from './pages/PayImpound'
 import PaymentCheck from './pages/PaymentCheck'
 import PaymentHistory from './pages/PaymentHistory'
 import PayConfirm from './pages/pay/PayConfirm'
@@ -48,6 +49,8 @@ export default function App() {
         <Route path="v/:violationRef" element={<ViolationDetails />} />
         <Route path="faq" element={<FaqChatbot />} />
         <Route path="impound" element={<ImpoundLocation />} />
+        {/* The static QR at the impound desk (admin: IT Admin > QR Codes). */}
+        <Route path="pay-impound" element={<PayImpound />} />
 
         {/* Signed-out only */}
         <Route element={<RedirectIfSignedIn />}>
