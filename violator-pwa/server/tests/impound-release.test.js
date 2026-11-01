@@ -163,7 +163,7 @@ describe('online impound payment', () => {
     assert.equal(db.data.get('violations/imp-1').releaseStatus, 'Released')
   })
 
-  it('emails one receipt that says paid and released, not "official"', () => {
+  it('emails one official receipt that says paid and released', () => {
     const { subject, html, text } = buildReceiptEmail({
       releasedOnPayment: true, referenceNumber: 'REF-2026-00042', releaseOrderId: 'ORD-2026-00010', cin: 'IMP-2026-0007',
       plateNo: 'ABC 1234', impoundFee: 2100, convenienceFee: 52.5, totalAmount: 2152.5, paidAt,
@@ -171,7 +171,7 @@ describe('online impound payment', () => {
     const body = `${subject} ${html ?? ''} ${text ?? ''}`
     assert.match(body, /released/i)
     assert.match(body, /ORD-2026-00010/)
-    assert.doesNotMatch(body, /official receipt/i)
+    assert.match(body, /OFFICIAL RECEIPT/)
   })
 })
 

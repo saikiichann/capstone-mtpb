@@ -72,7 +72,7 @@ With no Firebase env (or `VITE_USE_SAMPLE_DATA=true`) the app runs on sample dat
     Mira's cash impounds (team decision 2026-11-01, `server/impound-release.js`). In the same transaction: next REF and
     ORD (`counters/releaseOrder`), violation `Verified` + `Released`, payment `Verified`, one `releaseLog` entry, and the
     `impoundRecords` doc `Released` (by `impoundRecordId` → `sourceViolationId` → doc id). No OR number. All reads first.
-    Only one receipt email (no verified/released emails: `releasedOnPayment` on the attempt).
+    Only one receipt email, "OFFICIAL RECEIPT" like clamps (no verified/released emails: `releasedOnPayment` on the attempt).
   - **Impound desk QR** `/pay-impound`: plate + last 4 of the OVR No. (`impound-lookup` in `api/violations.js`, 10/min)
     gives a signed 30-minute pass (`server/impound-access.js`), kept like a scan token. Officer name hidden on impounds.
   - `/api/confirm-payment` takes `{ attemptId }` and returns `{ status, payment }` (the browser can't read attempts).

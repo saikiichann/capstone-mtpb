@@ -8,7 +8,8 @@ import { CONTACT_LINE, renderEmail } from './email-layout.js'
 
 export function buildReceiptEmail(attempt) {
   // Online impound payments are verified and released when paid
-  // (server/impound-release.js). No OR number, so not an "official" receipt.
+  // (server/impound-release.js). Same OFFICIAL RECEIPT heading as clamps
+  // (Marco, 2026-11-02).
   if (attempt.releasedOnPayment) return buildImpoundReceiptEmail(attempt)
   const email = renderEmail({
     heading: 'OFFICIAL RECEIPT',
@@ -39,7 +40,7 @@ export function buildReceiptEmail(attempt) {
 
 function buildImpoundReceiptEmail(attempt) {
   const email = renderEmail({
-    heading: 'PAYMENT RECEIPT',
+    heading: 'OFFICIAL RECEIPT',
     message:
       'Your impound fee is paid and your vehicle is released. Show your Blue Ticket and a valid ID at the impound desk to get your vehicle.',
     rows: [
