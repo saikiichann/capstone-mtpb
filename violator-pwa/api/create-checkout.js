@@ -10,6 +10,7 @@ import {
   requireUser,
   trustedOrigin,
 } from '../server/http.js'
+import { impoundAccessFromConfig } from '../server/impound-access.js'
 import { paymongo } from '../server/paymongo.js'
 import { createPaymentService } from '../server/payments-service.js'
 import { createRateLimiter } from '../server/rate-limit.js'
@@ -39,9 +40,10 @@ export async function POST(request) {
     const user = await requireUser(request, adminAuth())
     const body = await readJson(request)
     const store = createFirestoreStore()
-    // Only for a violation this person may see (scanned its clamp, owns the
-    // vehicle, or already paying it): server/violation-access.js.
-    const violation = await createViolationAccess({ store }).getViolation({
+    // Only for a violation this person may see (scanned its clamp, found it at
+    // the impound desk, owns the vehicle, or already paying it):
+    // server/violation-access.js.
+    const violation = await createViolationAccess({ store, impoundAccess: impoundAccessFromConfig() }).getViolation({
       user,
       ref: body.violationId || body.cin,
       token: body.token,

@@ -131,7 +131,30 @@ plate if the account doesn't have it: `ownerUid`, `plateNumber`,
 `createdAt`, `createdBy: "Violator app (payment)"`. The app shows only that
 account's own violations on it.
 
-## 7. Still to agree
+## 7. Online impound payments: `releaseLog`, `impoundRecords`, `counters/releaseOrder`
+
+Impound fees paid online are released as soon as PayMongo confirms them, the
+same as the admin's cash impound payments (`lib/onsitePayment.ts`). One
+transaction in `completePayment()` (`server/impound-release.js` builds the
+fields) writes, with `"PayMongo (online)"` / role `"violator-app"` as the
+staff:
+
+- **violation**: `paymentStatus`/`verificationStatus: "Verified"`,
+  `releaseStatus`/`impoundStatus: "Released"`, `releaseOrderId`,
+  `referenceNumber` = `paymentReference`, `impoundFeePaid` (impound fee only),
+  `totalPaid`, `paymentLocation: "Online"`, timestamps.
+- **payments**: `status`/`verificationStatus: "Verified"`,
+  `chargeType: "Impound"`, `method: "GCash"`, `fineAmount: 0`, `impoundFee`,
+  `amount`, `convenienceFee`, `totalAmount`, `releaseOrderId`, plus ours
+  (`uid`, `checkoutAttemptId`, `paymongoPaymentId`, `livemode`). No `orNumber`.
+- **releaseLog**: one entry, `orderId` = `releaseOrderId`, `chargeType: "Impound"`.
+- **impoundRecords**: `status: "Released"`, `paymentStatus: "Verified"`, so the
+  car leaves Vehicles in Yard.
+- **counters**: `paymentReference` (REF) and `releaseOrder` (ORD), `lastValue + 1`.
+
+Clamp payments are unchanged (`Pending Verification`).
+
+## 8. Still to agree
 
 - The evidence-photo field name, against the enforcer app.
 - `/v/<cin>` in this app opens a violation without the QR token. CINs run in

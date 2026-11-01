@@ -89,6 +89,7 @@ function ViolationCard({ violation, showPayment = false, onPayNow }) {
     ['Color', violation.vehicleColor],
     ['Violation', violation.violationType],
     ['Location', violation.location],
+    ...(violation.impoundLocation ? [['Impound Lot', violation.impoundLocation]] : []),
     // Once impounded the impound fee replaces the clamp fine.
     ...(violation.impoundStatus && violation.impoundStatus !== 'none'
       ? [['Impound Status', IMPOUND_LABELS[violation.impoundStatus] ?? violation.impoundStatus]]
@@ -96,7 +97,8 @@ function ViolationCard({ violation, showPayment = false, onPayNow }) {
     violation.impoundFee > 0
       ? ['Impound Fee', formatPeso(violation.impoundFee), 'danger']
       : ['Fine Amount', formatPeso(violation.fineAmount), 'danger'],
-    ['Officer', violation.officerName],
+    // Left out for impounds recorded at the desk (server/violation-access.js).
+    ...(violation.officerName ? [['Officer', violation.officerName]] : []),
   ]
 
   return (

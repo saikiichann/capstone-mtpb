@@ -1,5 +1,6 @@
 import { isPaymentSettled } from '../src/firebase/mapping.js'
 import { samePlate } from '../src/utils/plates.js'
+import { isImpoundToken } from './impound-access.js'
 import { HttpError } from './payments-service.js'
 
 // Who may see a violation (checklist S2). The app used to read clamps and
@@ -10,6 +11,8 @@ import { HttpError } from './payments-service.js'
 //   sticker's scan token along),
 // - its owner: a signed-in, verified account with a verified ("active")
 //   vehicle of that plate,
+// - someone who found it at the impound desk QR with its plate number and
+//   the last 4 of the OVR No. (a 30-minute pass, server/impound-access.js),
 // - whoever started a payment for it (so receipts and the paid violation
 //   stay visible after the clamp is released),
 // - the account it was paid to (violatorUid, server/account-links.js),
@@ -22,6 +25,9 @@ import { HttpError } from './payments-service.js'
 // `store` is server/firestore-store.js (tests pass an in-memory one).
 
 const NOT_FOUND = () => new HttpError(404, 'Violation not found.')
+// The same answer whether the plate was never impounded, the OVR digits are
+// wrong or it's already paid, so nobody can find out which.
+export const IMPOUND_NOT_FOUND_MESSAGE = 'No unpaid impound found for this plate.'
 
 // Firestore Timestamps don't survive JSON; the app reads ISO strings.
 export function iso(value) {
@@ -39,8 +45,11 @@ export function publicViolation(v) {
     cin: v.cin,
     clampId: v.clampId,
     plateNumber: v.plateNumber,
-    officerName: v.officerName,
+    // Not for impounds: the impound desk page is open to anyone with the
+    // ticket, so it shows no personal data (Data Privacy Act).
+    officerName: isDeskImpound(v) ? '' : v.officerName,
     clampedAt: iso(v.clampedAt),
+    impoundLocation: v.impoundLocation,
     fineAmount: v.fineAmount,
     impoundStatus: v.impoundStatus,
     impoundFee: v.impoundFee,
@@ -61,6 +70,9 @@ export function publicViolation(v) {
     evidencePhotos: v.evidencePhotos,
   }
 }
+
+// Recorded by the impounding staff (Add Impound Record), not by an enforcer.
+const isDeskImpound = (v) => String(v?.enforcementType ?? '').toLowerCase() === 'impounded'
 
 // Owners need a verified email; guests (anonymous) never own vehicles.
 const isOwnerAccount = (user) => Boolean(user && !user.isGuest && user.email_verified)
@@ -88,14 +100,18 @@ function isNewUnpaidOn(violation, { plate, since }) {
   )
 }
 
-export function createViolationAccess({ store }) {
+// `impoundAccess` (server/impound-access.js) is only needed for the impound
+// desk lookup and its passes.
+export function createViolationAccess({ store, impoundAccess = null }) {
   async function findViolation(ref) {
     if (!ref) return null
     return (await store.getViolationById(ref)) ?? (await store.getViolationByCin(ref))
   }
 
   async function canView({ user, violation, token }) {
-    if (token && clampCarries(await store.getClampByToken(token), violation)) return true
+    if (isImpoundToken(token)) {
+      if (impoundAccess?.allows(token, { uid: user?.uid, violationId: violation.id })) return true
+    } else if (token && clampCarries(await store.getClampByToken(token), violation)) return true
     // Linked to this account by its payment (server/account-links.js).
     if (user && violation.raw?.violatorUid && violation.raw.violatorUid === user.uid) return true
     if (isOwnerAccount(user)) {
@@ -153,10 +169,33 @@ export function createViolationAccess({ store }) {
     return [...byId.values()]
   }
 
+  // Impound desk QR: the unpaid impound with this plate whose OVR No. ends
+  // in these 4 characters (the newest, if more than one). Returns
+  // { violation, token, expiresAt }; the token is the 30-minute pass.
+  async function impoundLookup({ user, plate, ovrLast4 }) {
+    const plateText = String(plate ?? '').trim()
+    const last4 = String(ovrLast4 ?? '').trim().toUpperCase()
+    if (!plateText || !/^[A-Z0-9]{4}$/.test(last4)) {
+      throw new HttpError(400, 'Enter the plate number and the last 4 digits of the OVR No.')
+    }
+    if (!impoundAccess || !user?.uid) throw new HttpError(503, 'The impound lookup is not available right now.')
+    const matches = (await store.listImpoundedViolations()).filter(
+      (v) =>
+        !isPaymentSettled(v.raw?.paymentStatus ?? v.paymentStatus) &&
+        samePlate(plateText, v.plateNumber) &&
+        String(v.raw?.uovrNo ?? '').trim().toUpperCase().endsWith(last4),
+    )
+    if (matches.length === 0) throw new HttpError(404, IMPOUND_NOT_FOUND_MESSAGE)
+    const recorded = (v) => millis(v.raw?.recordedAt ?? v.clampedAt)
+    const violation = matches.reduce((newest, v) => (recorded(v) > recorded(newest) ? v : newest))
+    return { violation, ...impoundAccess.issue({ uid: user.uid, violationId: violation.id }) }
+  }
+
   return {
     scan,
     getViolation,
     listMine,
+    impoundLookup,
     // Exposed for create-checkout: may this person pay this violation?
     canView,
     isSettled: (violation) => isPaymentSettled(violation.raw?.paymentStatus ?? violation.paymentStatus),

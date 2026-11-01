@@ -80,7 +80,9 @@ export function createStatusNotifier({ store, mailer, lookupEmail = async () => 
       const decision = payment.verificationStatus
       if (!DECISIONS.includes(decision) || !payment.checkoutAttemptId) continue
       const attempt = await store.getAttempt(payment.checkoutAttemptId)
-      if (!attempt) continue
+      // Online impound payments are released as soon as they're paid, and
+      // their receipt already says so: no separate verified email.
+      if (!attempt || attempt.releasedOnPayment) continue
       if (attempt.statusEmailFor === decision) {
         summary.checked += 1
         continue
@@ -91,6 +93,8 @@ export function createStatusNotifier({ store, mailer, lookupEmail = async () => 
     // Released vehicles.
     for (const violation of await store.listReleasedViolations(since)) {
       for (const attempt of await store.listPaidAttemptsFor(violation.id)) {
+        // ...nor a separate released email.
+        if (attempt.releasedOnPayment) continue
         if (attempt.releaseEmailFor === 'Released') {
           released.checked += 1
           continue

@@ -48,11 +48,18 @@ export const COLLECTIONS = {
   // Registered clamps from the admin app. The QR sticker on each clamp
   // points at the violator app with this id (see src/firebase/clamps.js).
   clamps: 'clamps',
+  // The admin app's release log and impound records. Written only for an
+  // online impound payment, which is released as soon as it's paid
+  // (server/impound-release.js), the same as the admin's cash payments.
+  releaseLog: 'releaseLog',
+  impoundRecords: 'impoundRecords',
 }
 
 // counters/paymentReference: { lastValue, prefix, updatedAt }, as the admin
 // app's cash payments write it.
 export const PAYMENT_COUNTER_ID = 'paymentReference'
+// counters/releaseOrder: the ORD-YYYY-##### release order numbers.
+export const RELEASE_COUNTER_ID = 'releaseOrder'
 
 // role_id stored on every violator document.
 // TODO: replace with the role_id value the team's RBAC uses for violators.

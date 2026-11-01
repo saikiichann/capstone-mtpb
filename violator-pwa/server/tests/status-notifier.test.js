@@ -178,6 +178,17 @@ describe('payment status emails', () => {
     const second = await notifier.run()
     assert.equal(second.released.sent, 0)
   })
+
+  it('sends no verified or released email for an online impound payment (its receipt says both)', async () => {
+    store.attempts.set('att_impound', { uid: 'guest-3', violationId: 'v-impound', status: 'paid', email: 'impound@example.com', cin: 'IMP-2026-0007', plateNo: 'ABC 1234', referenceNumber: 'REF-2026-00042', releaseOrderId: 'ORD-2026-00010', releasedOnPayment: true })
+    store.payments.push({ id: 'p6', checkoutAttemptId: 'att_impound', referenceNumber: 'REF-2026-00042', verificationStatus: 'Verified', verifiedAt: new Date('2026-10-11T07:58:00Z') })
+    store.releasedViolations = [
+      { id: 'v-impound', cin: 'IMP-2026-0007', plateNo: 'ABC 1234', releaseStatus: 'Released', releaseOrderId: 'ORD-2026-00010', releasedAt: new Date('2026-10-11T07:58:00Z') },
+    ]
+    const mailer = fakeMailer()
+    await createStatusNotifier({ store, mailer, lookupEmail, now: () => NOW }).run()
+    assert.equal(mailer.sent.filter((m) => m.to === 'impound@example.com').length, 0)
+  })
 })
 
 describe('cron secret', () => {
