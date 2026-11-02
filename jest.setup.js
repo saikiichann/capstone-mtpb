@@ -17,8 +17,30 @@ jest.mock('./src/supabase', () => ({
   uploadViolationPhoto: jest.fn(async () => 'https://example.test/photo.jpg'),
 }));
 jest.mock('./src/firebase', () => ({ auth: { currentUser: null }, db: {} }));
+jest.mock('@react-native-async-storage/async-storage', () => {
+  const store = new Map();
+  return {
+    __esModule: true,
+    default: {
+      getItem: jest.fn(async (k) => (store.has(k) ? store.get(k) : null)),
+      setItem: jest.fn(async (k, v) => {
+        store.set(k, String(v));
+      }),
+      removeItem: jest.fn(async (k) => {
+        store.delete(k);
+      }),
+      __store: store,
+    },
+  };
+});
 jest.mock('firebase/auth', () => ({
-  onAuthStateChanged: jest.fn(() => () => {}),
+  onAuthStateChanged: jest.fn((_auth, cb) => {
+    cb(null);
+    return () => {};
+  }),
+  initializeAuth: jest.fn(() => ({})),
+  getAuth: jest.fn(() => ({})),
+  getReactNativePersistence: jest.fn(() => ({})),
   signInWithEmailAndPassword: jest.fn(),
   signOut: jest.fn(),
   updatePassword: jest.fn(),
