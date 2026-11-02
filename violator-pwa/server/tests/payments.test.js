@@ -71,6 +71,8 @@ function memoryStore() {
     ['v4', { id: 'v4', cin: 'CLMP-2026-0043', fineAmount: 750, paymentStatus: 'Rejected' }],
     // Impounded: the ₱2,000 impound fee replaces the ₱900 clamp fine (as mapped by mapping.js).
     ['v5', { id: 'v5', cin: 'CLMP-2026-0044', fineAmount: 900, impoundStatus: 'impounded', impoundFee: 2000, amountDue: 2000, paymentStatus: 'Unpaid' }],
+    // Clamp unpaid past 24 hours: a fixed ₱2,000 replaces the ₱900 fine (as mapped by mapping.js).
+    ['v6', { id: 'v6', cin: 'CLMP-2026-0045', fineAmount: 900, overdue: true, overdueFee: 2000, amountDue: 2000, paymentStatus: 'Unpaid' }],
     // Last year's violation on the same clamp: the QR id repeats.
     ['v0', { id: 'v0', cin: 'CLMP-2026-0055', fineAmount: 500, paymentStatus: 'Verified', referenceNumber: 'REF-2025-00009', clampedAt: '2025-03-02T01:00:00Z' }],
   ])
@@ -202,6 +204,18 @@ describe('payment service', () => {
     assert.equal(saved.fineAmount, 2000)
     assert.equal(saved.chargeType, 'Impound')
     assert.equal(saved.impoundFee, 2000)
+  })
+
+  it('charges the ₱2,000 overdue clamp fee instead of the fine after 24 hours', async () => {
+    await service.startCheckout({ ...baseInput, violationId: 'v6', cin: 'CLMP-2026-0045' })
+    const a = calls.find((c) => c.method === 'POST').body.data.attributes
+    assert.equal(a.line_items[0].amount, 200000)
+    assert.match(a.line_items[0].name, /^Overdue clamp fee/)
+    const saved = store.attempts.get('att_1')
+    assert.equal(saved.fineAmount, 2000)
+    assert.equal(saved.chargeType, 'Clamp')
+    assert.equal(saved.overdueFee, 2000)
+    assert.equal(saved.impoundFee, 0)
   })
 
   it('a guest may skip the email; one given is kept in lower case for finding their account later', async () => {

@@ -400,9 +400,11 @@ export function createFirestoreStore({ db = getFirestore(adminApp()) } = {}) {
           convenienceFee: attempt.convenienceFee,
           totalAmount: attempt.totalAmount,
           // Same fields as the admin app's counter payments: once impounded
-          // the impound fee is what was charged, not the clamp fine.
+          // the impound fee is what was charged, not the clamp fine; past 24
+          // hours, the ₱2,000 overdue clamp fee.
           chargeType: attempt.chargeType ?? 'Clamp',
           impoundFee: attempt.impoundFee ?? 0,
+          overdueFee: attempt.overdueFee ?? 0,
           referenceNumber,
           method: 'GCash',
           status: 'pending',
@@ -427,6 +429,7 @@ export function createFirestoreStore({ db = getFirestore(adminApp()) } = {}) {
           paymentReference: referenceNumber,
           referenceNumber,
           totalPaid: attempt.totalAmount,
+          overdueFeePaid: attempt.overdueFee ?? 0,
           paidAt: patch.paidAt,
           updatedBy: 'Violator app (GCash)',
           ...stamp,

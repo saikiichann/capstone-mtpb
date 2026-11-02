@@ -44,23 +44,40 @@ function writeGuestChoice(uid) {
   }
 }
 
+// Guest payments are linked once per account per tab. Cleared on log out
+// (forgetGuestLinking) so the next sign-in in the same tab checks again —
+// a guest payment made in between used to stay unlinked and missing from
+// History until the tab was closed.
 const LINKED_KEY = 'mtpb-guest-payments-linked'
 
-function linkGuestPaymentsOnce(uid) {
+function forgetGuestLinking() {
   try {
-    if (sessionStorage.getItem(LINKED_KEY) === uid) return
+    sessionStorage.removeItem(LINKED_KEY)
+  } catch {
+    // Private mode: nothing was saved.
+  }
+}
+
+// Resolves to how many payments were moved into the account (0 if none or
+// already done in this tab).
+async function linkGuestPaymentsOnce(uid) {
+  try {
+    if (sessionStorage.getItem(LINKED_KEY) === uid) return 0
   } catch {
     // Private mode: just ask again. The server makes that harmless.
   }
-  callApi('account-links', { action: 'link-guest' })
-    .then(() => {
-      try {
-        sessionStorage.setItem(LINKED_KEY, uid)
-      } catch {
-        // See above.
-      }
-    })
-    .catch((err) => console.warn('Could not link guest payments yet', err))
+  try {
+    const result = await callApi('account-links', { action: 'link-guest' })
+    try {
+      sessionStorage.setItem(LINKED_KEY, uid)
+    } catch {
+      // See above.
+    }
+    return Number(result?.linked) || 0
+  } catch (err) {
+    console.warn('Could not link guest payments yet', err)
+    return 0
+  }
 }
 
 // A plain snapshot of the Firebase user, so React re-renders when
@@ -91,6 +108,10 @@ function FirebaseAuthProvider({ children }) {
   // While signIn/signUp are running they set the state themselves, so the
   // listener must not sign the user out before their document exists.
   const busyRef = useRef(false)
+  // Goes up when guest payments were just linked, so History, Home and the
+  // payment lists load again and show them (hooks/usePayments.js and
+  // hooks/useMyViolations.js).
+  const [guestLinkVersion, setGuestLinkVersion] = useState(0)
 
   useEffect(() => {
     return onAuthStateChanged(auth, async (fbUser) => {
@@ -123,7 +144,14 @@ function FirebaseAuthProvider({ children }) {
   // per account per tab; a failure just waits for the next sign-in.
   const verifiedUid = state.user && !state.user.isGuest && state.user.emailVerified ? state.user.uid : null
   useEffect(() => {
-    if (verifiedUid) linkGuestPaymentsOnce(verifiedUid)
+    if (!verifiedUid) return undefined
+    let cancelled = false
+    linkGuestPaymentsOnce(verifiedUid).then((linked) => {
+      if (!cancelled && linked > 0) setGuestLinkVersion((n) => n + 1)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [verifiedUid])
 
   const signIn = useCallback(async (credentials) => {
@@ -153,6 +181,8 @@ function FirebaseAuthProvider({ children }) {
   const signOut = useCallback(() => {
     writeGuestChoice(null)
     setGuestChoseUid(null)
+    // Log out clears everything kept in the browser for this account.
+    forgetGuestLinking()
     return signOutUser()
   }, [])
 
@@ -194,6 +224,7 @@ function FirebaseAuthProvider({ children }) {
       isDemo: false,
       // True only once someone has tapped "Pay now as guest". Anonymous
       // sign-in alone doesn't count — see GUEST_CHOICE_KEY above.
+      guestLinkVersion,
       guestChoseCheckout: Boolean(state.user?.isGuest && guestChoseUid && guestChoseUid === state.user.uid),
       updateProfile,
       continueAsGuest,
@@ -204,7 +235,7 @@ function FirebaseAuthProvider({ children }) {
       resendVerification: resendVerificationEmail,
       sendPasswordReset: sendResetEmail,
     }),
-    [state, guestChoseUid, signIn, signUp, signOut, refreshUser, updateProfile, continueAsGuest],
+    [state, guestChoseUid, guestLinkVersion, signIn, signUp, signOut, refreshUser, updateProfile, continueAsGuest],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

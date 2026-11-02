@@ -4,7 +4,7 @@ export const AuthContext = createContext(null)
 
 // Returns { status, user, profile, isDemo, signIn, signUp, signOut,
 // resendVerification, sendPasswordReset, refreshUser, updateProfile,
-// continueAsGuest,
+// continueAsGuest, guestLinkVersion,
 // markVerifiedDemo }.
 export function useAuth() {
   const value = useContext(AuthContext)

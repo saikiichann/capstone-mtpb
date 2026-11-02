@@ -46,6 +46,8 @@ const FIELDS = {
   impoundStatus: ['impoundStatus'],
   impoundFee: ['impoundFee'],
   impoundLocation: ['impoundLocation', 'impoundLot'],
+  // End of the 24-hour grace period, written by the enforcer app.
+  gracePeriodEnd: ['gracePeriodEnd'],
 }
 
 // Field names a violation's plate might be stored under. Firestore can't
@@ -130,13 +132,64 @@ export function impoundFeeDue(impoundStatus, storedFee) {
   return Number.isFinite(fee) && fee > 0 ? fee : IMPOUND_FEE
 }
 
-export function normalizeViolation(id, data) {
+// ------------------------------------------------------ overdue clamp fee
+//
+// Per MTPB: a clamp is ₱900 per violation within 24 hours of clamping. After
+// that it is a fixed ₱2,000 — the same at 25 hours or 48+ hours — and it
+// REPLACES the fine (not ₱900 + ₱2,000). The vehicle stays clamped; it is not
+// sent to impound. Same rule as the admin's lib/clampFee.ts and the enforcer
+// app's src/utils/clampState.js.
+export const CLAMP_GRACE_HOURS = 24
+export const CLAMP_OVERDUE_FEE = 2000
+
+// Firestore Timestamp, { seconds } / { _seconds }, Date, millis or ISO → Date.
+export function toDateValue(value) {
+  if (!value) return null
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
+  if (typeof value.toDate === 'function') return value.toDate()
+  if (typeof value === 'object') {
+    const seconds = Number.isFinite(value.seconds) ? value.seconds : value._seconds
+    if (Number.isFinite(seconds)) return new Date(seconds * 1000)
+    return null
+  }
+  if (typeof value === 'number' || typeof value === 'string') {
+    const d = new Date(value)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  return null
+}
+
+// When the 24 hours end: gracePeriodEnd if saved, else clamped time + 24 h.
+export function graceEndsAt(data) {
+  const stored = toDateValue(pick(data, FIELDS.gracePeriodEnd))
+  if (stored) return stored
+  const clamped = toDateValue(pick(data, FIELDS.clampedAt))
+  return clamped ? new Date(clamped.getTime() + CLAMP_GRACE_HOURS * 3600000) : null
+}
+
+export function normalizeViolation(id, data, now = Date.now()) {
   if (!data) return null
 
   const fine = Number(pick(data, FIELDS.fineAmount, 0))
   const fineAmount = Number.isFinite(fine) ? fine : 0
   const impoundStatus = normalizeImpoundStatus(pick(data, FIELDS.impoundStatus))
   const impoundFee = impoundFeeDue(impoundStatus, pick(data, FIELDS.impoundFee))
+  // A clamped vehicle that the impounding staff have since towed reads as
+  // impounded, like one the enforcer impounded directly.
+  const status =
+    impoundStatus === 'impounded'
+      ? 'impounded'
+      : normalizeViolationStatus(pick(data, FIELDS.enforcementType) ?? pick(data, FIELDS.status))
+  const settled = isPaymentSettled(pick(data, FIELDS.paymentStatus))
+  const paid = Number(data.totalPaid)
+  const graceEnds = status === 'clamped' ? graceEndsAt(data) : null
+  // Unpaid clamp past its 24 hours: ₱2,000 instead of the fine.
+  const overdue =
+    status === 'clamped' && impoundFee === 0 && !settled && !(paid > 0) && !!graceEnds && now >= graceEnds.getTime()
+  // Paid at the overdue rate (server/firestore-store.js saves this): keep
+  // showing ₱2,000 after it is paid, not the original fine.
+  const overduePaid = Number(data.overdueFeePaid) > 0 ? Number(data.overdueFeePaid) : 0
+  const overdueFee = overdue ? CLAMP_OVERDUE_FEE : overduePaid
 
   return {
     id,
@@ -151,9 +204,13 @@ export function normalizeViolation(id, data) {
     impoundFee,
     // The yard the vehicle was towed to (Add Impound Record).
     impoundLocation: pick(data, FIELDS.impoundLocation, ''),
-    // What the violator pays: the clamp fine, or the impound fee instead of
-    // it once impounded. Pay Now, History and the checkout all use this.
-    amountDue: impoundFee > 0 ? impoundFee : fineAmount,
+    graceEndsAt: graceEnds ? graceEnds.toISOString() : null,
+    overdue,
+    overdueFee,
+    // What the violator pays. Impound: the impound fee. Clamp: the fine
+    // within 24 hours, a fixed ₱2,000 after (it replaces the fine). Pay Now,
+    // History and the checkout all use this.
+    amountDue: impoundFee > 0 ? impoundFee : overdueFee > 0 ? overdueFee : fineAmount,
     violationType: pick(data, FIELDS.violationType, ''),
     location: pick(data, FIELDS.location, ''),
     paymentStatus: normalizePaymentStatus(pick(data, FIELDS.paymentStatus)),
@@ -165,12 +222,7 @@ export function normalizeViolation(id, data) {
     referenceNumber: pick(data, FIELDS.referenceNumber, ''),
     paymentMethod: pick(data, FIELDS.paymentMethod, ''),
     paidAt: pick(data, FIELDS.paidAt, null),
-    // A clamped vehicle that the impounding staff have since towed reads as
-    // impounded, like one the enforcer impounded directly.
-    status:
-      impoundStatus === 'impounded'
-        ? 'impounded'
-        : normalizeViolationStatus(pick(data, FIELDS.enforcementType) ?? pick(data, FIELDS.status)),
+    status,
     // Kept as written by the admin app ("Clamping", "Impounding"), since it's
     // shown to the violator as a label rather than used for logic.
     enforcementType: pick(data, FIELDS.enforcementType, ''),
