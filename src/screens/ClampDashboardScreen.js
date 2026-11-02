@@ -1,232 +1,230 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList, StatusBar, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  StatusBar,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
-import MCIcon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { colors } from '../theme/colors';
 import ConfirmModal from '../components/ConfirmModal';
+import BottomNav from '../components/BottomNav';
+import StatusPill from '../components/StatusPill';
+import { ui, greeting, initialsOf, enforcerIdOf } from '../theme/ui';
 import { auth, db } from '../firebase';
+import { endSession } from '../session';
 import { signOut } from 'firebase/auth';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
+import { clampStateOf } from '../utils/clampState';
+import { toRow, shortTime } from '../utils/violationRow';
 
+/**
+ * Home: who is on duty, their latest clamps, and the big Scan button.
+ */
 export default function ClampDashboardScreen({ navigation, route }) {
-  // ============================================
-  // 1. LAHAT NG HOOKS DITO
-  // ============================================
+  const officerUid = route?.params?.officerUid || auth.currentUser?.uid || null;
+  const [officerName, setOfficerName] = useState(
+    route?.params?.officerName || 'Officer',
+  );
+  const [photoUrl, setPhotoUrl] = useState(null);
+  const [area, setArea] = useState('Sector 3, Manila');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showLogout, setShowLogout] = useState(false);
-  const [recentActivity, setRecentActivity] = useState([]);
-  const [loadingActivity, setLoadingActivity] = useState(true);
+  const [now, setNow] = useState(Date.now());
 
-  const officerName = route?.params?.officerName || 'Unknown Officer';
-  const officerUid = route?.params?.officerUid || null;
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(t);
+  }, []);
 
-  // === EFFECT: Recent Activity mula sa violations collection ===
+  // Own profile (name, photo, area) — live, so a new photo shows right away.
+  useEffect(() => {
+    if (!officerUid) return undefined;
+    return onSnapshot(
+      doc(db, 'users', officerUid),
+      snap => {
+        const d = snap.data() || {};
+        if (d.name) setOfficerName(d.name);
+        setPhotoUrl(d.photoUrl || null);
+        if (d.assignedLocation) setArea(d.assignedLocation);
+      },
+      () => {},
+    );
+  }, [officerUid]);
+
+  // Own clamps, newest first.
   useEffect(() => {
     if (!officerUid) {
-      setLoadingActivity(false);
-      return;
+      setLoading(false);
+      return undefined;
     }
-
     const q = query(
       collection(db, 'violations'),
       where('enforcementType', '==', 'clamped'),
-      where('officerUid', '==', officerUid)
+      where('officerUid', '==', officerUid),
     );
-
-    const unsubscribe = onSnapshot(
+    return onSnapshot(
       q,
-      (snap) => {
-        const fetched = snap.docs.map((d) => {
-          const data = d.data();
-          const date = data.recordedAt?.toDate?.() || new Date();
-          const time = date.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
-
-          const isSettled =
-            ['paid', 'verified', 'settled'].includes(String(data.paymentStatus || '').toLowerCase()) ||
-            ['released', 'approved by oic'].includes(String(data.releaseStatus || '').toLowerCase()) ||
-            !!data.paidAt ||
-            !!data.releasedAt;
-
-          return {
-            id: data.cin || d.id,
-            time,
-            recordedAt: data.recordedAt || null,
-            status: isSettled ? 'SETTLED' : 'UNSETTLED',
-            isSettled,
-          };
-        });
-
-        fetched.sort((a, b) => {
-          const dateA = a.recordedAt?.toDate?.()?.getTime?.() || 0;
-          const dateB = b.recordedAt?.toDate?.()?.getTime?.() || 0;
-          return dateB - dateA;
-        });
-
-        setRecentActivity(fetched.slice(0, 3));
-        setLoadingActivity(false);
+      snap => {
+        setRows(snap.docs.map(d => toRow(d.id, d.data())));
+        setLoading(false);
       },
-      (err) => {
-        console.error('Failed to load recent activity:', err);
-        setLoadingActivity(false);
-      }
+      err => {
+        console.log('Recent activity failed:', err?.code);
+        setLoading(false);
+      },
     );
-
-    return () => unsubscribe();
   }, [officerUid]);
 
-  // ============================================
-  // 2. HANDLERS
-  // ============================================
+  const recent = useMemo(
+    () =>
+      rows
+        .slice()
+        .sort((a, b) => (b.recordedAt || 0) - (a.recordedAt || 0))
+        .slice(0, 4)
+        .map(r => ({ ...r, state: clampStateOf(r, now) })),
+    [rows, now],
+  );
+
+  const params = { officerName, officerUid };
+  const goScan = () => navigation.navigate('ScanQR', params);
+  const goActivity = () => navigation.navigate('ClampActivity', params);
+  const goProfile = () => navigation.navigate('EditProfile', params);
+
   const handleLogout = async () => {
     setShowLogout(false);
     try {
+      await endSession();
       await signOut(auth);
     } catch (err) {
-      console.error('Logout error:', err);
+      console.log('Logout error:', err?.code);
     }
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
-  const goToScanQR = () => {
-    navigation.navigate('ScanQR', { officerName, officerUid });
-  };
-
-  const goToActivity = () => {
-    navigation.navigate('ClampActivity', { officerName, officerUid });
-  };
-
-  const goToEditProfile = () => {
-    navigation.navigate('EditProfile', {
-      officerUid,
-      officerName,
-    });
-  };
-
-  // ============================================
-  // 3. MAIN RENDER
-  // ============================================
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={ui.ink} />
 
-      <View style={styles.content}>
-        <View style={styles.profileHeader}>
-          <View style={styles.topRow}>
-            <View style={styles.badgeIcon}>
-              <Image
-                source={require('../../assets/mtpb_logo.png')}
-                style={{ width: 28, height: 28 }}
-                resizeMode="contain"
-              />
+      {/* Grey behind the header so its rounded bottom corners show. */}
+      <View style={styles.headerWrap}>
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <View style={styles.onDuty}>
+              <View style={styles.onDutyDot} />
+              <Text style={styles.onDutyText}>On duty</Text>
             </View>
-            <View style={{ flexDirection: 'row' }}>
-              <TouchableOpacity onPress={() => setShowLogout(true)}>
-                <Icon name="log-out" size={20} color={colors.black} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.avatarWrap}>
-            <View style={styles.avatarCircle}>
-              <Icon name="user" size={56} color={colors.white} />
-            </View>
-            <TouchableOpacity style={styles.editBadge} onPress={goToEditProfile}>
-              <Icon name="edit-2" size={12} color={colors.white} />
+            <TouchableOpacity
+              style={styles.logoutBtn}
+              onPress={() => setShowLogout(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Log out"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon name="log-out" size={14} color={ui.white} />
+              <Text style={styles.logoutText}>Log out</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.namePill}>
-            <View style={styles.onlineDot} />
-            <Text style={styles.nameText}>{officerName}</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.me}
+            onPress={goProfile}
+            accessibilityRole="button"
+            accessibilityLabel={`Open my profile, ${officerName}`}
+          >
+            <View style={styles.avatar}>
+              {photoUrl ? (
+                <Image source={{ uri: photoUrl }} style={styles.avatarImg} />
+              ) : (
+                <Text style={styles.avatarText}>{initialsOf(officerName)}</Text>
+              )}
+              <View style={styles.avatarEdit}>
+                <Icon name="edit-2" size={13} color={ui.ink} />
+              </View>
+            </View>
+            <View style={styles.meText}>
+              <Text style={styles.hello}>{greeting(new Date(now))}</Text>
+              <Text style={styles.name} numberOfLines={2}>
+                {officerName}
+              </Text>
+              <View style={styles.metaRow}>
+                <Text style={styles.idChip}>ID {enforcerIdOf(officerUid)}</Text>
+                <Icon name="map-pin" size={13} color="#D5D8DE" />
+                <Text style={styles.areaText} numberOfLines={1}>
+                  {area}
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
 
-          <Text style={styles.idText}>
-            ENFORCER ID: {officerUid ? officerUid.slice(0, 8).toUpperCase() : '--------'}
-          </Text>
-          <View style={styles.locationRow}>
-            <Icon name="map-pin" size={12} color={colors.gray} />
-            <Text style={styles.locationText}>Sector 3 Manila</Text>
-          </View>
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+      >
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionTitle}>Recent activity</Text>
+          <TouchableOpacity
+            style={styles.seeAll}
+            onPress={goActivity}
+            accessibilityRole="button"
+          >
+            <Text style={styles.seeAllText}>See all</Text>
+          </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.actionCard} onPress={goToScanQR}>
-          <View style={styles.actionIconWrap}>
-            <MCIcon name="qrcode-scan" size={26} color={colors.black} />
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={ui.ink} />
+            <Text style={styles.muted}>Loading your activity…</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.actionCardTitle}>Scan Clamp QR</Text>
-            <Text style={styles.actionCardSubtitle}>Scan QR to Issue Clamping Violation</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.sectionHeaderRow} onPress={goToActivity}>
-          <Text style={styles.sectionHeader}>Recent Activity</Text>
-          <Icon name="chevron-right" size={18} color={colors.gray} />
-        </TouchableOpacity>
-
-        {loadingActivity ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator size="small" color={colors.navy} />
-            <Text style={styles.loadingText}>Loading activity...</Text>
-          </View>
-        ) : recentActivity.length === 0 ? (
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyText}>No clamping activity yet.</Text>
+        ) : recent.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Icon name="inbox" size={28} color={ui.muted} />
+            <Text style={styles.emptyTitle}>No clamps yet today</Text>
+            <Text style={styles.muted}>
+              Tap Scan below to record your first violation.
+            </Text>
           </View>
         ) : (
-          <FlatList
-            data={recentActivity}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingBottom: 8 }}
-            scrollEnabled={false}
-            renderItem={({ item }) => (
-              <View style={styles.activityRow}>
-                <View style={styles.activityIcon}>
-                  <MCIcon name="shield-car" size={20} color={colors.navy} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.activityId}>{item.id}</Text>
-                  <Text
-                    style={[
-                      styles.activityStatus,
-                      { color: item.isSettled ? colors.green : colors.red },
-                    ]}
-                  >
-                    {item.status}
-                  </Text>
-                </View>
-                <Text style={styles.activityTime}>{item.time}</Text>
+          recent.map(r => (
+            <TouchableOpacity
+              key={r.docId}
+              style={styles.row}
+              onPress={() =>
+                navigation.navigate('ViolationDetails', { record: r })
+              }
+              accessibilityRole="button"
+            >
+              <View style={styles.rowMain}>
+                <Text style={styles.plate}>{r.plate || '—'}</Text>
+                <Text style={styles.rowType} numberOfLines={1}>
+                  {r.violation || 'Violation'}
+                </Text>
+                <Text style={styles.rowMeta}>
+                  {r.cin} · {shortTime(r.recordedAt, new Date(now))}
+                </Text>
               </View>
-            )}
-          />
+              <StatusPill state={r.state} />
+            </TouchableOpacity>
+          ))
         )}
-      </View>
+      </ScrollView>
 
-      <View style={styles.tabBar}>
-        <TouchableOpacity style={styles.tabItem} onPress={goToActivity}>
-          <Icon name="refresh-cw" size={20} color={colors.gray} />
-          <Text style={styles.tabLabel}>ACTIVITY</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabItemCenter} onPress={goToScanQR}>
-          <View style={styles.tabCenterCircle}>
-            <MCIcon name="qrcode-scan" size={32} color={colors.white} />
-          </View>
-          <Text style={styles.tabLabel}>SCAN CLAMP QR</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabItem}>
-          <Icon name="user" size={20} color={colors.gray} />
-          <Text style={styles.tabLabel}>DASHBOARD</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomNav active="home" onScan={goScan} onActivity={goActivity} />
 
       <ConfirmModal
         visible={showLogout}
-        title="Log Out"
-        message="Are you sure you want to logout?"
-        cancelLabel="Cancel"
-        confirmLabel="Logout"
+        title="Log out?"
+        message="You will need your username and password to sign in again."
+        cancelLabel="Stay"
+        confirmLabel="Log out"
         onCancel={() => setShowLogout(false)}
         onConfirm={handleLogout}
       />
@@ -235,157 +233,134 @@ export default function ClampDashboardScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.white },
-  content: { flex: 1, paddingHorizontal: 20 },
-  profileHeader: { alignItems: 'center', paddingTop: 8 },
-  topRow: {
-    width: '100%',
+  safeArea: { flex: 1, backgroundColor: ui.ink },
+  headerWrap: { backgroundColor: ui.ground },
+  header: {
+    backgroundColor: ui.ink,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 28,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+  },
+  headerTop: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
   },
-  badgeIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.lightGray,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  avatarWrap: { marginTop: 12, marginBottom: 12 },
-  avatarCircle: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: colors.navy,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editBadge: {
-    position: 'absolute',
-    bottom: 4,
-    right: 4,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: colors.black,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.white,
-  },
-  namePill: {
+  onDuty: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
+    height: 28,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: '#1C3A26',
   },
-  onlineDot: {
+  onDutyDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.green,
-    marginRight: 8,
+    backgroundColor: '#3DDC6E',
+    marginRight: 6,
   },
-  nameText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.black,
-  },
-  idText: { fontSize: 12, fontWeight: '600', color: colors.gray, marginTop: 10 },
-  locationRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  locationText: { fontSize: 12, color: colors.gray, marginLeft: 4 },
-  actionCard: {
+  onDutyText: { color: '#7EE2A0', fontSize: 13, fontWeight: '600' },
+  logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: 14,
+    height: 32,
+    paddingHorizontal: 10,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    marginTop: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    borderColor: 'rgba(255,255,255,0.35)',
   },
-  actionIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: colors.lightGray,
+  logoutText: {
+    color: ui.white,
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  me: { flexDirection: 'row', alignItems: 'center', marginTop: 22 },
+  avatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    borderColor: ui.white,
+    backgroundColor: '#2A2D35',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
   },
-  actionCardTitle: { fontSize: 15, fontWeight: '700', color: colors.black },
-  actionCardSubtitle: { fontSize: 12, color: colors.gray, marginTop: 2 },
-  sectionHeaderRow: {
+  avatarImg: { width: 66, height: 66, borderRadius: 33 },
+  avatarText: { color: ui.white, fontSize: 26, fontWeight: '800' },
+  avatarEdit: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: ui.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  meText: { flex: 1, marginLeft: 16 },
+  hello: { color: ui.onDarkMuted, fontSize: 14 },
+  name: { color: ui.white, fontSize: 24, fontWeight: '800', marginTop: 2 },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    flexWrap: 'wrap',
+  },
+  idChip: {
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#2A2D35',
+    color: '#D5D8DE',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    marginRight: 8,
+  },
+  areaText: { color: '#D5D8DE', fontSize: 13, marginLeft: 4, flexShrink: 1 },
+  body: { flex: 1, backgroundColor: ui.ground },
+  bodyContent: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 24 },
+  sectionHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 24,
-    marginBottom: 8,
-  },
-  sectionHeader: { fontSize: 13, fontWeight: '700', color: colors.black },
-  loadingWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 20,
-  },
-  loadingText: { marginLeft: 8, fontSize: 12, color: colors.gray },
-  emptyWrap: {
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  emptyText: { fontSize: 12, color: colors.gray, fontStyle: 'italic' },
-  activityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 12,
-    marginBottom: 10,
-  },
-  activityIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.lightGray,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  activityId: { fontSize: 13, fontWeight: '700', color: colors.black },
-  activityStatus: { fontSize: 11, fontWeight: '700', marginTop: 2 },
-  activityTime: { fontSize: 11, color: colors.gray },
-  tabBar: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 8,
-    paddingBottom: 12,
-    backgroundColor: colors.white,
-  },
-  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  tabItemCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: -34 },
-  tabCenterCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: colors.black,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 4,
   },
-  tabLabel: { fontSize: 9, fontWeight: '600', color: colors.gray, marginTop: 4 },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: ui.ink },
+  seeAll: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
+  seeAllText: { fontSize: 15, fontWeight: '600', color: ui.ink },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: ui.white,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: ui.line,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 12,
+  },
+  rowMain: { flex: 1, marginRight: 12 },
+  plate: { fontSize: 19, fontWeight: '800', letterSpacing: 0.5, color: ui.ink },
+  rowType: { fontSize: 14, color: ui.text2, marginTop: 3 },
+  rowMeta: { fontSize: 13, color: ui.muted, marginTop: 3 },
+  center: { alignItems: 'center', paddingVertical: 32 },
+  muted: { fontSize: 14, color: ui.muted, marginTop: 8, textAlign: 'center' },
+  emptyCard: {
+    alignItems: 'center',
+    backgroundColor: ui.white,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: ui.line,
+    padding: 24,
+    marginTop: 12,
+  },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: ui.ink, marginTop: 8 },
 });

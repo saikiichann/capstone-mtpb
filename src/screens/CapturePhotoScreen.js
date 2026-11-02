@@ -1,59 +1,106 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Alert } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { Camera } from 'react-native-camera-kit';
-import { colors } from '../theme/colors';
+import { useIsFocused } from '@react-navigation/native';
+import { ui } from '../theme/ui';
 
+/**
+ * Full-screen camera.
+ * params: returnTo (screen to go back to, default ClampingDetails),
+ *         paramName (photoUri by default), front (selfie camera), title, hint.
+ * It goes BACK to the screen that opened it (popTo + merge), so whatever was
+ * typed there (plate, violations) is kept.
+ */
 export default function CapturePhotoScreen({ navigation, route }) {
   const cameraRef = useRef(null);
   const [flashOn, setFlashOn] = useState(false);
   const [busy, setBusy] = useState(false);
+  const focused = useIsFocused();
+  // Give the camera a moment to open and set its exposure; a photo taken
+  // right away can come out black on older phones.
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (!focused) {
+      setReady(false);
+      return undefined;
+    }
+    const t = setTimeout(() => setReady(true), 1200);
+    return () => clearTimeout(t);
+  }, [focused]);
 
-  // Default sa ClampingDetails — hindi ImpoundDetails
   const returnTo = route?.params?.returnTo || 'ClampingDetails';
-  const extraParams = route?.params?.extraParams || {};
+  const paramName = route?.params?.paramName || 'photoUri';
+  const front = route?.params?.front === true;
+  const title = route?.params?.title || 'Evidence photo';
+  const hint = route?.params?.hint || 'Show the plate number and the clamp in one photo.';
 
   const capture = async () => {
-    if (busy) return;
+    if (busy || !ready || !cameraRef.current) return;
     setBusy(true);
     try {
       const image = await cameraRef.current.capture();
-      navigation.navigate(returnTo, { ...extraParams, photoUri: image.uri });
+      console.log('[camera] photo:', JSON.stringify(image));
+      navigation.popTo(returnTo, { [paramName]: image.uri }, { merge: true });
     } catch (e) {
-      Alert.alert('Capture failed', 'Hindi nakuha ang larawan. Subukan ulit.');
+      Alert.alert('Photo not taken', 'The camera could not take the photo. Please try again.');
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.navy} />
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <StatusBar barStyle="light-content" backgroundColor="#17191E" />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Icon name="arrow-left" size={20} color={colors.white} />
+        <TouchableOpacity
+          style={styles.roundBtn}
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel"
+        >
+          <Icon name="x" size={22} color={ui.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Capture Photo</Text>
-        <View style={{ width: 20 }} />
+        <Text style={styles.headerTitle}>{title}</Text>
+        {front ? (
+          <View style={styles.roundBtnSpacer} />
+        ) : (
+          <TouchableOpacity
+            style={[styles.roundBtn, flashOn && styles.roundBtnOn]}
+            onPress={() => setFlashOn((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={flashOn ? 'Turn off flash' : 'Turn on flash'}
+          >
+            <Icon name="zap" size={22} color={flashOn ? ui.ink : ui.white} />
+          </TouchableOpacity>
+        )}
       </View>
 
-      <View style={styles.body}>
-        <View style={styles.card}>
-          <View style={styles.frame}>
-            <Camera ref={cameraRef} style={StyleSheet.absoluteFill} cameraType="back" flashMode={flashOn ? 'on' : 'off'} />
-          </View>
-          <Text style={styles.caption}>Capture vehicle photo for proof!</Text>
-        </View>
+      <View style={styles.frame}>
+        {focused && (
+          <Camera
+            ref={cameraRef}
+            style={StyleSheet.absoluteFill}
+            cameraType={front ? 'front' : 'back'}
+            flashMode={flashOn ? 'on' : 'off'}
+          />
+        )}
+      </View>
 
-        <TouchableOpacity style={styles.primaryBtn} onPress={capture} disabled={busy}>
-          <Text style={styles.primaryBtnText}>{busy ? 'Capturing...' : 'Capture'}</Text>
-        </TouchableOpacity>
+      <Text style={styles.hint}>{hint}</Text>
 
-        <TouchableOpacity style={styles.secondaryBtn} onPress={() => setFlashOn((v) => !v)}>
-          <Icon name="zap" size={16} color={colors.black} style={{ marginRight: 8 }} />
-          <Text style={styles.secondaryBtnText}>{flashOn ? 'Turn off Flashlight' : 'Turn on Flashlight'}</Text>
+      <View style={styles.bottom}>
+        <TouchableOpacity
+          style={styles.shutter}
+          onPress={capture}
+          disabled={busy || !ready}
+          accessibilityRole="button"
+          accessibilityLabel="Take photo"
+          accessibilityState={{ disabled: busy || !ready }}
+        >
+          {busy || !ready ? <ActivityIndicator color={ui.white} /> : <View style={styles.shutterInner} />}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -61,16 +108,36 @@ export default function CapturePhotoScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.navy },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44 },
-  backBtn: { padding: 4 },
-  headerTitle: { color: colors.white, fontSize: 16, fontWeight: '700' },
-  body: { flex: 1, backgroundColor: colors.offWhite, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 24 },
-  card: { backgroundColor: colors.white, borderRadius: 16, padding: 16, alignItems: 'center' },
-  frame: { width: '100%', aspectRatio: 3 / 4, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.black },
-  caption: { fontSize: 12, color: colors.gray, marginTop: 12 },
-  primaryBtn: { backgroundColor: colors.black, borderRadius: 12, height: 50, alignItems: 'center', justifyContent: 'center', marginTop: 20 },
-  primaryBtnText: { color: colors.white, fontSize: 15, fontWeight: '700' },
-  secondaryBtn: { flexDirection: 'row', backgroundColor: colors.white, borderRadius: 12, height: 50, alignItems: 'center', justifyContent: 'center', marginTop: 12, borderWidth: 1, borderColor: colors.border },
-  secondaryBtnText: { fontSize: 14, fontWeight: '600', color: colors.black },
+  safeArea: { flex: 1, backgroundColor: '#17191E' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  roundBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roundBtnOn: { backgroundColor: ui.accent },
+  roundBtnSpacer: { width: 48, height: 48 },
+  headerTitle: { color: ui.white, fontSize: 18, fontWeight: '700' },
+  frame: { flex: 1, marginHorizontal: 12, borderRadius: 20, overflow: 'hidden', backgroundColor: '#000' },
+  hint: { color: '#D5D8DE', fontSize: 15, textAlign: 'center', paddingHorizontal: 24, marginTop: 14 },
+  bottom: { alignItems: 'center', paddingVertical: 20 },
+  shutter: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 5,
+    borderColor: ui.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shutterInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: ui.accent },
 });

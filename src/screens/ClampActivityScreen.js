@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,318 +6,365 @@ import {
   TouchableOpacity,
   StyleSheet,
   SectionList,
+  ScrollView,
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
-import MCIcon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { colors } from '../theme/colors';
+import BottomNav from '../components/BottomNav';
+import StatusPill from '../components/StatusPill';
+import { ui } from '../theme/ui';
 import { auth, db } from '../firebase';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import {
+  ACTIVITY_CHIPS,
+  CLAMP_STATES,
+  amountDueOf,
+  clampStateOf,
+  graceLeftText,
+  inChip,
+} from '../utils/clampState';
+import { toRow, dayLabel, timeOnly, peso } from '../utils/violationRow';
+
+/** Sort button cycles through these. "Needs action" keeps unpaid clamps on top. */
+const SORTS = [
+  { key: 'action', label: 'Needs action first' },
+  { key: 'newest', label: 'Newest first' },
+  { key: 'oldest', label: 'Oldest first' },
+];
+
+const GROUP_TITLES = {
+  overdue: 'Overdue',
+  unpaid: 'Unpaid',
+  'for-verification': 'For verification',
+  'for-release': 'For release',
+  released: 'Released',
+};
 
 /**
- * Group violations by date (descending).
- * Each section: { title: "WED, MAY 20, 5:30 PM", data: [...] }
+ * Activity: every clamp this enforcer recorded.
+ * - Chips: All, Overdue, Unpaid, For Verification, For Release (with counts).
+ * - Sort: needs action first (default), newest or oldest. Date sorts group by day.
+ * - Each row shows the exact state (same as QR Management) and the amount due.
+ * - Live; an Unpaid clamp turns Overdue on its own after 24 hours.
  */
-function groupByDate(violations) {
-  const groups = {};
-  violations.forEach((v) => {
-    const key = v.dateFull || 'Unknown';
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(v);
-  });
-  return Object.entries(groups)
-    .sort((a, b) => (b[0] > a[0] ? 1 : -1))
-    .map(([title, data]) => ({ title, data }));
-}
-
 export default function ClampActivityScreen({ navigation, route }) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [violations, setViolations] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  // Fallback sa auth.currentUser kung walang officerUid sa params
   const officerUid = route?.params?.officerUid || auth.currentUser?.uid || null;
   const officerName = route?.params?.officerName || 'Officer';
 
-  useEffect(() => {
-    // Kung walang officerUid, kunin LAHAT ng clamping violations
-    // (walang filter sa officerUid)
-    let q;
-    if (officerUid) {
-      q = query(
-        collection(db, 'violations'),
-        where('enforcementType', '==', 'clamped'),
-        where('officerUid', '==', officerUid)
-      );
-    } else {
-      q = query(
-        collection(db, 'violations'),
-        where('enforcementType', '==', 'clamped')
-      );
-    }
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [chip, setChip] = useState(route?.params?.chip || 'all');
+  const [sortIdx, setSortIdx] = useState(0);
+  const [now, setNow] = useState(Date.now());
 
-    const unsubscribe = onSnapshot(
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    const q = officerUid
+      ? query(
+          collection(db, 'violations'),
+          where('enforcementType', '==', 'clamped'),
+          where('officerUid', '==', officerUid)
+        )
+      : query(collection(db, 'violations'), where('enforcementType', '==', 'clamped'));
+    return onSnapshot(
       q,
       (snap) => {
-        const fetched = snap.docs.map((d) => {
-          const data = d.data();
-          const date = data.recordedAt?.toDate?.() || new Date();
-          const dateFull = [
-            date.toLocaleDateString('en-PH', { weekday: 'short' }),
-            date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
-            date.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }),
-          ].join(' | ');
-
-          return {
-            id: data.cin || d.id,
-            dateFull,
-            recordedAt: data.recordedAt || null,
-            location: data.location || '',
-            plate: data.plateNo || '',
-            make: data.vehicleMake || '',
-            type: data.vehicleType || '',
-            color: data.vehicleColor || '',
-            violation: data.violationType || '',
-            amount: data.fineAmount || 0,
-            status: 'CLAMPED',
-            paymentStatus: data.paymentStatus || 'Unpaid',
-            releaseStatus: data.releaseStatus || 'Pending',
-            paidAt: data.paidAt || null,
-            releasedAt: data.releasedAt || null,
-            totalPaid: data.totalPaid || null,
-            photoUri: data.photoUrl || null,
-            cin: data.cin,
-          };
-        });
-
-        // I-sort sa JavaScript base sa recordedAt (descending — pinakabago sa taas)
-        fetched.sort((a, b) => {
-          const dateA = a.recordedAt?.toDate?.()?.getTime?.() || 0;
-          const dateB = b.recordedAt?.toDate?.()?.getTime?.() || 0;
-          return dateB - dateA;
-        });
-
-        setViolations(fetched);
+        setRows(snap.docs.map((d) => toRow(d.id, d.data())));
         setLoading(false);
       },
       (err) => {
-        console.error('Failed to load violations:', err);
+        console.log('Failed to load violations:', err?.code);
         setLoading(false);
       }
     );
-
-    return () => unsubscribe();
   }, [officerUid]);
 
-  const filtered = violations.filter((r) =>
-    r.plate.toLowerCase().includes(searchQuery.trim().toLowerCase())
+  const withState = useMemo(
+    () =>
+      rows.map((r) => {
+        const state = clampStateOf(r, now);
+        return { ...r, state, amountDue: amountDueOf(r, state) };
+      }),
+    [rows, now]
   );
-  const sections = groupByDate(filtered);
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="light-content" backgroundColor={colors.navy} />
+  const counts = useMemo(() => {
+    const c = {};
+    ACTIVITY_CHIPS.forEach(({ key }) => {
+      c[key] = withState.filter((r) => inChip(r.state, key)).length;
+    });
+    return c;
+  }, [withState]);
 
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Icon name="arrow-left" size={20} color={colors.white} />
+  const sort = SORTS[sortIdx];
+
+  const { sections, total } = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let list = withState.filter((r) => {
+      if (!inChip(r.state, chip)) return false;
+      if (!q) return true;
+      return (
+        r.plate.toLowerCase().includes(q) ||
+        r.cin.toLowerCase().includes(q) ||
+        r.clampId.toLowerCase().includes(q) ||
+        String(r.address?.street || r.location || '').toLowerCase().includes(q)
+      );
+    });
+
+    const byDate = (a, b) => (b.recordedAt || 0) - (a.recordedAt || 0);
+    if (sort.key === 'oldest') list = list.sort((a, b) => -byDate(a, b));
+    else if (sort.key === 'newest') list = list.sort(byDate);
+    else
+      list = list.sort((a, b) => {
+        const d = CLAMP_STATES[a.state].order - CLAMP_STATES[b.state].order;
+        return d !== 0 ? d : byDate(a, b);
+      });
+
+    const nowDate = new Date(now);
+    const out = [];
+    list.forEach((r) => {
+      const title =
+        sort.key === 'action' ? GROUP_TITLES[CLAMP_STATES[r.state].group] : dayLabel(r.recordedAt, nowDate);
+      const last = out[out.length - 1];
+      if (last && last.title === title) last.data.push(r);
+      else out.push({ title, data: [r] });
+    });
+    return { sections: out, total: list.length };
+  }, [withState, chip, search, sort.key, now]);
+
+  const params = { officerName, officerUid };
+
+  const header = (
+    <View style={styles.header}>
+      <Text style={styles.title}>Activity</Text>
+      <View style={styles.searchBox}>
+        <Icon name="search" size={20} color={ui.text2} />
+        <TextInput
+          style={styles.searchInput}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search plate number"
+          placeholderTextColor={ui.muted}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          accessibilityLabel="Search plate number"
+        />
+        {!!search && (
+          <TouchableOpacity onPress={() => setSearch('')} style={styles.clearBtn} accessibilityLabel="Clear search">
+            <Icon name="x" size={18} color={ui.text2} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Activity</Text>
-          <View style={{ width: 20 }} />
-        </View>
-
-        <View style={[styles.body, { alignItems: 'center', justifyContent: 'center' }]}>
-          <ActivityIndicator size="large" color={colors.navy} />
-          <Text style={styles.loadingText}>Loading violations...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+        )}
+      </View>
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.navy} />
-
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Icon name="arrow-left" size={20} color={colors.white} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Activity</Text>
-        <View style={{ width: 20 }} />
-      </View>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={ui.ink} />
+      {header}
 
       <View style={styles.body}>
-        <View style={styles.searchRow}>
-          <Icon name="search" size={16} color={colors.gray} style={{ marginRight: 8 }} />
-          <TextInput
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search Plate Number"
-            placeholderTextColor={colors.gray}
-          />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipsBar}
+          contentContainerStyle={styles.chips}
+          accessibilityRole="tablist"
+        >
+          {ACTIVITY_CHIPS.map((c) => {
+            const on = chip === c.key;
+            return (
+              <TouchableOpacity
+                key={c.key}
+                style={[styles.chip, on && styles.chipOn]}
+                onPress={() => setChip(c.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={`${c.label}, ${counts[c.key] || 0}`}
+              >
+                <View style={[styles.chipDot, { backgroundColor: on ? ui.white : c.dot }]} />
+                <Text style={[styles.chipText, on && styles.chipTextOn]}>{c.label}</Text>
+                <Text style={[styles.chipCount, on && styles.chipCountOn]}>{counts[c.key] || 0}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        <View style={styles.toolbar}>
+          <Text style={styles.resultText}>
+            {total} {total === 1 ? 'violation' : 'violations'}
+          </Text>
+          <TouchableOpacity
+            style={styles.sortBtn}
+            onPress={() => setSortIdx((i) => (i + 1) % SORTS.length)}
+            accessibilityRole="button"
+            accessibilityLabel={`Sort: ${sort.label}. Tap to change.`}
+          >
+            <Icon name={sort.key === 'action' ? 'alert-circle' : 'calendar'} size={17} color={ui.ink} />
+            <Text style={styles.sortText}>{sort.label}</Text>
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.statusHeader}>CLAMPED</Text>
-
-        {violations.length === 0 ? (
-          <Text style={styles.empty}>No clamping violations yet. Scan a QR code to create one.</Text>
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={ui.ink} />
+            <Text style={styles.muted}>Loading violations…</Text>
+          </View>
         ) : (
           <SectionList
             sections={sections}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.docId}
             stickySectionHeadersEnabled={false}
-            renderSectionHeader={({ section }) => (
-              <Text style={styles.sectionHeader}>{section.title}</Text>
-            )}
+            contentContainerStyle={styles.listContent}
+            renderSectionHeader={({ section }) => <Text style={styles.groupTitle}>{section.title}</Text>}
             renderItem={({ item }) => {
-              // Kumpletong settled check
-              const isSettled =
-                ['paid', 'verified', 'settled'].includes(String(item.paymentStatus || '').toLowerCase()) ||
-                ['released', 'approved by oic'].includes(String(item.releaseStatus || '').toLowerCase()) ||
-                !!item.paidAt ||
-                !!item.releasedAt;
-
+              const left = item.state === 'unpaid' ? graceLeftText(item, now) : null;
               return (
                 <TouchableOpacity
-                  style={styles.recordRow}
+                  style={styles.row}
                   onPress={() => navigation.navigate('ViolationDetails', { record: item })}
+                  accessibilityRole="button"
                 >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.recordId}>{item.id}</Text>
-                    <Text style={styles.recordViolation}>{item.violation}</Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
-                    <Text style={styles.amount}>₱ {Number(item.amount).toLocaleString()}</Text>
-                    <Text style={[styles.status, { color: isSettled ? colors.green : colors.red }]}>
-                      {isSettled ? 'SETTLED' : 'UNSETTLED'}
+                  <View style={styles.rowMain}>
+                    <Text style={styles.plate}>{item.plate || '—'}</Text>
+                    <Text style={styles.rowType} numberOfLines={1}>
+                      {item.violation || 'Violation'}
                     </Text>
+                    <Text style={styles.rowMeta} numberOfLines={1}>
+                      {item.cin} · {timeOnly(item.recordedAt)}
+                      {item.clampId ? ` · ${item.clampId}` : ''}
+                    </Text>
+                    {left && <Text style={styles.rowLeft}>{left} before ₱2,000</Text>}
                   </View>
-                  <Icon name="chevron-right" size={16} color={colors.gray} />
+                  <View style={styles.rowSide}>
+                    <StatusPill state={item.state} />
+                    <Text style={styles.amount}>{peso(item.amountDue)}</Text>
+                  </View>
                 </TouchableOpacity>
               );
             }}
-            ListEmptyComponent={<Text style={styles.empty}>No records match your search.</Text>}
-            contentContainerStyle={{ paddingBottom: 16 }}
+            ListEmptyComponent={
+              <Text style={styles.empty}>
+                {rows.length === 0
+                  ? 'No clamps yet. Tap Scan to record your first violation.'
+                  : 'No violations match this filter.'}
+              </Text>
+            }
           />
         )}
       </View>
 
-      <View style={styles.tabBar}>
-        <TouchableOpacity style={styles.tabItem}>
-          <Icon name="refresh-cw" size={20} color={colors.black} />
-          <Text style={styles.tabLabel}>ACTIVITY</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItemCenter}
-          onPress={() => navigation.navigate('ScanQR', { officerName, officerUid })}
-        >
-          <View style={styles.tabCenterCircle}>
-            <MCIcon name="qrcode-scan" size={32} color={colors.white} />
-          </View>
-          <Text style={styles.tabLabel}>SCAN CLAMP QR</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.navigate('ClampDashboard', { officerName, officerUid })}
-        >
-          <Icon name="user" size={20} color={colors.gray} />
-          <Text style={styles.tabLabel}>DASHBOARD</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomNav
+        active="activity"
+        // Go back to the Home already open (navigate would stack a second one).
+        onHome={() => navigation.popTo('ClampDashboard', params)}
+        onScan={() => navigation.navigate('ScanQR', params)}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.navy },
-  header: {
+  safeArea: { flex: 1, backgroundColor: ui.ink },
+  header: { backgroundColor: ui.ink, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 18 },
+  title: { fontSize: 28, fontWeight: '800', color: ui.white, marginBottom: 14 },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 52,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: ui.white,
+  },
+  searchInput: { flex: 1, marginLeft: 10, fontSize: 16, fontWeight: '500', color: ui.ink, paddingVertical: 0 },
+  clearBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -10 },
+  body: { flex: 1, backgroundColor: ui.ground },
+  chipsBar: { flexGrow: 0, flexShrink: 0 },
+  chips: { flexDirection: 'row', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 4 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+    paddingHorizontal: 14,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: ui.field,
+    backgroundColor: ui.white,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  chipOn: { backgroundColor: ui.ink, borderColor: ui.ink },
+  chipDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
+  chipText: { fontSize: 14, fontWeight: '600', color: ui.ink },
+  chipTextOn: { color: ui.white },
+  chipCount: {
+    overflow: 'hidden',
+    marginLeft: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+    borderRadius: 10,
+    backgroundColor: ui.ground,
+    color: ui.text2,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  chipCountOn: { backgroundColor: ui.white, color: ui.ink },
+  toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
+    paddingTop: 2,
+  },
+  resultText: { fontSize: 14, fontWeight: '600', color: ui.text2 },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     height: 44,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: ui.field,
+    backgroundColor: ui.white,
   },
-  backBtn: { padding: 4 },
-  headerTitle: { color: colors.white, fontSize: 16, fontWeight: '700' },
-  body: {
-    flex: 1,
-    backgroundColor: colors.white,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-  },
-  loadingText: { marginTop: 12, color: colors.gray, fontSize: 13 },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    height: 40,
-  },
-  searchInput: { flex: 1, fontSize: 13, color: colors.black },
-  statusHeader: {
-    fontSize: 11,
+  sortText: { marginLeft: 8, fontSize: 14, fontWeight: '600', color: ui.ink },
+  listContent: { paddingHorizontal: 20, paddingBottom: 24 },
+  groupTitle: {
+    marginTop: 16,
+    marginBottom: 2,
+    fontSize: 13,
     fontWeight: '700',
-    color: colors.gray,
-    textAlign: 'center',
-    letterSpacing: 0.6,
-    marginTop: 14,
-    marginBottom: 6,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: ui.muted,
   },
-  sectionHeader: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.gray,
-    letterSpacing: 0.4,
-    marginTop: 12,
-    marginBottom: 6,
-  },
-  recordRow: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: 10,
+    backgroundColor: ui.white,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: 12,
-    marginBottom: 8,
+    borderColor: ui.line,
+    paddingVertical: 14,
+    paddingLeft: 16,
+    paddingRight: 14,
+    marginTop: 10,
   },
-  recordId: { fontSize: 14, fontWeight: '700', color: colors.black },
-  recordViolation: { fontSize: 11, color: colors.gray, marginTop: 2 },
-  amount: { fontSize: 13, fontWeight: '700', color: colors.black },
-  status: { fontSize: 9, fontWeight: '700', marginTop: 2 },
-  empty: {
-    fontSize: 12,
-    color: colors.gray,
-    textAlign: 'center',
-    marginTop: 24,
-    fontStyle: 'italic',
-  },
-  tabBar: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 8,
-    paddingBottom: 12,
-    backgroundColor: colors.white,
-  },
-  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  tabItemCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: -34 },
-  tabCenterCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: colors.black,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  tabLabel: { fontSize: 9, fontWeight: '600', color: colors.gray, marginTop: 4 },
+  rowMain: { flex: 1, marginRight: 12 },
+  plate: { fontSize: 19, fontWeight: '800', letterSpacing: 0.5, color: ui.ink },
+  rowType: { fontSize: 14, color: ui.text2, marginTop: 3 },
+  rowMeta: { fontSize: 13, color: ui.muted, marginTop: 3 },
+  rowLeft: { fontSize: 13, fontWeight: '600', color: '#7A4A00', marginTop: 3 },
+  rowSide: { alignItems: 'flex-end' },
+  amount: { fontSize: 17, fontWeight: '700', color: ui.ink, marginTop: 8 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  muted: { fontSize: 14, color: ui.muted, marginTop: 10 },
+  empty: { marginVertical: 40, textAlign: 'center', fontSize: 15, color: ui.muted },
 });
