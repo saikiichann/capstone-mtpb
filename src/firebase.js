@@ -1,6 +1,7 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApp, getApps } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";        // ← IDAGDAG ITO
+import { getAuth, getReactNativePersistence, initializeAuth } from "firebase/auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const firebaseConfig = {
   apiKey: "AIzaSyAWVZFyL69T8JFloi0lb-9JSQGkftklnCQ",
@@ -11,7 +12,19 @@ export const firebaseConfig = {
   appId: "1:193167402004:web:db259e0839a88f6f91b301",
 };
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 export const db = getFirestore(app);
-export const auth = getAuth(app);                // ← IDAGDAG ITO
+// Keep the sign-in on the phone, so the enforcer doesn't log in every
+// time the app opens. How long the app accepts it (one 12-hour shift) is
+// decided in src/shift.js.
+let authInstance;
+try {
+  authInstance = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage),
+  });
+} catch {
+  // already set up (Fast Refresh in development)
+  authInstance = getAuth(app);
+}
+export const auth = authInstance;

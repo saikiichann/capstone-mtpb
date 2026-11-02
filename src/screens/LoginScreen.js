@@ -21,6 +21,7 @@ import { ui } from '../theme/ui';
 import { auth, db } from '../firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { startSession } from '../session';
+import { startShift } from '../shift';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 /** IT Admin hotline shown on Forgot password. */
@@ -72,6 +73,8 @@ export default function LoginScreen({ navigation }) {
       }
 
       await updateDoc(userDocRef, { lastLogin: serverTimestamp() });
+      // Stay logged in for this shift (src/shift.js).
+      await startShift({ uid, name: userData.name });
       // Session Monitor (IT Admin): device + IP. Runs in the background.
       startSession({ uid, name: userData.name });
       navigation.replace('ClampDashboard', {

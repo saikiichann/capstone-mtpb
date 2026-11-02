@@ -6,6 +6,8 @@
    - Habang bukas ang app: ina-update ang lastActive kada 5 minuto, at
      tuwing babalik ang app sa harap (AppState "active").
    - Pag-logout: sinasara (active: false, endedAt).
+   - Pagbukas ulit ng app sa loob ng shift (src/shift.js): itinutuloy ang
+     parehong session (resumeSession), hindi gumagawa ng bago.
    - Kapag ni-Revoke ng IT Admin (revoked: true): tinatawag ang
      setRevokeHandler() callback (App.tsx), na naglo-logout at bumabalik
      sa Login.
@@ -19,11 +21,13 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   onSnapshot,
   serverTimestamp,
   updateDoc,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { clearShift, readShift, setShiftSession } from './shift';
 
 export const CLIENT_IP_URL = 'https://mtpb-admin.vercel.app/api/client-ip';
 const HEARTBEAT_MS = 5 * 60 * 1000;
@@ -87,6 +91,28 @@ async function touch() {
   }
 }
 
+/** Revoke watch + lastActive heartbeat for the current session. */
+function watchSession(id) {
+  stopWatch = onSnapshot(
+    doc(db, 'sessions', id),
+    (snap) => {
+      if (snap.exists() && snap.data()?.revoked === true) {
+        stopTimers();
+        sessionId = null;
+        clearShift();
+        onRevoked?.();
+      }
+    },
+    () => {
+      // can't read it (offline / rules): keep working
+    },
+  );
+  heartbeat = setInterval(touch, HEARTBEAT_MS);
+  appStateSub = AppState.addEventListener('change', (state) => {
+    if (state === 'active') touch();
+  });
+}
+
 /**
  * Starts the session after a successful login. Never throws: if it
  * can't be recorded (offline, rules), the app still works.
@@ -108,35 +134,59 @@ export async function startSession({ uid, name }) {
       active: true,
     });
     sessionId = ref.id;
-
-    stopWatch = onSnapshot(
-      doc(db, 'sessions', sessionId),
-      (snap) => {
-        if (snap.exists() && snap.data()?.revoked === true) {
-          stopTimers();
-          sessionId = null;
-          onRevoked?.();
-        }
-      },
-      () => {
-        // can't read it (offline / rules): keep working
-      },
-    );
-    heartbeat = setInterval(touch, HEARTBEAT_MS);
-    appStateSub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') touch();
-    });
+    await setShiftSession(sessionId);
+    watchSession(sessionId);
   } catch (err) {
     console.log('Session not recorded:', err?.code || err?.message);
   }
 }
 
-/** Closes the session. Call before signOut(). */
-export async function endSession() {
-  const id = sessionId;
+/**
+ * The app was opened again during the shift: continue the session saved
+ * at login instead of recording a new one.
+ * Returns false when the IT Admin revoked it (the caller logs out).
+ */
+export async function resumeSession({ uid, name }) {
+  stopTimers();
+  sessionId = null;
+  const saved = (await readShift())?.sessionId;
+  if (!saved) {
+    await startSession({ uid, name });
+    return true;
+  }
+  try {
+    const snap = await getDoc(doc(db, 'sessions', saved));
+    const data = snap.exists() ? snap.data() : null;
+    if (data?.revoked === true) {
+      await clearShift();
+      return false;
+    }
+    if (!data || data.active === false) {
+      // gone or already closed: record a fresh one
+      await startSession({ uid, name });
+      return true;
+    }
+    ip = data.ipAddress || '—';
+  } catch {
+    // offline: keep the saved session, the watch catches up later
+  }
+  sessionId = saved;
+  watchSession(saved);
+  touch();
+  return true;
+}
+
+/**
+ * Closes the session and forgets the shift. Call before signOut().
+ * `savedId` closes the one saved at login (shift over before the app
+ * resumed it).
+ */
+export async function endSession(savedId = null) {
+  const id = sessionId || savedId;
   stopTimers();
   sessionId = null;
   ip = '—';
+  await clearShift();
   if (!id) return;
   try {
     await updateDoc(doc(db, 'sessions', id), { active: false, endedAt: serverTimestamp() });
