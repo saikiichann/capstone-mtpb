@@ -100,7 +100,7 @@ test('Profile: details are read-only, password and photo can change', async () =
   const t = texts(tree);
   expect(t).toContain('Only the IT Admin can change these.');
   expect(t).toContain('j.delacruz@mtpb.gov.ph');
-  expect(t).toContain('Clamping Staff · Sector 3, Manila');
+  expect(t).toContain('Clamping Staff · District 3, Manila');
   expect(t).toContain('Change photo');
   expect(t).toContain('Update password');
   // Name is shown as text, not an input.
@@ -134,4 +134,35 @@ test('Sign in: fields and forgot password sheet', async () => {
   await ReactTestRenderer.act(async () => forgot.props.onPress());
   expect(texts(tree)).toContain('Call IT Admin · (02) 8888-1234');
   await ReactTestRenderer.act(async () => tree.unmount());
+});
+
+test('District 3 and the Team Leader badge come from User Management', async () => {
+  const leader = { ...userDoc, assignedDistrict: 'District 3', isTeamLeader: true };
+  onSnapshot.mockImplementation((ref, next) => {
+    if (ref.kind === 'doc') {
+      const data = ref.col === 'users' ? leader : sample.find((v) => v.id === ref.id);
+      next({ id: ref.id, exists: () => !!data, data: () => data });
+    } else {
+      next({ docs: sample.map((d) => ({ id: d.id, data: () => d })) });
+    }
+    return () => {};
+  });
+
+  const home = await render(<ClampDashboardScreen navigation={nav()} route={{ params: { officerUid: 'u1' } }} />);
+  const h = texts(home);
+  expect(h).toContain('District 3, Manila');
+  expect(h).toContain('Team Leader');
+  await ReactTestRenderer.act(async () => home.unmount());
+
+  const profile = await render(<EditProfileScreen navigation={nav()} route={{ params: { officerUid: 'u1' } }} />);
+  expect(texts(profile)).toContain('Clamping Staff (Team Leader) · District 3, Manila');
+  await ReactTestRenderer.act(async () => profile.unmount());
+});
+
+test('A member (not leader) has no Team Leader badge', async () => {
+  const home = await render(<ClampDashboardScreen navigation={nav()} route={{ params: { officerUid: 'u1' } }} />);
+  const h = texts(home);
+  expect(h).not.toContain('Team Leader');
+  expect(h).toContain('District 3, Manila');
+  await ReactTestRenderer.act(async () => home.unmount());
 });

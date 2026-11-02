@@ -175,8 +175,12 @@ export default function EditProfileScreen({ navigation, route }) {
   );
 
   const name = profile.name || route?.params?.officerName || '';
-  const role = ROLE_NAMES[profile.role] || profile.role || 'Clamping Staff';
-  const area = profile.assignedLocation || 'Sector 3, Manila';
+  const role =
+    (ROLE_NAMES[profile.role] || profile.role || 'Clamping Staff') +
+    (profile.isTeamLeader === true ? ' (Team Leader)' : '');
+  const area = profile.assignedDistrict
+    ? `${profile.assignedDistrict}, Manila`
+    : profile.assignedLocation || 'District 3, Manila';
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>

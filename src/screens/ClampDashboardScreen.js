@@ -31,7 +31,8 @@ export default function ClampDashboardScreen({ navigation, route }) {
     route?.params?.officerName || 'Officer',
   );
   const [photoUrl, setPhotoUrl] = useState(null);
-  const [area, setArea] = useState('Sector 3, Manila');
+  const [area, setArea] = useState('District 3, Manila');
+  const [isLeader, setIsLeader] = useState(false);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showLogout, setShowLogout] = useState(false);
@@ -51,7 +52,11 @@ export default function ClampDashboardScreen({ navigation, route }) {
         const d = snap.data() || {};
         if (d.name) setOfficerName(d.name);
         setPhotoUrl(d.photoUrl || null);
-        if (d.assignedLocation) setArea(d.assignedLocation);
+        // Clamping Staff: District 3 (set by the IT Admin in User Management).
+        if (d.assignedDistrict) setArea(`${d.assignedDistrict}, Manila`);
+        else if (d.assignedLocation) setArea(d.assignedLocation);
+        // One team leader for the whole district.
+        setIsLeader(d.isTeamLeader === true);
       },
       () => {},
     );
@@ -152,6 +157,12 @@ export default function ClampDashboardScreen({ navigation, route }) {
               <Text style={styles.name} numberOfLines={2}>
                 {officerName}
               </Text>
+              {isLeader && (
+                <View style={styles.leaderChip}>
+                  <Icon name="star" size={11} color="#1A1A1A" />
+                  <Text style={styles.leaderText}>Team Leader</Text>
+                </View>
+              )}
               <View style={styles.metaRow}>
                 <Text style={styles.idChip}>ID {enforcerIdOf(officerUid)}</Text>
                 <Icon name="map-pin" size={13} color="#D5D8DE" />
@@ -325,6 +336,23 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   areaText: { color: '#D5D8DE', fontSize: 13, marginLeft: 4, flexShrink: 1 },
+  leaderChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    marginBottom: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: '#E8C15A',
+  },
+  leaderText: {
+    color: '#1A1A1A',
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
   body: { flex: 1, backgroundColor: ui.ground },
   bodyContent: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 24 },
   sectionHead: {
