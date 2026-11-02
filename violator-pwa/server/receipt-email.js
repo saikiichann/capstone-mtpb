@@ -8,16 +8,17 @@ import { CONTACT_LINE, renderEmail } from './email-layout.js'
 
 export function buildReceiptEmail(attempt) {
   // Online impound payments are verified and released when paid
-  // (server/impound-release.js). Same OFFICIAL RECEIPT heading as clamps
-  // (Marco, 2026-11-02).
+  // (server/impound-release.js). Both are Electronic Official Receipts with
+  // an OR number from the same series as cash (team decision 2026-11-02).
   if (attempt.releasedOnPayment) return buildImpoundReceiptEmail(attempt)
   const email = renderEmail({
-    heading: 'OFFICIAL RECEIPT',
+    heading: 'ELECTRONIC OFFICIAL RECEIPT',
     // No test-mode notice (Marco's choice, 2026-10-11): receipts look the same
     // as they would with real payments.
     message:
       'Your payment was received and is waiting for verification by MTPB staff. Once it is verified, an enforcer will remove the clamp.',
     rows: [
+      ['OR Number', attempt.orNumber],
       ['Reference Number', attempt.referenceNumber],
       ['Date & Time', formatDateTime(attempt.paidAt)],
       ['Violation Number', attempt.cin],
@@ -43,10 +44,11 @@ export function buildReceiptEmail(attempt) {
 
 function buildImpoundReceiptEmail(attempt) {
   const email = renderEmail({
-    heading: 'OFFICIAL RECEIPT',
+    heading: 'ELECTRONIC OFFICIAL RECEIPT',
     message:
       'Your impound fee is paid and your vehicle is released. Show your Blue Ticket and a valid ID at the impound desk to get your vehicle.',
     rows: [
+      ['OR Number', attempt.orNumber],
       ['Reference Number', attempt.referenceNumber],
       ['Release Order', attempt.releaseOrderId],
       ['Date & Time', formatDateTime(attempt.paidAt)],

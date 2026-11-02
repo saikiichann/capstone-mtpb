@@ -255,3 +255,10 @@ describe('overdue clamp fee (₱2,000 after 24 hours)', () => {
     assert.equal(v.amountDue, 4100)
   })
 })
+
+describe('payment OR number', () => {
+  it('reads the Official Receipt number (cash and online share one series)', () => {
+    assert.equal(normalizePayment('p1', { referenceNumber: 'REF-2026-00002', orNumber: 'OR-2026-00001', status: 'pending', totalAmount: 922.5 }).orNumber, 'OR-2026-00001')
+    assert.equal(normalizePayment('p2', { referenceNumber: 'REF-2026-00003', status: 'pending', totalAmount: 922.5 }).orNumber, '')
+  })
+})

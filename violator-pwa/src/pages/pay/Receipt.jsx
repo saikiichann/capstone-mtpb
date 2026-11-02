@@ -108,6 +108,7 @@ export default function Receipt() {
   }
 
   const rows = [
+    ...(payment.orNumber ? [['OR Number', payment.orNumber]] : []),
     ['Reference Number', payment.referenceNumber],
     ['Date & Time', formatDateTime(payment.paidAt, { short: true })],
     // The violation number (CIN) is what people and MTPB staff use. The
