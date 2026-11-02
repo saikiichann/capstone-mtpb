@@ -30,6 +30,9 @@ export function rememberScanToken(refs, token) {
   }
 }
 
+// Impound desk passes (server/impound-access.js) start with "imp.".
+export const isImpoundPass = (token) => typeof token === 'string' && token.startsWith('imp.')
+
 export function scanTokenFor(ref) {
   if (!ref) return null
   return read().find((entry) => entry.refs.includes(ref))?.token ?? null

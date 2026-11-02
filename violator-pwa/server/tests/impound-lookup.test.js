@@ -104,6 +104,30 @@ describe('impound pass', () => {
     await assert.rejects(access.getViolation({ user: guest, ref: 'imp-old', token }), (e) => e.status === 404)
   })
 
+  it('keeps working after the guest logs in or signs up on the same phone', async () => {
+    // Bug 2026-11-02: lookup as a guest, then log in: the account (a new uid)
+    // got "No violation found".
+    const access = setup()
+    const { token } = await access.impoundLookup({ user: guest, plate: 'ABC 1234', ovrLast4: '2345' })
+    const account = { uid: 'acct-1', isGuest: false, email_verified: true }
+    assert.equal((await access.getViolation({ user: account, ref: 'imp-1', token })).id, 'imp-1')
+    // Pay Now asks the same question (create-checkout uses canView).
+    const violation = await access.getViolation({ user: guest, ref: 'imp-1', token })
+    assert.equal(await access.canView({ user: account, violation, token }), true)
+    // Still only that violation, and still not for another guest.
+    await assert.rejects(access.getViolation({ user: account, ref: 'imp-old', token }), (e) => e.status === 404)
+    await assert.rejects(access.getViolation({ user: { uid: 'guest-2', isGuest: true }, ref: 'imp-1', token }), (e) => e.status === 404)
+  })
+
+  it('still expires after 30 minutes for the account too', async () => {
+    let clock = Date.parse('2026-11-02T00:00:00Z')
+    const access = setup({ now: () => clock })
+    const { token } = await access.impoundLookup({ user: guest, plate: 'ABC 1234', ovrLast4: '2345' })
+    const account = { uid: 'acct-1', isGuest: false, email_verified: true }
+    clock += 31 * 60_000
+    await assert.rejects(access.getViolation({ user: account, ref: 'imp-1', token }), (e) => e.status === 404)
+  })
+
   it('stops working after 30 minutes', async () => {
     let clock = Date.parse('2026-11-02T00:00:00Z')
     const access = setup({ now: () => clock })
