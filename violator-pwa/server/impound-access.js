@@ -9,7 +9,10 @@ import { config } from './config.js'
 // "whoever started a payment" rule keeps the receipt visible.
 //
 // The pass is signed, not stored: nothing new in Firestore. It is only good
-// for the same signed-in (guest) user and the same violation.
+// for the same violation, and for the guest who looked it up, or for a
+// signed-in account on the same phone (a guest who logs in or signs up
+// halfway gets a new uid; the pass stays in that phone's storage).
+// It still expires after 30 minutes either way.
 
 export const IMPOUND_ACCESS_MINUTES = 30
 const PREFIX = 'imp.'
@@ -27,7 +30,8 @@ export function createImpoundAccess({ secret, now = () => Date.now() }) {
       return { token: `${PREFIX}${payload}.${sign(payload)}`, expiresAt: new Date(expires).toISOString() }
     },
 
-    allows(token, { uid, violationId }) {
+    // `account`: the caller is a signed-in account (not a guest).
+    allows(token, { uid, violationId, account = false }) {
       if (!isImpoundToken(token) || !uid || !violationId) return false
       const [payload, signature] = token.slice(PREFIX.length).split('.')
       if (!payload || !signature) return false
@@ -36,7 +40,7 @@ export function createImpoundAccess({ secret, now = () => Date.now() }) {
       if (expected.length !== given.length || !timingSafeEqual(expected, given)) return false
       try {
         const { u, v, e } = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))
-        return u === uid && v === violationId && Number(e) > now()
+        return (u === uid || account === true) && v === violationId && Number(e) > now()
       } catch {
         return false
       }

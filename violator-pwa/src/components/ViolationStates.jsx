@@ -3,7 +3,9 @@ import { useT } from '../i18n/language-context'
 import { Skeleton } from './Skeleton'
 
 // Loading / not found / error cards shared by the violation and payment pages.
-export default function ViolationStates({ status, cin }) {
+// `impound`: opened from the impound desk QR (/pay-impound), so "not found"
+// points back there instead of to a clamp's QR code.
+export default function ViolationStates({ status, cin, impound = false }) {
   const t = useT()
   if (status === 'loading') {
     // Shaped like the violation card that's about to replace it: the code,
@@ -18,6 +20,17 @@ export default function ViolationStates({ status, cin }) {
           ))}
         </div>
         <Skeleton height={44} style={{ marginTop: 26, borderRadius: 10 }} />
+      </div>
+    )
+  }
+  if (status === 'not-found' && impound) {
+    return (
+      <div className="card state-card">
+        <h2 className="screen-title">{t('violation.notFound.title')}</h2>
+        <p>{t('violation.notFound.impoundText')}</p>
+        <Link className="btn btn--primary" to="/pay-impound">
+          {t('violation.notFound.impoundAgain')}
+        </Link>
       </div>
     )
   }

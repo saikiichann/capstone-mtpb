@@ -110,7 +110,8 @@ export function createViolationAccess({ store, impoundAccess = null }) {
 
   async function canView({ user, violation, token }) {
     if (isImpoundToken(token)) {
-      if (impoundAccess?.allows(token, { uid: user?.uid, violationId: violation.id })) return true
+      const account = Boolean(user && !user.isGuest)
+      if (impoundAccess?.allows(token, { uid: user?.uid, violationId: violation.id, account })) return true
     } else if (token && clampCarries(await store.getClampByToken(token), violation)) return true
     // Linked to this account by its payment (server/account-links.js).
     if (user && violation.raw?.violatorUid && violation.raw.violatorUid === user.uid) return true
@@ -176,7 +177,7 @@ export function createViolationAccess({ store, impoundAccess = null }) {
     const plateText = String(plate ?? '').trim()
     const last4 = String(ovrLast4 ?? '').trim().toUpperCase()
     if (!plateText || !/^[A-Z0-9]{4}$/.test(last4)) {
-      throw new HttpError(400, 'Enter the plate number and the last 4 digits of the OVR No.')
+      throw new HttpError(400, 'Enter the plate number and the last 4 digits of the UOVR No.')
     }
     if (!impoundAccess || !user?.uid) throw new HttpError(503, 'The impound lookup is not available right now.')
     const matches = (await store.listImpoundedViolations()).filter(

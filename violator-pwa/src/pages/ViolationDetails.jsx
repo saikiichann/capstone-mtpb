@@ -9,6 +9,7 @@ import ViolationStates from '../components/ViolationStates'
 import useViolation from '../hooks/useViolation'
 import { useT } from '../i18n/language-context'
 import { evidencePhotosOf } from '../utils/evidence'
+import { isImpoundPass, scanTokenFor } from '../firebase/scan-tokens'
 import PayChoiceDialog from './PayChoiceDialog'
 import { formatDateTime, formatPeso } from '../utils/format'
 
@@ -45,7 +46,7 @@ export default function ViolationDetails() {
 
       <main className="page__body">
         {status !== 'ready' ? (
-          <ViolationStates status={status} cin={violationRef} />
+          <ViolationStates status={status} cin={violationRef} impound={isImpoundPass(scanTokenFor(violationRef))} />
         ) : canPayNow ? (
           <>
             <ViolationCard violation={violation} showPayment />
@@ -74,6 +75,8 @@ function ViolationCard({ violation, showPayment = false, onPayNow }) {
   const isPaid = violation.paymentStatus === 'paid'
   const badge = isPaid ? (violation.awaitingVerification ? 'verifying' : 'paid') : 'unpaid'
   const here = `/v/${encodeURIComponent(violation.id ?? violation.cin)}`
+  // Impounds recorded at the desk (Add Impound Record) have no make.
+  const isDeskImpound = String(violation.enforcementType ?? '').toLowerCase() === 'impounded'
   // Order asked for by MTPB. Rows whose value is missing still show a dash,
   // so the layout doesn't jump about between violations — except the two
   // that only some records carry. The labels and the clamped / impounded
@@ -84,7 +87,7 @@ function ViolationCard({ violation, showPayment = false, onPayNow }) {
     ...(violation.enforcementType ? [['Enforcement', sentenceCase(violation.enforcementType)]] : []),
     ['Plate Number', violation.plateNumber],
     ...(violation.clampId ? [['Clamp', violation.clampId]] : []),
-    ['Make', violation.vehicleMake],
+    ...(isDeskImpound ? [] : [['Make', violation.vehicleMake]]),
     ['Type', violation.vehicleType],
     ['Color', violation.vehicleColor],
     ['Violation', violation.violationType],
