@@ -65,7 +65,9 @@ export function createStaffPassword({ store, auth, now = () => new Date() }) {
     return GENERIC_REQUEST_REPLY
   }
 
-  async function reset({ caller, uid }) {
+  // `ip`: the IT Admin's address (rate-limit.js clientIp), for the audit log,
+  // like the admin's own audit entries.
+  async function reset({ caller, uid, ip = null }) {
     const admin = await store.getStaff(caller?.uid)
     if (!admin || admin.role !== 'it-admin' || String(admin.status ?? '').toLowerCase() !== 'active') {
       throw new HttpError(403, 'Only the IT Admin can reset passwords.')
@@ -92,6 +94,7 @@ export function createStaffPassword({ store, auth, now = () => new Date() }) {
       record: target.username ?? uid,
       type: 'password-reset',
       metadata: { targetUid: uid },
+      ipAddress: ip && ip !== 'unknown' ? ip : '—',
       timestamp: at,
     })
 
