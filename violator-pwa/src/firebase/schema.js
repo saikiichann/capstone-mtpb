@@ -60,6 +60,11 @@ export const COLLECTIONS = {
 export const PAYMENT_COUNTER_ID = 'paymentReference'
 // counters/releaseOrder: the ORD-YYYY-##### release order numbers.
 export const RELEASE_COUNTER_ID = 'releaseOrder'
+// counters/orNumber: the OR-YYYY-##### Official Receipt numbers. One series
+// for cash (admin lib/onsitePayment.ts) and online payments (team decision
+// 2026-11-02). In the prototype the system numbers them; in deployment the
+// series comes from the City Treasurer's eOR system.
+export const OR_COUNTER_ID = 'orNumber'
 
 // role_id stored on every violator document.
 // TODO: replace with the role_id value the team's RBAC uses for violators.

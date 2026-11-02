@@ -5,9 +5,9 @@
 // not affected: they still wait in Payment Verification.
 //
 // This file only builds the fields; completePayment() in
-// server/firestore-store.js writes them in one transaction. No OR number
-// (the OR series stays with the cashier), and the GCash convenience fee stays
-// separate from impoundFeePaid.
+// server/firestore-store.js writes them in one transaction. The OR number
+// comes from the same series as the cashier's (counters/orNumber), and the
+// GCash convenience fee stays separate from impoundFeePaid.
 
 export const ONLINE_STAFF = 'PayMongo (online)'
 export const ONLINE_ROLE = 'violator-app'
@@ -18,7 +18,7 @@ export function isImpoundPayment(attempt, violation) {
 
 // `serverTime` is FieldValue.serverTimestamp() (tests pass a marker).
 // → { violation, payment, releaseLog, impoundRecord } for the four writes.
-export function impoundReleaseWrites({ attempt, attemptId, violation, patch, referenceNumber, releaseOrderId, serverTime }) {
+export function impoundReleaseWrites({ attempt, attemptId, violation, patch, referenceNumber, orNumber = null, releaseOrderId, serverTime }) {
   const impoundFee = Number(attempt.impoundFee ?? attempt.fineAmount ?? 0)
   const released = {
     verifiedAt: serverTime,
@@ -41,6 +41,7 @@ export function impoundReleaseWrites({ attempt, attemptId, violation, patch, ref
       paymentMethod: 'GCash',
       paymentReference: referenceNumber,
       referenceNumber,
+      orNumber,
       impoundFeePaid: impoundFee,
       totalPaid: attempt.totalAmount,
       paymentLocation: 'Online',
@@ -65,6 +66,7 @@ export function impoundReleaseWrites({ attempt, attemptId, violation, patch, ref
       convenienceFee: attempt.convenienceFee,
       totalAmount: attempt.totalAmount,
       referenceNumber,
+      orNumber,
       paymentLocation: 'Online',
       method: 'GCash',
       status: 'Verified',
@@ -103,6 +105,7 @@ export function impoundReleaseWrites({ attempt, attemptId, violation, patch, ref
       status: 'Released',
       paymentStatus: 'Verified',
       referenceNumber,
+      orNumber,
       releaseOrderId,
       // The impound fee only; the GCash convenience fee is on the payment.
       amountPaid: impoundFee,

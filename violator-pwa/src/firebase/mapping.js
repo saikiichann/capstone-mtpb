@@ -325,6 +325,7 @@ export const CLAMP_TOKEN_FIELD = 'scanToken'
 const PAYMENT_FIELDS = {
   status: ['verificationStatus', 'status', 'paymentStatus', 'payment_status', 'state'],
   referenceNumber: ['referenceNumber', 'paymentReference', 'reference', 'refNo'],
+  orNumber: ['orNumber', 'officialReceiptNumber'],
   violationCin: ['violationCin', 'cin', 'CIN'],
   violationId: ['violationId', 'violation_id'],
   plateNumber: ['plateNumber', 'plateNo', 'plate'],
@@ -370,6 +371,8 @@ export function normalizePayment(id, data) {
     // The document id is the reference number in our own writes; the field
     // wins when something else created the document.
     referenceNumber: pick(data, PAYMENT_FIELDS.referenceNumber, id),
+    // Official Receipt number (cash and online share one series).
+    orNumber: pick(data, PAYMENT_FIELDS.orNumber, ''),
     status: state,
     // Has a receipt: the money is in, verified or not.
     isPaid: state === 'paid' || state === 'verifying',

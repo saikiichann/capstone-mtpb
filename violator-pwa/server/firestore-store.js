@@ -8,7 +8,7 @@ import {
   normalizeViolation,
   PLATE_FIELDS,
 } from '../src/firebase/mapping.js'
-import { COLLECTIONS, PAYMENT_COUNTER_ID, RELEASE_COUNTER_ID } from '../src/firebase/schema.js'
+import { COLLECTIONS, OR_COUNTER_ID, PAYMENT_COUNTER_ID, RELEASE_COUNTER_ID } from '../src/firebase/schema.js'
 import { plateSpellings } from '../src/utils/plates.js'
 import { config } from './config.js'
 import { impoundReleaseWrites, isImpoundPayment } from './impound-release.js'
@@ -47,6 +47,7 @@ export function createFirestoreStore({ db = getFirestore(adminApp()) } = {}) {
   const payments = db.collection(COLLECTIONS.payments)
   const counterRef = db.collection(COLLECTIONS.counters).doc(PAYMENT_COUNTER_ID)
   const releaseCounterRef = db.collection(COLLECTIONS.counters).doc(RELEASE_COUNTER_ID)
+  const orCounterRef = db.collection(COLLECTIONS.counters).doc(OR_COUNTER_ID)
 
   // The impound record of an impound violation, read inside the payment's
   // transaction: the violation's impoundRecordId (Add Impound Record sets
@@ -316,8 +317,9 @@ export function createFirestoreStore({ db = getFirestore(adminApp()) } = {}) {
     },
 
     // Records a confirmed online payment the way the admin app records cash:
-    // the next REF number from its counter, a `payments` document waiting for
-    // verification, and the violation moved to "Pending Verification".
+    // the next REF number and the next OR number from its counters (the same
+    // series as cash), a `payments` document waiting for verification, and
+    // the violation moved to "Pending Verification".
     // Finance staff then verify it in the admin app, which also updates the
     // clamp and the release status.
     //
@@ -336,6 +338,7 @@ export function createFirestoreStore({ db = getFirestore(adminApp()) } = {}) {
         const violationDoc = await tx.get(violationRef)
         const violation = violationDoc.data() ?? {}
         const counterDoc = await tx.get(counterRef)
+        const orCounterDoc = await tx.get(orCounterRef)
         const stamp = { updatedAt: FieldValue.serverTimestamp() }
 
         // Money came in for a violation that no longer exists: keep it on
@@ -351,6 +354,9 @@ export function createFirestoreStore({ db = getFirestore(adminApp()) } = {}) {
 
         const next = Number(counterDoc.exists ? (counterDoc.data().lastValue ?? 0) : 0) + 1
         const referenceNumber = `REF-${manilaYear(patch.paidAt)}-${String(next).padStart(5, '0')}`
+        // Official Receipt number, same OR series as the admin's cash payments.
+        const nextOr = Number(orCounterDoc.exists ? (orCounterDoc.data().lastValue ?? 0) : 0) + 1
+        const orNumber = `OR-${manilaYear(patch.paidAt)}-${String(nextOr).padStart(5, '0')}`
         const paymentRef = payments.doc()
 
         // Impound: paid = verified + released right away (server/impound-release.js).
@@ -366,11 +372,13 @@ export function createFirestoreStore({ db = getFirestore(adminApp()) } = {}) {
             violation,
             patch,
             referenceNumber,
+            orNumber,
             releaseOrderId,
             serverTime: FieldValue.serverTimestamp(),
           })
 
           tx.set(counterRef, { lastValue: next, prefix: 'REF', ...stamp }, { merge: true })
+          tx.set(orCounterRef, { lastValue: nextOr, prefix: 'OR', ...stamp }, { merge: true })
           tx.set(releaseCounterRef, { lastValue: nextOrder, prefix: 'ORD', ...stamp }, { merge: true })
           tx.update(violationRef, writes.violation)
           tx.set(paymentRef, writes.payment)
@@ -381,6 +389,7 @@ export function createFirestoreStore({ db = getFirestore(adminApp()) } = {}) {
             ...stamp,
             status: 'paid',
             referenceNumber,
+            orNumber,
             paymentId: paymentRef.id,
             releaseOrderId,
             // No separate "verified" / "released" emails: the receipt says
@@ -391,6 +400,7 @@ export function createFirestoreStore({ db = getFirestore(adminApp()) } = {}) {
         }
 
         tx.set(counterRef, { lastValue: next, prefix: 'REF', ...stamp }, { merge: true })
+        tx.set(orCounterRef, { lastValue: nextOr, prefix: 'OR', ...stamp }, { merge: true })
 
         tx.set(paymentRef, {
           violationId: attempt.violationId,
@@ -406,6 +416,7 @@ export function createFirestoreStore({ db = getFirestore(adminApp()) } = {}) {
           impoundFee: attempt.impoundFee ?? 0,
           overdueFee: attempt.overdueFee ?? 0,
           referenceNumber,
+          orNumber,
           method: 'GCash',
           status: 'pending',
           recordedBy: 'Violator app (GCash)',
@@ -428,6 +439,7 @@ export function createFirestoreStore({ db = getFirestore(adminApp()) } = {}) {
           paymentMethod: 'GCash',
           paymentReference: referenceNumber,
           referenceNumber,
+          orNumber,
           totalPaid: attempt.totalAmount,
           overdueFeePaid: attempt.overdueFee ?? 0,
           paidAt: patch.paidAt,
@@ -435,7 +447,7 @@ export function createFirestoreStore({ db = getFirestore(adminApp()) } = {}) {
           ...stamp,
         })
 
-        tx.update(attemptRef, { ...patch, ...stamp, status: 'paid', referenceNumber, paymentId: paymentRef.id })
+        tx.update(attemptRef, { ...patch, ...stamp, status: 'paid', referenceNumber, orNumber, paymentId: paymentRef.id })
         return 'paid'
       })
     },

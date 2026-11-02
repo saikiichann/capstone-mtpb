@@ -69,6 +69,8 @@ function impoundSetup({ impoundRecordId = 'rec-1', recordDoc = { status: 'Impoun
     },
     'counters/paymentReference': { lastValue: 41, prefix: 'REF' },
     'counters/releaseOrder': { lastValue: 9, prefix: 'ORD' },
+    // The cashier's OR series (admin lib/onsitePayment.ts): online continues it.
+    'counters/orNumber': { lastValue: 217, prefix: 'OR' },
     ...(recordDoc ? { 'impoundRecords/rec-1': recordDoc } : {}),
   })
 }
@@ -93,7 +95,7 @@ describe('online impound payment', () => {
     assert.equal(v.paymentMethod, 'GCash')
     assert.equal(v.impoundFeePaid, 2100, 'impound fee only, not the GCash fee')
     assert.equal(v.totalPaid, 2152.5)
-    assert.equal('orNumber' in v, false, 'no OR for online payments')
+    assert.equal(v.orNumber, 'OR-2026-00218', 'next number in the cashier\'s OR series')
 
     const [payment] = db.docsIn('payments')
     assert.equal(payment.status, 'Verified')
@@ -106,6 +108,7 @@ describe('online impound payment', () => {
     assert.equal(payment.convenienceFee, 52.5)
     assert.equal(payment.totalAmount, 2152.5)
     assert.equal(payment.uovrNo, 'MT-0012345')
+    assert.equal(payment.orNumber, 'OR-2026-00218')
     assert.equal(payment.releaseOrderId, 'ORD-2026-00010')
     assert.equal(payment.paymentLocation, 'Online')
     assert.equal(payment.checkoutAttemptId, 'att-1')
@@ -125,13 +128,15 @@ describe('online impound payment', () => {
     assert.equal(record.releaseOrderId, 'ORD-2026-00010')
     assert.equal(record.releasedBy, 'PayMongo (online)')
     assert.equal(record.amountPaid, 2100, 'impound fee only, not the GCash fee')
-    assert.equal('orNumber' in record, false)
+    assert.equal(record.orNumber, 'OR-2026-00218')
 
     assert.equal(db.data.get('counters/paymentReference').lastValue, 42)
     assert.equal(db.data.get('counters/releaseOrder').lastValue, 10)
+    assert.equal(db.data.get('counters/orNumber').lastValue, 218)
     const attempt = db.data.get('checkoutAttempts/att-1')
     assert.equal(attempt.status, 'paid')
     assert.equal(attempt.releasedOnPayment, true)
+    assert.equal(attempt.orNumber, 'OR-2026-00218', 'for the receipt email')
   })
 
   it('records it only once when the webhook and the success page both confirm', async () => {
@@ -142,6 +147,7 @@ describe('online impound payment', () => {
     assert.equal(db.docsIn('payments').length, 1)
     assert.equal(db.docsIn('releaseLog').length, 1)
     assert.equal(db.data.get('counters/releaseOrder').lastValue, 10)
+    assert.equal(db.data.get('counters/orNumber').lastValue, 218, 'one OR only')
   })
 
   it('refuses one already paid at the desk', async () => {
@@ -164,15 +170,16 @@ describe('online impound payment', () => {
     assert.equal(db.data.get('violations/imp-1').releaseStatus, 'Released')
   })
 
-  it('emails one official receipt that says paid and released', () => {
+  it('emails one electronic official receipt with the OR number, paid and released', () => {
     const { subject, html, text } = buildReceiptEmail({
-      releasedOnPayment: true, referenceNumber: 'REF-2026-00042', releaseOrderId: 'ORD-2026-00010', cin: 'IMP-2026-0007',
+      releasedOnPayment: true, referenceNumber: 'REF-2026-00042', orNumber: 'OR-2026-00218', releaseOrderId: 'ORD-2026-00010', cin: 'IMP-2026-0007',
       plateNo: 'ABC 1234', impoundFee: 2100, convenienceFee: 52.5, totalAmount: 2152.5, paidAt,
     })
     const body = `${subject} ${html ?? ''} ${text ?? ''}`
     assert.match(body, /released/i)
     assert.match(body, /ORD-2026-00010/)
-    assert.match(body, /OFFICIAL RECEIPT/)
+    assert.match(body, /ELECTRONIC OFFICIAL RECEIPT/)
+    assert.match(body, /OR-2026-00218/)
   })
 })
 
@@ -188,5 +195,31 @@ describe('online clamp payment', () => {
     assert.equal(db.docsIn('payments')[0].status, 'pending')
     assert.equal(db.docsIn('releaseLog').length, 0)
     assert.equal(db.data.has('counters/releaseOrder'), false)
+  })
+
+  it('gets the next OR number too, the same series as cash (first one: 00001)', async () => {
+    const db = memoryDb({
+      'checkoutAttempts/att-2': { status: 'pending', uid: 'owner-1', violationId: 'clmp-1', cin: 'CLMP-2026-0001', plateNo: 'XYZ 9999', chargeType: 'Clamp', fineAmount: 900, convenienceFee: 22.5, totalAmount: 922.5 },
+      'violations/clmp-1': { cin: 'CLMP-2026-0001', enforcementType: 'clamped', plateNo: 'XYZ 9999', paymentStatus: 'Unpaid' },
+    })
+    await createFirestoreStore({ db }).completePayment('att-2', patch)
+    assert.equal(db.docsIn('payments')[0].orNumber, 'OR-2026-00001')
+    assert.equal(db.data.get('violations/clmp-1').orNumber, 'OR-2026-00001')
+    assert.equal(db.data.get('checkoutAttempts/att-2').orNumber, 'OR-2026-00001')
+    assert.deepEqual(
+      { lastValue: db.data.get('counters/orNumber').lastValue, prefix: db.data.get('counters/orNumber').prefix },
+      { lastValue: 1, prefix: 'OR' },
+    )
+  })
+
+  it('emails an electronic official receipt with the OR number', () => {
+    const { html, text } = buildReceiptEmail({
+      referenceNumber: 'REF-2026-00002', orNumber: 'OR-2026-00001', cin: 'CLMP-2026-0001', plateNo: 'XYZ 9999',
+      chargeType: 'Clamp', fineAmount: 900, convenienceFee: 22.5, totalAmount: 922.5, paidAt,
+    })
+    const body = `${html ?? ''} ${text ?? ''}`
+    assert.match(body, /ELECTRONIC OFFICIAL RECEIPT/)
+    assert.match(body, /OR Number/)
+    assert.match(body, /OR-2026-00001/)
   })
 })
