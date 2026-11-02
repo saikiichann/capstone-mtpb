@@ -240,16 +240,11 @@ const hasNoViolator = (r: {
 }) => !r.violatorUid && !r.guestId && !r.violatorName;
 
 const violatorLabel = (row: PaymentRow): string => {
-  if (row.violatorName) {
-    return row.violatorUid
-      ? `${row.violatorName} (Registered)`
-      : row.guestId
-      ? `${row.violatorName} (Guest)`
-      : row.violatorName;
-  }
-  if (row.violatorUid) return `Registered — ${row.violatorUid}`;
-  if (row.guestId) return `Guest — ${row.guestId}`;
-  return "—";
+  // Account / guest ids are never shown — only the name and whether it is
+  // a registered account or a guest (same as Transaction History).
+  const kind = row.violatorUid ? "Registered" : row.guestId ? "Guest" : null;
+  if (row.violatorName) return kind ? `${row.violatorName} (${kind})` : row.violatorName;
+  return kind ?? "—";
 };
 
 const toPaymentRow = (id: string, data: DocumentData): PaymentRow => {
@@ -1143,10 +1138,11 @@ export default function PaymentVerification() {
                                     <span className="violator-name">{row.violatorName}</span>
                                   )}
                                   <span
-                                    className="violator-id"
-                                    title={row.violatorUid ?? row.guestId ?? ""}
+                                    className={`violator-tag ${
+                                      row.violatorUid ? "uid" : "guest"
+                                    }`}
                                   >
-                                    {row.violatorUid ?? row.guestId}
+                                    {row.violatorUid ? "Registered" : "Guest"}
                                   </span>
                                 </div>
                               ) : row.violatorName ? (
