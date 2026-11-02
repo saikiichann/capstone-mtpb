@@ -496,7 +496,8 @@ export default function ReleaseLog() {
                                     Registered
                                   </span>
                                 )}
-                                {row.guestId && (
+                                {/* Registered wins: a linked account still has the enforcer's guest id */}
+                                {!row.violatorUid && row.guestId && (
                                   <span className="violator-tag guest">
                                     Guest
                                   </span>
