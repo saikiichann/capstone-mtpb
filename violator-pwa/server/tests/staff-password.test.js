@@ -108,7 +108,13 @@ describe('staff password: reset', () => {
     assert.equal(store.users.get('fin1').mustChangePassword, true)
     assert.equal(store.requests[0].status, 'done')
     assert.equal(store.audit[0].type, 'password-reset')
+    assert.equal(store.audit[0].ipAddress, '—', 'no address given: shown as a dash')
     assert.ok(!JSON.stringify(store.audit).includes(result.temporaryPassword), 'password never logged')
+  })
+
+  it('records the IT Admin\'s IP address in the audit log', async () => {
+    await service.reset({ caller: { uid: 'it1' }, uid: 'fin1', ip: '203.0.113.7' })
+    assert.equal(store.audit[0].ipAddress, '203.0.113.7')
   })
 
   it('refuses non-IT-Admins, inactive IT Admins, self-resets and unknown accounts', async () => {

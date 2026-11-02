@@ -41,7 +41,7 @@ export async function POST(request) {
     if (body.action === 'reset') {
       limit(resetLimiter, request)
       const caller = await requireStaffToken(request, auth)
-      return json(200, await service.reset({ caller, uid: body.uid }), headers)
+      return json(200, await service.reset({ caller, uid: body.uid, ip: clientIp(request) }), headers)
     }
     return json(400, { error: 'Unknown request.' }, headers)
   } catch (err) {
