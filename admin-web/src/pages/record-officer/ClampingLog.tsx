@@ -1,13 +1,21 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+/* ------------------------------------------------------------------
+   RECORD OFFICER — Clamping Log (/record-officer/clamping)
+
+   Monitoring lang. Same content as OIC/Supervisor Clamping Log, pero:
+     - Sidebar para sa Record Officer (All Violations, Clamping Log,
+       Impounding Log, Release Log, Reports)
+     - Walang Payment/Finance group
+   CLAMP is separate from IMPOUND. ₱900 within 24 hours, ₱2,000 after
+   (fixed, hindi na tumataas). NANANATILING NAKA-CLAMP.
+   Styles: ./ClampingLog.css
+------------------------------------------------------------------ */
+import { useState, useEffect, useMemo } from "react";
 import {
-  KeyRound,
   Search,
   ChevronDown,
   ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+  ChevronRight } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
@@ -15,16 +23,17 @@ import {
   onSnapshot,
   query,
   where,
-  writeBatch,
-  serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./ClampingLog.css";
+import {
+  CLAMP_OVERDUE_FEE,
+  amountDueFor,
+  graceHoursLeft,
+  isClampOverdue,
+} from "../../lib/clampFee";
 
-// Asset imports
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
 import allViolationsIcon from "../../assets/allviolations.png";
 import clampingIcon from "../../assets/clamping.png";
@@ -32,11 +41,12 @@ import impoundingLogIcon from "../../assets/impounding.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
-import logoutIcon from "../../assets/logout.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
-// ---------------------------------------------------------------------------
-// TYPES
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   TYPES
+------------------------------------------------------------------ */
 type RoleSlug =
   | "oic"
   | "it-admin"
@@ -47,14 +57,11 @@ type RoleSlug =
   | "clamping-staff"
   | "impounding-staff";
 
-type CurrentUser = {
-  name: string;
-  role: RoleSlug;
-};
+type CurrentUser = { name: string; role: RoleSlug };
 
-type ClampStatus = "Clamped" | "Released";
+type LogStatus = "Clamped" | "Removed";
 
-type ClampingRow = {
+type ClampLogRow = {
   id: string;
   reference: string | null;
   cin: string;
@@ -63,36 +70,21 @@ type ClampingRow = {
   location: string;
   officer: string;
   recordedAt: Timestamp | null;
-  status: ClampStatus;
-  /** True once "Subject to Impound" has been set (auto or manual). */
-  alreadyFlagged: boolean;
-  /** True kapag auto-flagged ng system (24hr expired). */
-  autoFlagged: boolean;
-  /** The impound status field from Firestore. */
-  impoundStatus: string | null;
-  /** Hours since clamping. */
-  hoursSinceClamp: number;
+  status: LogStatus;
+  amountDue: number;
+  overdue: boolean;
+  paid: boolean;
+  graceLeft: number;
 };
 
-type NavItem = {
-  label: string;
-  icon: string;
-  path: string;
-  active?: boolean;
-};
+type NavItem = { label: string; icon: string; path: string; active?: boolean };
+type NavGroup = { label: string; items: NavItem[] };
 
-type NavGroup = {
-  label: string;
-  items: NavItem[];
-};
-
-// ---------------------------------------------------------------------------
-// CONSTANTS
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   CONSTANTS
+------------------------------------------------------------------ */
 const ITEMS_PER_PAGE = 10;
 const ALL_VIOLATIONS = "All Violations";
-const GRACE_PERIOD_HOURS = 24;
-const IMPOUND_FEE = 2000;
 
 const MASTER_VIOLATIONS = [
   "Illegal Parking",
@@ -113,16 +105,6 @@ const MASTER_VIOLATIONS = [
   "Double Parking",
 ];
 
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer in Charge",
-  "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  "finance": "Finance Staff",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -171,14 +153,13 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// HELPERS
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   HELPERS
+------------------------------------------------------------------ */
 const formatDateTime = (ts: Timestamp | null): string => {
   if (!ts) return "—";
   try {
-    const date = ts.toDate();
-    return date.toLocaleString("en-US", {
+    return ts.toDate().toLocaleString("en-US", {
       month: "short",
       day: "numeric",
       hour: "numeric",
@@ -192,18 +173,6 @@ const formatDateTime = (ts: Timestamp | null): string => {
 const millis = (ts: Timestamp | null): number => {
   try {
     return ts ? ts.toMillis() : 0;
-  } catch {
-    return 0;
-  }
-};
-
-/**
- * Computes hours elapsed since the vehicle was clamped.
- */
-const computeHoursSinceClamp = (ts: Timestamp | null): number => {
-  if (!ts) return 0;
-  try {
-    return (Date.now() - ts.toDate().getTime()) / (1000 * 60 * 60);
   } catch {
     return 0;
   }
@@ -246,35 +215,27 @@ const normalizeViolationType = (raw: unknown): string => {
     .join(" ");
 };
 
-const deriveStatus = (releaseStatus: unknown): ClampStatus =>
-  releaseStatus === "Released" ? "Released" : "Clamped";
+const deriveLogStatus = (releaseStatus: unknown): LogStatus =>
+  releaseStatus === "Released" ? "Removed" : "Clamped";
 
-const getStatusClass = (status: ClampStatus): string =>
-  status === "Released" ? "status-released-clamp" : "status-active-clamp";
+/* ------------------------------------------------------------------
+   COMPONENT
+------------------------------------------------------------------ */
+export default function RecordOfficerClampingLog() {
 
-// ---------------------------------------------------------------------------
-// COMPONENT
-// ---------------------------------------------------------------------------
-export default function ClampingLog() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
-
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
+  const [, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "record-officer",
   });
 
-  const [rows, setRows] = useState<ClampingRow[]>([]);
+  const [rows, setRows] = useState<ClampLogRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [violationFilter, setViolationFilter] = useState(ALL_VIOLATIONS);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Fetch current user
-  // -----------------------------------------------------------------------
+  /* Current user */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
       if (!loggedUser) {
@@ -282,30 +243,22 @@ export default function ClampingLog() {
         return;
       }
       try {
-        const userDocRef = doc(db, "users", loggedUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const data = userDocSnap.data();
+        const snap = await getDoc(doc(db, "users", loggedUser.uid));
+        if (snap.exists()) {
+          const data = snap.data();
           setCurrentUser({
             name: data.name ?? "Unknown",
             role: (data.role ?? "record-officer") as RoleSlug,
           });
-        } else {
-          setCurrentUser({
-            name: loggedUser.email?.split("@")[0] ?? "Unknown",
-            role: "record-officer",
-          });
         }
       } catch (err) {
-        console.error("Error fetching current user:", err);
+        console.error("Failed to load current user:", err);
       }
     });
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // EFFECT: Fetch clamping records
-  // -----------------------------------------------------------------------
+  /* Fetch clamping records */
   useEffect(() => {
     const q = query(
       collection(db, "violations"),
@@ -315,11 +268,11 @@ export default function ClampingLog() {
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        const fetched: ClampingRow[] = snap.docs
+        const fetched: ClampLogRow[] = snap.docs
           .map((d) => {
             const data = d.data();
             const recordedAt = (data.recordedAt as Timestamp) ?? null;
-            const hoursSinceClamp = computeHoursSinceClamp(recordedAt);
+            const releaseStatus = data.releaseStatus;
 
             return {
               id: d.id,
@@ -333,11 +286,13 @@ export default function ClampingLog() {
               location: data.location ?? "—",
               officer: data.officer ?? "—",
               recordedAt,
-              status: deriveStatus(data.releaseStatus),
-              alreadyFlagged: data.impoundStatus === "Subject to Impound",
-              autoFlagged: data.impoundAutoFlagged ?? false,
-              impoundStatus: data.impoundStatus ?? null,
-              hoursSinceClamp,
+              status: deriveLogStatus(releaseStatus),
+              amountDue: amountDueFor(data),
+              overdue: isClampOverdue(data),
+              paid: ["verified", "pending verification"].includes(
+                String(data.paymentStatus ?? "").toLowerCase()
+              ),
+              graceLeft: graceHoursLeft(data),
             };
           })
           .sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
@@ -352,114 +307,6 @@ export default function ClampingLog() {
     );
     return () => unsubscribe();
   }, []);
-
-  // -----------------------------------------------------------------------
-  // AUTO-FLAG OVERDUE VIOLATIONS (Client-Side)
-  //
-  // Runs on every page load. Finds clamped violations that have exceeded
-  // the 24-hour grace period and auto-flags them as "Subject to Impound"
-  // with a fixed impound fee of ₱2,000.
-  // -----------------------------------------------------------------------
-  useEffect(() => {
-    if (loading || rows.length === 0) return;
-
-    const autoFlagOverdue = async () => {
-      const overdueRows = rows.filter(
-        (row) =>
-          row.status === "Clamped" &&
-          row.hoursSinceClamp >= GRACE_PERIOD_HOURS &&
-          row.impoundStatus !== "Subject to Impound" &&
-          row.impoundStatus !== "Impounded"
-      );
-
-      if (overdueRows.length === 0) return;
-
-      console.log(
-        `[auto-flag] Found ${overdueRows.length} overdue clamped violation(s) to flag`
-      );
-
-      try {
-        const batch = writeBatch(db);
-
-        overdueRows.forEach((row) => {
-          const violationRef = doc(db, "violations", row.id);
-          const auditRef = doc(collection(db, "auditLogs"));
-
-          batch.update(violationRef, {
-            impoundStatus: "Subject to Impound",
-            impoundFlaggedAt: serverTimestamp(),
-            impoundFlaggedBy: "system",
-            impoundFlaggedByRole: "system",
-            impoundAutoFlagged: true,
-            impoundFee: IMPOUND_FEE,
-            updatedAt: serverTimestamp(),
-            updatedBy: "system",
-          });
-
-          batch.set(auditRef, {
-            userName: "System",
-            userRole: "system",
-            action: `auto-flagged violation ${row.cin} as Subject to Impound (24hr grace period expired)`,
-            record: row.cin,
-            type: "impound-flag-auto",
-            metadata: {
-              cin: row.cin,
-              plateNo: row.plateNo,
-              hoursSinceClamp: Math.round(row.hoursSinceClamp),
-              impoundFee: IMPOUND_FEE,
-              method: "client-side",
-            },
-            timestamp: serverTimestamp(),
-          });
-        });
-
-        await batch.commit();
-        console.log(
-          `[auto-flag] Successfully flagged ${overdueRows.length} violation(s)`
-        );
-      } catch (err) {
-        console.error("[auto-flag] Failed to flag overdue violations:", err);
-      }
-    };
-
-    autoFlagOverdue();
-  }, [loading, rows]);
-
-  // -----------------------------------------------------------------------
-  // EFFECT: Click-outside for dropdown
-  // -----------------------------------------------------------------------
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // -----------------------------------------------------------------------
-  // HANDLERS
-  // -----------------------------------------------------------------------
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/");
-    }
-  };
-
-  const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
-    setIsMenuOpen(false);
-  };
 
   const violationOptions = useMemo(() => {
     const unique = new Set<string>(MASTER_VIOLATIONS);
@@ -496,51 +343,23 @@ export default function ClampingLog() {
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
   const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  useEffect(() => {
+  // Back to page 1 when these change (during render, not in an effect)
+  const pageResetKey = JSON.stringify([searchQuery, violationFilter]);
+  const [prevPageResetKey, setPrevPageResetKey] = useState(pageResetKey);
+  if (pageResetKey !== prevPageResetKey) {
+    setPrevPageResetKey(pageResetKey);
     setCurrentPage(1);
-  }, [searchQuery, violationFilter]);
+  }
 
-  // -----------------------------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------------------------
   return (
-    <div className="record-page">
+    <div className="record-page clamping-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Record Officer</p>
-            </div>
-          </div>
+        <AppSidebar groups={NAV_GROUPS} role={<>Record Officer</>} />
 
-          <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${item.active ? "nav-item-active" : ""}`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
-
-        {/* MAIN CONTENT */}
+        {/* MAIN */}
         <div className="main">
+          <AppTopbar groups={NAV_GROUPS} />
           <header className="main-header">
             <div>
               <h1>Clamping Log</h1>
@@ -553,38 +372,11 @@ export default function ClampingLog() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={officerAvatar}
-                alt="Officer Profile"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button className="dropdown-item" onClick={handleChangePassword}>
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button className="dropdown-item logout" onClick={handleLogout}>
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
-          <main className="main-content">
+          <main className="main-content clamping-body">
             {/* SEARCH + FILTER */}
-            <div className="search-filter-row">
+            <div className="clamping-toolbar">
               <div className="search-bar-container">
                 <Search size={18} className="search-bar-icon" />
                 <input
@@ -613,16 +405,17 @@ export default function ClampingLog() {
               </div>
             </div>
 
-            <div className="card">
+            {/* TABLE */}
+            <div className="card clamping-card">
               <div className="log-header">
-                <p className="card-eyebrow">Sector 3</p>
+                <div>
+                  <p className="card-eyebrow">Sector 3</p>
+                  <h2 className="card-title">Clamping Log</h2>
+                </div>
                 <div className="log-header-meta">
-                  Active clamps: {activeClamps} total
+                  Active clamps: <strong>{activeClamps}</strong> total
                 </div>
               </div>
-              <h2 className="card-title" style={{ marginBottom: 16 }}>
-                Clamping Log
-              </h2>
 
               {loading ? (
                 <div className="table-loading">
@@ -637,7 +430,7 @@ export default function ClampingLog() {
                   </p>
                 </div>
               ) : (
-                <div className="table-wrapper">
+                <div className="clamping-table-wrap" tabIndex={0} role="region" aria-label="Clamping log table" data-scroll-region>
                   <table className="data-table">
                     <thead>
                       <tr>
@@ -649,67 +442,54 @@ export default function ClampingLog() {
                         <th>Clamped by</th>
                         <th>Time</th>
                         <th>Status</th>
-                        <th>Impound</th>
+                        <th>Fee</th>
                       </tr>
                     </thead>
                     <tbody>
                       {paginatedRows.map((row) => (
                         <tr key={row.id}>
-                          <td className="cell-reference">
-                            {row.reference ?? "—"}
-                          </td>
+                          <td className="cell-reference">{row.reference ?? "—"}</td>
                           <td>
                             <span className="cin-pill">{row.cin}</span>
                           </td>
                           <td className="cell-plate">{row.plateNo}</td>
                           <td className="cell-violation">{row.violation}</td>
                           <td className="cell-location">{row.location}</td>
-                          <td className="cell-clamped-by">{row.officer}</td>
-                          <td className="cell-datetime">
-                            {formatDateTime(row.recordedAt)}
-                          </td>
+                          <td className="cell-officer">{row.officer}</td>
+                          <td className="cell-time">{formatDateTime(row.recordedAt)}</td>
                           <td>
                             <span
-                              className={`status-pill ${getStatusClass(
-                                row.status
-                              )}`}
+                              className={`status-pill ${
+                                row.status === "Clamped"
+                                  ? "status-clamped"
+                                  : "status-removed"
+                              }`}
                             >
                               {row.status}
                             </span>
                           </td>
                           <td>
-                            {/* AUTO-FLAG INDICATOR */}
-                            {row.status === "Clamped" &&
-                              row.hoursSinceClamp < GRACE_PERIOD_HOURS &&
-                              row.impoundStatus !== "Subject to Impound" &&
-                              row.impoundStatus !== "Impounded" && (
-                                <span className="impound-pending">
-                                  Within {GRACE_PERIOD_HOURS}hr grace
-                                </span>
-                              )}
-
-                            {row.impoundStatus === "Subject to Impound" && (
+                            {/* ₱900 within 24 hours, ₱2,000 after — stays clamped (lib/clampFee.ts) */}
+                            {row.status !== "Removed" && row.paid && (
+                              <span className="badge-paid" title="Payment recorded">
+                                Paid · ₱{row.amountDue.toLocaleString()}
+                              </span>
+                            )}
+                            {row.status !== "Removed" && !row.paid && row.overdue && (
                               <span
-                                className={`badge-impound ${
-                                  row.autoFlagged ? "badge-impound-auto" : ""
-                                }`}
-                                title={
-                                  row.autoFlagged
-                                    ? "Auto-flagged by system (24hr grace period expired)"
-                                    : "Flagged as Subject to Impound"
-                                }
+                                className="badge-overdue"
+                                title="Past the 24-hour grace period: the fee is now a fixed ₱2,000 (replaces the fine). The vehicle stays clamped."
                               >
-                                {row.autoFlagged
-                                  ? `🤖 Auto-flagged (₱${IMPOUND_FEE.toLocaleString()})`
-                                  : `Subject to Impound (₱${IMPOUND_FEE.toLocaleString()})`}
+                                Overdue · ₱{CLAMP_OVERDUE_FEE.toLocaleString()}
+                              </span>
+                            )}
+                            {row.status !== "Removed" && !row.paid && !row.overdue && (
+                              <span className="fee-pending" title="Within the 24-hour grace period">
+                                ₱{row.amountDue.toLocaleString()} · {Math.max(1, Math.ceil(row.graceLeft))}h left
                               </span>
                             )}
 
-                            {row.impoundStatus === "Impounded" && (
-                              <span className="badge-impounded">Impounded</span>
-                            )}
-
-                            {row.status === "Released" && (
+                            {row.status === "Removed" && (
                               <span className="action-placeholder">—</span>
                             )}
                           </td>
@@ -741,9 +521,7 @@ export default function ClampingLog() {
                   <button
                     type="button"
                     className="pagination-btn"
-                    onClick={() =>
-                      setCurrentPage((p) => Math.min(totalPages, p + 1))
-                    }
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                     disabled={safePage === totalPages}
                   >
                     Next
@@ -755,6 +533,7 @@ export default function ClampingLog() {
           </main>
         </div>
       </div>
+
     </div>
   );
 }

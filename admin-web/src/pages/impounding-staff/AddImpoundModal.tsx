@@ -1,50 +1,110 @@
-import { useState } from "react";
-import { X, AlertCircle } from "lucide-react";
+import { useMemo, useState } from "react";
+import { X, AlertCircle, Lock } from "lucide-react";
 import {
   addDoc,
   collection,
+  doc,
+  getDocs,
+  limit,
+  query,
   serverTimestamp,
   Timestamp,
+  where,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../../firebase";
+import {
+  computeImpoundFee,
+  IMPOUND_BASE_FEES,
+  IMPOUND_FREE_KM,
+  IMPOUND_PER_KM_FEE,
+  WEIGHT_CLASS_LABELS,
+  weightClassFromVehicleType,
+  type VehicleWeightClass,
+  type ImpoundStatus,
+} from "../../lib/impoundFlag";
+import { clientIp } from "../../lib/staffSession";
 
-export type PrefillData = {
-  sourceViolationId?: string;
-  cin?: string;
-  plateNo?: string;
-  color?: string;
-  vehicleType?: string;
-  location?: string;
-  violatorName?: string;
-  contactNo?: string;
-  initialViolation?: string;
-  clampedAt?: Timestamp | null;
-  clampedBy?: string;
-};
-
+/* ------------------------------------------------------------------
+   TYPES
+------------------------------------------------------------------ */
 type AddImpoundModalProps = {
   onClose: () => void;
   onSaved: () => void;
   currentUserName: string;
-  prefill?: PrefillData;
 };
 
 type FormState = {
-  violatorName: string;
-  contactNo: string;
+  // UOVR / Ticket
+  uovrNo: string;
+  aorNo: string;
+  ticketDate: string;      // datetime-local
+  ticketTimeStarted: string;
+  ticketTimeFinished: string;
+  street: string;
+  cityMun: string;
+
+  // Driver
+  lastName: string;
+  firstName: string;
+  middleName: string;
+  dateOfBirth: string;     // date
+  address: string;
+  licenseNo: string;
+
+  // Vehicle
+  plateNo: string;
+  mvFile: string;
+  vehicleType: string;
+  color: string;
+  vehicleOwner: string;
+  vehicleOwnerAddress: string;
+
+  // Violation
   initialViolation: string;
   impoundViolations: string[];
-  plateNo: string;
-  color: string;
-  vehicleType: string;
-  place: string;
-  ticketDate: string;
-  turnOverBy: string;
+
+  // Apprehension
+  apprehendingOfficer: string;
+  deputationNo: string;
+
+  // Confiscation flags
+  dlConfiscated: boolean;
+  plateConfiscated: boolean;
+  towed: boolean;
+  impounded: boolean;
+
+  // Impound location + fee
+  impoundLocation: string;
+  distanceKm: string;
+
+  // Turn-over
   receivedBy: string;
-  orNumber: string;
-  cin: string;
-  status: string;
+
+  // System
+  status: ImpoundStatus;
 };
+
+/* ------------------------------------------------------------------
+   CONSTANTS
+------------------------------------------------------------------ */
+const VEHICLE_TYPES = [
+  { code: "01", label: "PUB" },
+  { code: "02", label: "PUJ" },
+  { code: "03", label: "CAR" },
+  { code: "04", label: "MOTORCYCLE" },
+  { code: "05", label: "TAXI" },
+  { code: "06", label: "TRAILER" },
+  { code: "07", label: "TRICYCLE" },
+  { code: "08", label: "VAN" },
+  { code: "09", label: "TRUCK" },
+  { code: "10", label: "OTHERS" },
+];
+
+const COLOR_OPTIONS = [
+  "Black", "White", "Silver", "Gray", "Red", "Blue", "Green",
+  "Yellow", "Orange", "Brown", "Maroon", "Beige", "Gold", "Other",
+];
 
 const IMPOUND_VIOLATION_OPTIONS = [
   "Driving w/o License",
@@ -57,96 +117,129 @@ const IMPOUND_VIOLATION_OPTIONS = [
   "Tampered OR / CR (Pertaining to Date)",
   "Expired OR / Unregistered (No Chassis Number)",
   "Out of Route / Cutting Trip",
+  "No Helmet",
+  "Obstruction",
+  "Illegal Parking",
 ];
 
-const COLOR_OPTIONS = [
-  "Black",
-  "White",
-  "Silver",
-  "Gray",
-  "Red",
-  "Blue",
-  "Green",
-  "Yellow",
-  "Orange",
-  "Brown",
-  "Maroon",
-  "Beige",
-  "Gold",
-  "Other",
-];
+const STATUS_OPTIONS: ImpoundStatus[] = ["Impounded", "Released"];
 
-const VEHICLE_TYPE_OPTIONS = [
-  "Sedan",
-  "SUV",
-  "Hatchback",
-  "Pickup",
-  "Van",
-  "Motorcycle",
-  "Truck",
-  "Bus",
-  "Jeepney",
-  "Tricycle",
-  "Other",
-];
+const UOVR_REGEX = /^[A-Z]{1,3}-\d{6,8}$/;
 
-const STATUS_OPTIONS = ["Impounded", "Released"];
-
-function formatPHMobileInput(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
-  if (digits.length <= 4) return digits;
-  if (digits.length <= 7) return `${digits.slice(0, 4)} ${digits.slice(4)}`;
-  return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+/* ------------------------------------------------------------------
+   HELPERS
+------------------------------------------------------------------ */
+function formatPlateInput(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9- ]/g, "").slice(0, 12);
 }
 
-function timestampToLocalInput(ts: Timestamp | null | undefined): string {
-  if (!ts) return "";
-  try {
-    const d = ts.toDate();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-      d.getHours()
-    )}:${pad(d.getMinutes())}`;
-  } catch {
-    return "";
-  }
+/** Generate CIN: IMP-YYYY-#### */
+async function generateImpoundCIN(): Promise<string> {
+  const year = new Date().getFullYear();
+  const prefix = `IMP-${year}-`;
+
+  const q = query(
+    collection(db, "violations"),
+    where("cin", ">=", `${prefix}0000`),
+    where("cin", "<=", `${prefix}9999`),
+    limit(1000)
+  );
+  const snap = await getDocs(q);
+
+  let maxSeq = 0;
+  snap.docs.forEach((d) => {
+    const cin = String(d.data().cin ?? "");
+    const m = cin.match(/^IMP-\d{4}-(\d{4})$/);
+    if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+  });
+
+  return `${prefix}${String(maxSeq + 1).padStart(4, "0")}`;
 }
 
+/* ------------------------------------------------------------------
+   COMPONENT
+------------------------------------------------------------------ */
 export default function AddImpoundModal({
   onClose,
   onSaved,
   currentUserName,
-  prefill,
 }: AddImpoundModalProps) {
   const [form, setForm] = useState<FormState>({
-    violatorName: prefill?.violatorName ?? "",
-    contactNo: prefill?.contactNo ?? "",
-    initialViolation: prefill?.initialViolation ?? "",
+    uovrNo: "",
+    aorNo: "",
+    ticketDate: "",
+    ticketTimeStarted: "",
+    ticketTimeFinished: "",
+    street: "",
+    cityMun: "",
+
+    lastName: "",
+    firstName: "",
+    middleName: "",
+    dateOfBirth: "",
+    address: "",
+    licenseNo: "",
+
+    plateNo: "",
+    mvFile: "",
+    vehicleType: "",
+    color: "",
+    vehicleOwner: "",
+    vehicleOwnerAddress: "",
+
+    initialViolation: "",
     impoundViolations: [],
-    plateNo: prefill?.plateNo ?? "",
-    color: prefill?.color ?? "",
-    vehicleType: prefill?.vehicleType ?? "",
-    place: prefill?.location ?? "",
-    ticketDate: timestampToLocalInput(prefill?.clampedAt),
-    turnOverBy: prefill?.clampedBy ?? "",
+
+    apprehendingOfficer: "",
+    deputationNo: "",
+
+    dlConfiscated: false,
+    plateConfiscated: false,
+    towed: true,
+    impounded: true,
+
+    impoundLocation: "",
+    distanceKm: "",
+
     receivedBy: currentUserName || "",
-    orNumber: "",
-    cin: prefill?.cin ?? "",
+
     status: "Impounded",
   });
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [uovrWarning, setUovrWarning] = useState("");
 
+  /* ---------------- DERIVED ---------------- */
+  const weightClass: VehicleWeightClass = useMemo(
+    () => weightClassFromVehicleType(form.vehicleType),
+    [form.vehicleType]
+  );
+
+  const distanceNum = Number(form.distanceKm) || 0;
+
+  const impoundFee = useMemo(
+    () => computeImpoundFee(weightClass, distanceNum),
+    [weightClass, distanceNum]
+  );
+
+  const baseFee = IMPOUND_BASE_FEES[weightClass];
+  const extraKm = Math.max(0, distanceNum - IMPOUND_FREE_KM);
+  const extraFee = extraKm * IMPOUND_PER_KM_FEE;
+
+  /* ---------------- HANDLERS ---------------- */
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleContactChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatPHMobileInput(e.target.value);
-    setForm((prev) => ({ ...prev, contactNo: formatted }));
+    const { name, value, type } = e.target;
+    if (type === "checkbox") {
+      const checked = (e.target as HTMLInputElement).checked;
+      setForm((prev) => ({ ...prev, [name]: checked }));
+    } else {
+      setForm((prev) => ({ ...prev, [name]: value }));
+    }
+    if (error) setError("");
+    if (name === "uovrNo") setUovrWarning("");
   };
 
   const handleViolationToggle = (violation: string) => {
@@ -158,61 +251,267 @@ export default function AddImpoundModal({
     }));
   };
 
+  /** Live UOVR duplicate check kapag umalis sa field. */
+  const checkUovrDuplicate = async () => {
+    const uovr = form.uovrNo.trim().toUpperCase();
+    if (!uovr) {
+      setUovrWarning("");
+      return;
+    }
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, "impoundRecords"),
+          where("uovrNo", "==", uovr),
+          limit(1)
+        )
+      );
+      if (!snap.empty) {
+        setUovrWarning(`UOVR "${uovr}" already exists in the system.`);
+      } else {
+        setUovrWarning("");
+      }
+    } catch (err) {
+      console.warn("UOVR duplicate check failed:", err);
+    }
+  };
+
+  /* ---------------- VALIDATION ---------------- */
+  const validate = (): string | null => {
+    if (!form.uovrNo.trim()) return "UOVR No. is required.";
+    if (!UOVR_REGEX.test(form.uovrNo.trim().toUpperCase()))
+      return "UOVR No. format is invalid (e.g., ML-0267990).";
+    if (!form.ticketDate) return "Date of apprehension is required.";
+    if (!form.street.trim()) return "Street is required.";
+    if (!form.cityMun.trim()) return "City/Municipality is required.";
+
+    if (!form.lastName.trim()) return "Last Name is required.";
+    if (!form.firstName.trim()) return "First Name is required.";
+    if (!form.dateOfBirth) return "Date of Birth is required.";
+    if (!form.address.trim()) return "Address is required.";
+    if (!form.licenseNo.trim()) return "License Number is required.";
+
+    if (!form.plateNo.trim()) return "Plate Number is required.";
+    if (!form.vehicleType) return "Vehicle Type is required.";
+    if (!form.vehicleOwner.trim()) return "Vehicle Owner is required.";
+    if (!form.vehicleOwnerAddress.trim())
+      return "Vehicle Owner Address is required.";
+
+    if (!form.initialViolation.trim()) return "Initial Violation is required.";
+    if (form.impoundViolations.length === 0)
+      return "Select at least one violation subject for impounding.";
+
+    if (!form.apprehendingOfficer.trim())
+      return "Apprehending Officer is required.";
+
+    if (!form.impoundLocation.trim()) return "Impound Location is required.";
+    if (!form.distanceKm || distanceNum < 0)
+      return "Distance (km) is required.";
+
+    if (!form.receivedBy.trim()) return "Received By is required.";
+
+    return null;
+  };
+
+  /* ---------------- SUBMIT ---------------- */
   const handleSubmit = async () => {
     setError("");
-
-    if (!form.cin.trim()) {
-      setError("CIN is required.");
-      return;
-    }
-    if (!form.plateNo.trim()) {
-      setError("Plate number is required.");
-      return;
-    }
-    if (!form.ticketDate) {
-      setError("Date & time is required.");
+    const validationError = validate();
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
     setSaving(true);
     try {
-      const ticketDate = new Date(form.ticketDate);
-      if (isNaN(ticketDate.getTime())) {
-        throw new Error("Invalid date format.");
+      const uovr = form.uovrNo.trim().toUpperCase();
+
+      // Duplicate check (final)
+      const dupSnap = await getDocs(
+        query(
+          collection(db, "impoundRecords"),
+          where("uovrNo", "==", uovr),
+          limit(1)
+        )
+      );
+      if (!dupSnap.empty) {
+        setError(`UOVR "${uovr}" already exists. Cannot save duplicate.`);
+        setSaving(false);
+        return;
       }
 
-      await addDoc(collection(db, "impoundRecords"), {
-        sourceViolationId: prefill?.sourceViolationId ?? null,
-        cin: form.cin.trim(),
+      // Auto-generate CIN
+      const cin = await generateImpoundCIN();
+
+      // Full name
+      const fullName = [form.firstName, form.middleName, form.lastName]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(" ");
+
+      // Ticket datetime
+      let ticketDate: Timestamp | null = null;
+      if (form.ticketDate) {
+        const d = new Date(form.ticketDate);
+        if (!isNaN(d.getTime())) ticketDate = Timestamp.fromDate(d);
+      }
+
+      const docData = {
+        // Identifiers
+        uovrNo: uovr,
+        cin,
         referenceNumber: null,
-        violatorName: form.violatorName.trim() || "—",
-        contactNo: form.contactNo.trim() || "—",
-        initialViolation: form.initialViolation.trim() || "—",
+
+        // Ticket
+        aorNo: form.aorNo.trim() || null,
+        ticketDate,
+        ticketTimeStarted: form.ticketTimeStarted || null,
+        ticketTimeFinished: form.ticketTimeFinished || null,
+        street: form.street.trim(),
+        cityMun: form.cityMun.trim(),
+
+        // Driver
+        violatorName: fullName,
+        lastName: form.lastName.trim(),
+        firstName: form.firstName.trim(),
+        middleName: form.middleName.trim() || null,
+        dateOfBirth: form.dateOfBirth,
+        contactNo: null, // UOVR doesn't have contact; pwede i-add sa Edit
+        address: form.address.trim(),
+        licenseNo: form.licenseNo.trim().toUpperCase(),
+
+        // Vehicle
+        plateNo: formatPlateInput(form.plateNo),
+        mvFile: form.mvFile.trim() || null,
+        vehicleType: form.vehicleType,
+        color: form.color.trim() || null,
+        vehicleOwner: form.vehicleOwner.trim(),
+        vehicleOwnerAddress: form.vehicleOwnerAddress.trim(),
+
+        // Violation
+        initialViolation: form.initialViolation.trim(),
         impoundViolations: form.impoundViolations,
-        plateNo: form.plateNo.trim().toUpperCase(),
-        color: form.color.trim() || "—",
-        vehicleType: form.vehicleType.trim() || "—",
-        location: form.place.trim() || "—",
-        clampedAt: Timestamp.fromDate(ticketDate),
-        clampedBy: form.turnOverBy.trim() || "—",
-        receivedBy: form.receivedBy.trim() || currentUserName,
-        orNumber: form.orNumber.trim() || "—",
+
+        // Apprehension
+        apprehendingOfficer: form.apprehendingOfficer.trim(),
+        deputationNo: form.deputationNo.trim() || null,
+
+        // Confiscation
+        dlConfiscated: form.dlConfiscated,
+        plateConfiscated: form.plateConfiscated,
+        towed: form.towed,
+        impounded: form.impounded,
+
+        // Location + fee
+        location: form.impoundLocation.trim(),
+        distanceKm: distanceNum,
+        weightClass,
+        impoundFee,
+        baseFee,
+        extraKm,
+        extraFee,
+
+        // Petsa ng impound — binabasa ito ng Impounding Log / Active
+        // Impounding / Homepage (dati walang laman, kaya "—" ang petsa).
+        clampedAt: ticketDate ?? serverTimestamp(),
+
+        // Turn-over
+        clampedBy: form.apprehendingOfficer.trim(),
+        receivedBy: form.receivedBy.trim(),
+
+        // Status
         status: form.status,
+
+        // Meta
         createdBy: currentUserName,
         createdAt: serverTimestamp(),
         updatedBy: currentUserName,
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      // Impounded → may kasabay na violation (Unpaid) para lumabas sa
+      // Pending Payments. Isang batch: sabay na masusulat o wala pareho.
+      const batch = writeBatch(db);
+      const recordRef = doc(collection(db, "impoundRecords"));
+      if (form.status === "Impounded") {
+        const violationRef = doc(collection(db, "violations"));
+        const place = [form.street.trim(), form.cityMun.trim()].filter(Boolean).join(", ");
+        batch.set(violationRef, {
+          cin,
+          uovrNo: uovr,
+          plateNo: docData.plateNo,
+          vehicleType: form.vehicleType,
+          vehicleColor: docData.color,
+          violationType: docData.initialViolation,
+          impoundViolations: form.impoundViolations,
+          enforcementType: "impounded",
+          clampId: null,
+
+          // Lugar ng huli (ticket) at impound lot
+          location: place || docData.location,
+          impoundLocation: docData.location,
+          sectorId: "sector-3",
+
+          officer: docData.apprehendingOfficer,
+          fineAmount: 0,
+
+          // Violator — "Registered" kapag active ang plate (lib/registeredOwners.ts)
+          violatorUid: null,
+          guestId: `guest_${docData.plateNo}`,
+          violatorName: fullName || null,
+
+          // Impound
+          impoundStatus: "Impounded",
+          impoundFee,
+          weightClass,
+          distanceKm: distanceNum,
+          impoundRecordId: recordRef.id,
+
+          recordedAt: ticketDate ?? serverTimestamp(),
+          paymentStatus: "Unpaid",
+          releaseStatus: "Pending",
+          createdBy: currentUserName,
+          createdAt: serverTimestamp(),
+        });
+        batch.set(recordRef, { ...docData, sourceViolationId: violationRef.id });
+      } else {
+        batch.set(recordRef, docData);
+      }
+      await batch.commit();
+
+      // Audit log (best effort)
+      try {
+        await addDoc(collection(db, "auditLogs"), {
+          userName: currentUserName,
+          userRole: "impounding-staff",
+          action: `recorded impound ${cin} (UOVR ${uovr}, fee ₱${impoundFee.toLocaleString()})`,
+          record: cin,
+          type: "impound-record",
+          metadata: {
+            uovrNo: uovr,
+            cin,
+            plateNo: docData.plateNo,
+            weightClass,
+            distanceKm: distanceNum,
+            impoundFee,
+          },
+          timestamp: serverTimestamp(),
+          ipAddress: clientIp(),
+        });
+      } catch (auditErr) {
+        console.warn("Audit log not written:", auditErr);
+      }
 
       onSaved();
       onClose();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Add impound record failed:", err);
-      setError(err.message || "Failed to save record.");
+      setError((err as Error)?.message || "Failed to save record.");
       setSaving(false);
     }
   };
 
+  /* ---------------- RENDER ---------------- */
   return (
     <div
       className="modal-overlay"
@@ -238,93 +537,292 @@ export default function AddImpoundModal({
         </div>
 
         <p className="modal-subtitle">
-          Copy the details from the MTPB paper ticket issued on-site.
+          Copy the details from the MTPB UOVR (Blue Ticket). All fields are
+          required unless stated otherwise.
         </p>
 
+        {/* ============ SECTION 1: UOVR ============ */}
+        <h4 className="form-section-title">UOVR / Ticket</h4>
+        <div className="modal-grid">
+          <div className="form-group">
+            <label htmlFor="uovrNo">
+              UOVR No. <span className="required">*</span>
+            </label>
+            <input
+              id="uovrNo"
+              name="uovrNo"
+              type="text"
+              className="form-input"
+              placeholder="ML-0267990"
+              value={form.uovrNo}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  uovrNo: e.target.value.toUpperCase(),
+                }))
+              }
+              onBlur={checkUovrDuplicate}
+              disabled={saving}
+            />
+            {uovrWarning && (
+              <small className="form-error">{uovrWarning}</small>
+            )}
+          </div>
+          <div className="form-group">
+            <label htmlFor="aorNo">
+              AOR No. <span className="required">*</span>
+            </label>
+            <input
+              id="aorNo"
+              name="aorNo"
+              type="text"
+              className="form-input"
+              placeholder="AOR-3901"
+              value={form.aorNo}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  aorNo: e.target.value.toUpperCase(),
+                }))
+              }
+              disabled={saving}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="ticketDate">
+              Date of Apprehension <span className="required">*</span>
+            </label>
+            <input
+              id="ticketDate"
+              name="ticketDate"
+              type="datetime-local"
+              className="form-input"
+              value={form.ticketDate}
+              onChange={handleChange}
+              disabled={saving}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="ticketTimeStarted">
+              Time Started <span className="required">*</span>
+            </label>
+            <input
+              id="ticketTimeStarted"
+              name="ticketTimeStarted"
+              type="time"
+              className="form-input"
+              value={form.ticketTimeStarted}
+              onChange={handleChange}
+              disabled={saving}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="ticketTimeFinished">
+              Time Finished <span className="required">*</span>
+            </label>
+            <input
+              id="ticketTimeFinished"
+              name="ticketTimeFinished"
+              type="time"
+              className="form-input"
+              value={form.ticketTimeFinished}
+              onChange={handleChange}
+              disabled={saving}
+            />
+          </div>
+          <div className="form-group form-group-full">
+            <label htmlFor="street">
+              Street <span className="required">*</span>
+            </label>
+            <input
+              id="street"
+              name="street"
+              type="text"
+              className="form-input"
+              placeholder="Cavite St"
+              value={form.street}
+              onChange={handleChange}
+              disabled={saving}
+            />
+          </div>
+          <div className="form-group form-group-full">
+            <label htmlFor="cityMun">
+              City / Municipality <span className="required">*</span>
+            </label>
+            <input
+              id="cityMun"
+              name="cityMun"
+              type="text"
+              className="form-input"
+              placeholder="Manila"
+              value={form.cityMun}
+              onChange={handleChange}
+              disabled={saving}
+            />
+          </div>
+        </div>
+
+        {/* ============ SECTION 2: DRIVER ============ */}
         <h4 className="form-section-title">Driver Information</h4>
         <div className="modal-grid">
           <div className="form-group">
-            <label htmlFor="violatorName">Name</label>
+            <label htmlFor="lastName">
+              Last Name <span className="required">*</span>
+            </label>
             <input
-              id="violatorName"
-              name="violatorName"
+              id="lastName"
+              name="lastName"
               type="text"
               className="form-input"
-              placeholder="Juan Dela Cruz"
-              value={form.violatorName}
+              placeholder="DIZON"
+              value={form.lastName}
               onChange={handleChange}
               disabled={saving}
             />
           </div>
           <div className="form-group">
-            <label htmlFor="contactNo">Contact No.</label>
+            <label htmlFor="firstName">
+              First Name <span className="required">*</span>
+            </label>
             <input
-              id="contactNo"
-              name="contactNo"
-              type="tel"
-              className="form-input"
-              placeholder="0917 123 4567"
-              value={form.contactNo}
-              onChange={handleContactChange}
-              disabled={saving}
-              maxLength={13}
-            />
-          </div>
-        </div>
-
-        <h4 className="form-section-title">Violation</h4>
-        <div className="modal-grid">
-          <div className="form-group form-group-full">
-            <label htmlFor="initialViolation">Initial Violation</label>
-            <input
-              id="initialViolation"
-              name="initialViolation"
+              id="firstName"
+              name="firstName"
               type="text"
               className="form-input"
-              placeholder="e.g. Illegal Parking"
-              value={form.initialViolation}
+              placeholder="FRANCISCO JR"
+              value={form.firstName}
               onChange={handleChange}
               disabled={saving}
             />
           </div>
-        </div>
-
-        <div className="form-group form-group-full">
-          <label>Violations Subject for Impounding</label>
-          <div className="checkbox-grid">
-            {IMPOUND_VIOLATION_OPTIONS.map((v) => (
-              <label key={v} className="checkbox-item">
-                <input
-                  type="checkbox"
-                  checked={form.impoundViolations.includes(v)}
-                  onChange={() => handleViolationToggle(v)}
-                  disabled={saving}
-                />
-                <span>{v}</span>
-              </label>
-            ))}
+          <div className="form-group">
+            <label htmlFor="middleName">
+              Middle Name <span className="required">*</span>
+            </label>
+            <input
+              id="middleName"
+              name="middleName"
+              type="text"
+              className="form-input"
+              placeholder="MENDOZA"
+              value={form.middleName}
+              onChange={handleChange}
+              disabled={saving}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="dateOfBirth">
+              Date of Birth <span className="required">*</span>
+            </label>
+            <input
+              id="dateOfBirth"
+              name="dateOfBirth"
+              type="date"
+              className="form-input"
+              value={form.dateOfBirth}
+              onChange={handleChange}
+              disabled={saving}
+            />
+          </div>
+          <div className="form-group form-group-full">
+            <label htmlFor="address">
+              Address <span className="required">*</span>
+            </label>
+            <input
+              id="address"
+              name="address"
+              type="text"
+              className="form-input"
+              placeholder="925 K-... St. Sampaloc, Manila"
+              value={form.address}
+              onChange={handleChange}
+              disabled={saving}
+            />
+          </div>
+          <div className="form-group form-group-full">
+            <label htmlFor="licenseNo">
+              License Number <span className="required">*</span>
+            </label>
+            <input
+              id="licenseNo"
+              name="licenseNo"
+              type="text"
+              className="form-input"
+              placeholder="N04-19-025074"
+              value={form.licenseNo}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  licenseNo: e.target.value.toUpperCase(),
+                }))
+              }
+              disabled={saving}
+            />
           </div>
         </div>
 
-        <h4 className="form-section-title">Vehicle</h4>
+        {/* ============ SECTION 3: VEHICLE ============ */}
+        <h4 className="form-section-title">Vehicle Information</h4>
         <div className="modal-grid">
           <div className="form-group">
             <label htmlFor="plateNo">
-              Plate No. <span className="required">*</span>
+              Plate Number <span className="required">*</span>
             </label>
             <input
               id="plateNo"
               name="plateNo"
               type="text"
               className="form-input"
-              placeholder="ABC 1234"
+              placeholder="FOR-R56"
               value={form.plateNo}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  plateNo: formatPlateInput(e.target.value),
+                }))
+              }
+              disabled={saving}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="mvFile">
+              MV File <span className="required">*</span>
+            </label>
+            <input
+              id="mvFile"
+              name="mvFile"
+              type="text"
+              className="form-input"
+              placeholder="MV File No."
+              value={form.mvFile}
               onChange={handleChange}
               disabled={saving}
             />
           </div>
           <div className="form-group">
-            <label htmlFor="color">Color</label>
+            <label htmlFor="vehicleType">
+              Vehicle Type <span className="required">*</span>
+            </label>
+            <select
+              id="vehicleType"
+              name="vehicleType"
+              className="form-select"
+              value={form.vehicleType}
+              onChange={handleChange}
+              disabled={saving}
+            >
+              <option value="">Select type...</option>
+              {VEHICLE_TYPES.map((v) => (
+                <option key={v.code} value={v.label}>
+                  {v.code} - {v.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="color">
+              Color <span className="required">*</span>
+            </label>
             <select
               id="color"
               name="color"
@@ -342,73 +840,231 @@ export default function AddImpoundModal({
             </select>
           </div>
           <div className="form-group form-group-full">
-            <label htmlFor="vehicleType">Type of Vehicle</label>
-            <select
-              id="vehicleType"
-              name="vehicleType"
-              className="form-select"
-              value={form.vehicleType}
-              onChange={handleChange}
-              disabled={saving}
-            >
-              <option value="">Select type...</option>
-              {VEHICLE_TYPE_OPTIONS.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <h4 className="form-section-title">Location &amp; Time</h4>
-        <div className="modal-grid">
-          <div className="form-group form-group-full">
-            <label htmlFor="place">Place</label>
-            <input
-              id="place"
-              name="place"
-              type="text"
-              className="form-input"
-              placeholder="Recto Ave. Manila"
-              value={form.place}
-              onChange={handleChange}
-              disabled={saving}
-            />
-          </div>
-          <div className="form-group form-group-full">
-            <label htmlFor="ticketDate">
-              Date &amp; Time <span className="required">*</span>
+            <label htmlFor="vehicleOwner">
+              Vehicle Owner <span className="required">*</span>
             </label>
             <input
-              id="ticketDate"
-              name="ticketDate"
-              type="datetime-local"
+              id="vehicleOwner"
+              name="vehicleOwner"
+              type="text"
               className="form-input"
-              value={form.ticketDate}
+              placeholder="Full name of owner"
+              value={form.vehicleOwner}
+              onChange={handleChange}
+              disabled={saving}
+            />
+          </div>
+          <div className="form-group form-group-full">
+            <label htmlFor="vehicleOwnerAddress">
+              Address of Vehicle Owner <span className="required">*</span>
+            </label>
+            <input
+              id="vehicleOwnerAddress"
+              name="vehicleOwnerAddress"
+              type="text"
+              className="form-input"
+              placeholder="Complete address"
+              value={form.vehicleOwnerAddress}
               onChange={handleChange}
               disabled={saving}
             />
           </div>
         </div>
 
-        <h4 className="form-section-title">Turn-over &amp; Receipt</h4>
+        {/* ============ SECTION 4: VIOLATION ============ */}
+        <h4 className="form-section-title">Violation</h4>
         <div className="modal-grid">
-          <div className="form-group">
-            <label htmlFor="turnOverBy">Turn-over By</label>
+          <div className="form-group form-group-full">
+            <label htmlFor="initialViolation">
+              Initial Violation <span className="required">*</span>
+            </label>
             <input
-              id="turnOverBy"
-              name="turnOverBy"
+              id="initialViolation"
+              name="initialViolation"
               type="text"
               className="form-input"
-              placeholder="Enforcer name"
-              value={form.turnOverBy}
+              placeholder="e.g. No Helmet"
+              value={form.initialViolation}
+              onChange={handleChange}
+              disabled={saving}
+            />
+          </div>
+        </div>
+
+        <div className="form-group form-group-full">
+          <label>
+            Violations Subject for Impounding <span className="required">*</span>
+          </label>
+          <div className="checkbox-grid">
+            {IMPOUND_VIOLATION_OPTIONS.map((v) => (
+              <label key={v} className="checkbox-item">
+                <input
+                  type="checkbox"
+                  checked={form.impoundViolations.includes(v)}
+                  onChange={() => handleViolationToggle(v)}
+                  disabled={saving}
+                />
+                <span>{v}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* ============ SECTION 5: APPREHENSION ============ */}
+        <h4 className="form-section-title">Apprehension Details</h4>
+        <div className="modal-grid">
+          <div className="form-group">
+            <label htmlFor="apprehendingOfficer">
+              Apprehending Officer <span className="required">*</span>
+            </label>
+            <input
+              id="apprehendingOfficer"
+              name="apprehendingOfficer"
+              type="text"
+              className="form-input"
+              placeholder="MC PAMINTUAN, MARY GRACE V."
+              value={form.apprehendingOfficer}
               onChange={handleChange}
               disabled={saving}
             />
           </div>
           <div className="form-group">
-            <label htmlFor="receivedBy">Received By</label>
+            <label htmlFor="deputationNo">
+              Deputation No. <span className="required">*</span>
+            </label>
+            <input
+              id="deputationNo"
+              name="deputationNo"
+              type="text"
+              className="form-input"
+              placeholder="DEPT 13093"
+              value={form.deputationNo}
+              onChange={handleChange}
+              disabled={saving}
+            />
+          </div>
+        </div>
+
+        <div className="form-group form-group-full">
+          <label>Confiscation</label>
+          <div className="checkbox-grid">
+            <label className="checkbox-item">
+              <input
+                type="checkbox"
+                name="dlConfiscated"
+                checked={form.dlConfiscated}
+                onChange={handleChange}
+                disabled={saving}
+              />
+              <span>DL Confiscated</span>
+            </label>
+            <label className="checkbox-item">
+              <input
+                type="checkbox"
+                name="plateConfiscated"
+                checked={form.plateConfiscated}
+                onChange={handleChange}
+                disabled={saving}
+              />
+              <span>Plate Confiscated</span>
+            </label>
+            <label className="checkbox-item">
+              <input
+                type="checkbox"
+                name="towed"
+                checked={form.towed}
+                onChange={handleChange}
+                disabled={saving}
+              />
+              <span>Towed</span>
+            </label>
+            <label className="checkbox-item">
+              <input
+                type="checkbox"
+                name="impounded"
+                checked={form.impounded}
+                onChange={handleChange}
+                disabled={saving}
+              />
+              <span>Impounded</span>
+            </label>
+          </div>
+        </div>
+
+        {/* ============ SECTION 6: LOCATION & FEE ============ */}
+        <h4 className="form-section-title">Impound Location &amp; Fee</h4>
+        <div className="modal-grid">
+          <div className="form-group form-group-full">
+            <label htmlFor="impoundLocation">
+              Impound Location <span className="required">*</span>
+            </label>
+            <input
+              id="impoundLocation"
+              name="impoundLocation"
+              type="text"
+              className="form-input"
+              placeholder="MTPB Impound Yard, Manila"
+              value={form.impoundLocation}
+              onChange={handleChange}
+              disabled={saving}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="distanceKm">
+              Distance (km) <span className="required">*</span>
+            </label>
+            <input
+              id="distanceKm"
+              name="distanceKm"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="0.1"
+              className="form-input"
+              placeholder="8"
+              value={form.distanceKm}
+              onChange={handleChange}
+              disabled={saving}
+            />
+            <small className="form-hint">
+              Unang {IMPOUND_FREE_KM} km libre, +₱{IMPOUND_PER_KM_FEE}/km pagkatapos.
+            </small>
+          </div>
+          <div className="form-group">
+            <label>Weight Class</label>
+            <div className="read-only-field">
+              {form.vehicleType
+                ? WEIGHT_CLASS_LABELS[weightClass]
+                : "Select vehicle type"}
+            </div>
+          </div>
+        </div>
+
+        {/* FEE BREAKDOWN */}
+        <div className="fee-breakdown">
+          <div className="fee-row">
+            <span>Base Fee ({weightClass})</span>
+            <strong>₱{baseFee.toLocaleString()}</strong>
+          </div>
+          <div className="fee-row">
+            <span>
+              Extra Distance ({extraKm} km × ₱{IMPOUND_PER_KM_FEE})
+            </span>
+            <strong>₱{extraFee.toLocaleString()}</strong>
+          </div>
+          <div className="fee-row fee-row-total">
+            <span>TOTAL IMPOUND FEE</span>
+            <strong>₱{impoundFee.toLocaleString()}</strong>
+          </div>
+        </div>
+
+        {/* ============ SECTION 7: TURN-OVER ============ */}
+        <h4 className="form-section-title">Turn-over</h4>
+        <div className="modal-grid">
+          <div className="form-group form-group-full">
+            <label htmlFor="receivedBy">
+              Received By <span className="required">*</span>
+            </label>
             <input
               id="receivedBy"
               name="receivedBy"
@@ -420,40 +1076,22 @@ export default function AddImpoundModal({
               disabled={saving}
             />
           </div>
-          <div className="form-group form-group-full">
-            <label htmlFor="orNumber">OR Number</label>
-            <input
-              id="orNumber"
-              name="orNumber"
-              type="text"
-              className="form-input"
-              placeholder="e.g. 1234567"
-              value={form.orNumber}
-              onChange={handleChange}
-              disabled={saving}
-            />
-          </div>
         </div>
 
+        {/* ============ SECTION 8: SYSTEM ============ */}
         <h4 className="form-section-title">System</h4>
         <div className="modal-grid">
           <div className="form-group">
-            <label htmlFor="cin">
-              CIN <span className="required">*</span>
-            </label>
-            <input
-              id="cin"
-              name="cin"
-              type="text"
-              className="form-input"
-              placeholder="e.g. CLMP-2026-101"
-              value={form.cin}
-              onChange={handleChange}
-              disabled={saving}
-            />
+            <label>CIN</label>
+            <div className="read-only-field">
+              <Lock size={12} style={{ display: "inline", marginRight: 6 }} />
+              Auto-generated (IMP-YYYY-####)
+            </div>
           </div>
           <div className="form-group">
-            <label htmlFor="status">Status</label>
+            <label htmlFor="status">
+              Status <span className="required">*</span>
+            </label>
             <select
               id="status"
               name="status"
@@ -471,6 +1109,7 @@ export default function AddImpoundModal({
           </div>
         </div>
 
+        {/* ERROR */}
         {error && (
           <div className="modal-error-box">
             <AlertCircle size={16} />
@@ -478,6 +1117,7 @@ export default function AddImpoundModal({
           </div>
         )}
 
+        {/* FOOTER */}
         <div className="modal-footer">
           <button
             type="button"

@@ -1,3 +1,17 @@
+/* ==================================================================
+   Homepage.css (Impounding Staff)
+   Shared layout + chrome para sa lahat ng impounding-staff pages:
+     - Homepage (Overview)
+     - ImpoundingLog
+     - ActiveImpounding
+     - FieldUpdates
+
+   BAGONG IMPOUND PROCESS:
+     - Hiwalay sa clamp. Walang "Subject to Impound".
+     - Status: "Impounded" / "Released" lang.
+     - Source: impoundRecords.
+================================================================== */
+
 /* ---------------- OUTER WRAPPER ---------------- */
 .impounding-page {
   display: flex;
@@ -195,7 +209,7 @@
 }
 
 .impounding-page .profile-dropdown::before {
-  content: '';
+  content: "";
   position: absolute;
   top: -6px;
   right: 14px;
@@ -266,7 +280,8 @@
 }
 
 .impounding-page .dropdown-item.logout img {
-  filter: invert(24%) sepia(94%) saturate(1800%) hue-rotate(343deg) brightness(90%) contrast(90%);
+  filter: invert(24%) sepia(94%) saturate(1800%) hue-rotate(343deg)
+    brightness(90%) contrast(90%);
 }
 
 /* ==================================================================
@@ -296,6 +311,13 @@
 .impounding-page .metric-grid-four {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.impounding-page .metric-grid-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   width: 100%;
 }
@@ -437,10 +459,12 @@
   white-space: nowrap;
 }
 
+/* --- Cell styles --- */
 .impounding-page .cell-reference {
   color: #111827;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .impounding-page .cell-plate {
@@ -454,6 +478,7 @@
   color: #374151;
 }
 
+.impounding-page .cell-officer,
 .impounding-page .cell-towed-by,
 .impounding-page .cell-clamped-by {
   color: #374151;
@@ -468,13 +493,22 @@
 
 .impounding-page .cell-overdue {
   color: #111827;
-  font-weight: 500;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* BAGONG FEE CELL */
+.impounding-page .cell-fee {
+  color: #111827;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 /* ==================================================================
    STATUS PILLS
-   Colors are approximated from the Figma screenshot. If the design
-   file has exact hex values, swap them in here.
+   BAGONG IMPOUND PROCESS: dalawa lang — "Impounded" at "Released".
 ================================================================== */
 .impounding-page .status-pill {
   display: inline-block;
@@ -482,49 +516,22 @@
   border: 1px solid transparent;
   border-radius: 999px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
-}
-
-/* Scheduled for Impounding */
-.impounding-page .status-scheduled {
-  background: #FEF9C3;
-  border-color: #EAB308;
-  color: #854D0E;
-}
-
-/* Clamped (log card) */
-.impounding-page .status-clamped {
-  background: #FECACA;
-  border-color: #EF4444;
-  color: #991B1B;
-}
-
-/* Subject to Impound */
-.impounding-page .status-subject {
-  background: #FCA5A5;
-  border-color: #DC2626;
-  color: #7F1D1D;
 }
 
 /* Impounded */
 .impounding-page .status-impounded {
-  background: #F87171;
-  border-color: #B91C1C;
-  color: #7F1D1D;
+  background: #FEE2E2;
+  border-color: #EF4444;
+  color: #991B1B;
 }
 
-/* Released / Removed */
+/* Released */
 .impounding-page .status-released {
   background: #DCFCE7;
   border-color: #22C55E;
   color: #166534;
-}
-
-.impounding-page .status-patrol {
-  background: #DBEAFE;
-  border-color: #3B82F6;
-  color: #1E40AF;
 }
 
 /* ==================================================================
@@ -546,7 +553,7 @@
 }
 
 /* ==================================================================
-   MODAL STYLES
+   MODAL STYLES (Update modal — Homepage + ActiveImpounding)
 ================================================================== */
 .modal-backdrop {
   position: fixed;
@@ -576,8 +583,14 @@
 }
 
 @keyframes modalIn {
-  from { transform: translateY(10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .modal-header {
@@ -773,10 +786,15 @@
   .impounding-page .metric-grid-four {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .impounding-page .metric-grid-three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
-  .impounding-page .metric-grid-four {
+  .impounding-page .metric-grid-four,
+  .impounding-page .metric-grid-three {
     grid-template-columns: 1fr;
   }
 
@@ -792,4 +810,21 @@
     max-width: 100%;
     max-height: 95vh;
   }
+}
+
+/* View-only yard list: paid vehicles leave it on their own. */
+.impounding-page .yard-list-note {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.impounding-page .yard-note {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #FEF3C7;
+  color: #92400E;
+  font-size: 13px;
+  line-height: 1.45;
 }

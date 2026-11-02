@@ -1,0 +1,293 @@
+/* ==================================================================
+   ClampingLog.css
+   Extends Homepage.css (record-officer) — Clamping Log styles.
+
+   The edit modal (modal-overlay, modal-content, form-group, etc.) and
+   the three-state status-impounded-clamp color have been removed —
+   the modal never wrote to Firestore (it was a TODO) and the page's
+   own Figma design has no action column at all, and ClampStatus is
+   now two-state only ("Clamped" | "Released"). Added: search bar,
+   violation filter, log-header meta, Reference column, and pagination
+   — none of those existed on this page before.
+================================================================== */
+
+/* ==================================================================
+   SEARCH + FILTER TOOLBAR
+================================================================== */
+.record-page .search-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.record-page .search-bar-container {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 13px 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.record-page .search-bar-icon {
+  color: #9CA3AF;
+  flex-shrink: 0;
+}
+
+.record-page .search-bar-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: #111827;
+  font-family: inherit;
+}
+
+.record-page .search-bar-input::placeholder {
+  color: #9CA3AF;
+}
+
+.record-page .filter-select-wrap {
+  position: relative;
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.record-page .filter-select {
+  width: 100%;
+  height: 100%;
+  padding: 13px 40px 13px 16px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+.record-page .filter-select-icon {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  color: #6B7280;
+  pointer-events: none;
+}
+
+/* ==================================================================
+   CARD HEADER ROW ("Active clamps: X total")
+================================================================== */
+.record-page .log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.record-page .log-header-meta {
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+}
+
+/* ==================================================================
+   TABLE CELLS
+================================================================== */
+.record-page .cell-reference {
+  color: #111827;
+  white-space: nowrap;
+}
+
+.record-page .cell-plate {
+  font-weight: 500;
+  color: #111827;
+}
+
+.record-page .cell-violation,
+.record-page .cell-location,
+.record-page .cell-clamped-by {
+  color: #374151;
+}
+
+.record-page .cell-datetime {
+  color: #6B7280;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+/* ==================================================================
+   STATUS PILLS (Clamping)
+   Two states only now — "Clamped" and "Released". Matches the colors
+   from the screenshot: Clamped red, Released green.
+================================================================== */
+.record-page .status-active-clamp {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.record-page .status-released-clamp {
+  background: #DCFCE7;
+  color: #166534;
+}
+
+/* ==================================================================
+   AUTO-FLAG IMPOUND BADGES (Record Officer)
+
+   Three states for the "Impound" column:
+     - impound-pending: green, waiting for 24hr grace period
+     - badge-impound:   red, manually flagged
+     - badge-impound-auto: amber, auto-flagged by system (24hr expired)
+     - badge-impounded: gray, already towed by Impounding Staff
+================================================================== */
+
+/* "Within 24hr grace" — waiting for grace period to expire */
+.record-page .impound-pending {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #F0FDF4;
+  color: #166534;
+  border: 1px solid #22C55E;
+}
+
+/* "Subject to Impound" — flagged (manual) */
+.record-page .badge-impound {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #FEE2E2;
+  color: #991B1B;
+  border: 1px solid #DC2626;
+}
+
+/* Auto-flagged variant — amber */
+.record-page .badge-impound-auto {
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #F59E0B;
+}
+
+/* "Impounded" — already towed */
+.record-page .badge-impounded {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #E5E7EB;
+  color: #374151;
+  border: 1px solid #9CA3AF;
+}
+
+/* Placeholder for released rows */
+.record-page .action-placeholder {
+  color: #CBD5E1;
+  font-size: 13px;
+}
+
+/* ==================================================================
+   PAGINATION
+================================================================== */
+.record-page .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 20px 0 0;
+  margin-top: 16px;
+  border-top: 1px solid #F3F4F6;
+}
+
+.record-page .pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #FFFFFF;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.record-page .pagination-btn:hover:not(:disabled) {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.record-page .pagination-btn:disabled {
+  color: #9CA3AF;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.record-page .pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.record-page .pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  background: #F3F4F6;
+  color: #111827;
+  font-weight: 700;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.record-page .pagination-sep {
+  color: #6B7280;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 768px) {
+  .record-page .search-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .record-page .search-bar-container,
+  .record-page .filter-select-wrap {
+    width: 100%;
+  }
+
+  .record-page .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

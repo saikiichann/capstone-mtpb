@@ -518,11 +518,11 @@
 }
 
 /* ==================================================================
-   AUTO-FLAG IMPOUND BADGES
+   FEE BADGES
 ================================================================== */
 
 /* "Within 24hr grace" — waiting for grace period to expire */
-.clamping-page .impound-pending {
+.clamping-page .fee-pending {
   display: inline-block;
   padding: 4px 10px;
   border-radius: 6px;
@@ -534,28 +534,21 @@
   border: 1px solid #22C55E;
 }
 
-/* "Subject to Impound" — flagged (manual or auto) */
-.clamping-page .badge-impound {
+/* "Overdue" — past 24 hours, fee is now ₱2,000 fixed */
+.clamping-page .badge-overdue {
   display: inline-block;
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
-  background: #FEE2E2;
-  color: #991B1B;
-  border: 1px solid #DC2626;
-}
-
-/* Auto-flagged variant — amber */
-.clamping-page .badge-impound-auto {
   background: #FEF3C7;
   color: #92400E;
   border: 1px solid #F59E0B;
 }
 
-/* "Impounded" — already towed */
-.clamping-page .badge-impounded {
+/* "Paid" — payment recorded */
+.clamping-page .badge-paid {
   display: inline-block;
   padding: 4px 10px;
   border-radius: 6px;
@@ -565,26 +558,6 @@
   background: #E5E7EB;
   color: #374151;
   border: 1px solid #9CA3AF;
-}
-
-/* ---- Legacy button (kept for backward compatibility) ---- */
-.btn-subject-impound {
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: none;
-  background: #16A34A;
-  color: #FFFFFF;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-  opacity: 1;
-  transition: background 0.15s ease;
-}
-
-.btn-subject-impound:hover {
-  background: #15803D;
 }
 
 /* ---- Placeholder for rows with no action ---- */
@@ -686,157 +659,6 @@
 }
 
 /* ==================================================================
-   CONFIRM MODAL (legacy — kept for backup)
-================================================================== */
-.clamping-page .modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(17, 24, 39, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-}
-
-.clamping-page .modal {
-  background: #FFFFFF;
-  border-radius: 10px;
-  width: 100%;
-  max-width: 480px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.clamping-page .modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 24px;
-  border-bottom: 1px solid #F3F4F6;
-  flex-shrink: 0;
-}
-
-.clamping-page .modal-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: #111827;
-}
-
-.clamping-page .modal-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  background: transparent;
-  color: #6B7280;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: background-color 0.15s ease;
-}
-
-.clamping-page .modal-close:hover:not(:disabled) {
-  background: #F3F4F6;
-  color: #111827;
-}
-
-.clamping-page .modal-close:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.clamping-page .modal-body {
-  padding: 20px 24px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.clamping-page .modal-description {
-  font-size: 14px;
-  color: #334155;
-  margin: 0 0 16px;
-}
-
-.clamping-page .modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 16px 24px;
-  border-top: 1px solid #F3F4F6;
-  background: #FAFAFA;
-  flex-shrink: 0;
-}
-
-/* ---- Info box inside confirm modal ---- */
-.impound-info-box {
-  background: #F8FAFC;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
-  font-size: 13px;
-  color: #334155;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 16px;
-}
-
-.impound-info-label {
-  font-weight: 600;
-}
-
-.clamping-page .btn-cancel {
-  padding: 10px 20px;
-  background: #FFFFFF;
-  border: 1px solid #D1D5DB;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #111827;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background-color 0.15s ease;
-}
-
-.clamping-page .btn-cancel:hover:not(:disabled) {
-  background: #F3F4F6;
-}
-
-.clamping-page .btn-cancel:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.clamping-page .btn-confirm {
-  padding: 10px 20px;
-  background: #16A34A;
-  border: 1px solid #16A34A;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #FFFFFF;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background-color 0.15s ease;
-}
-
-.clamping-page .btn-confirm:hover:not(:disabled) {
-  background: #15803D;
-  border-color: #15803D;
-}
-
-.clamping-page .btn-confirm:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ==================================================================
    RESPONSIVE
 ================================================================== */
 @media (max-width: 768px) {
@@ -857,4 +679,4 @@
     flex-wrap: wrap;
     justify-content: center;
   }
-}
+}

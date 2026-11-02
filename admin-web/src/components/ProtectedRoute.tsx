@@ -9,7 +9,8 @@ const ROLE_REDIRECTS: Record<string, string> = {
   "record-officer": "/record-officer",
   "release-officer": "/release-officer",
   "finance": "/finance",
-  "clamping-staff": "/clamping-staff",
+  // Clamping Staff use the enforcer app; the login page tells them so.
+  "clamping-staff": "/",
   "impounding-staff": "/impounding-staff",
 };
 

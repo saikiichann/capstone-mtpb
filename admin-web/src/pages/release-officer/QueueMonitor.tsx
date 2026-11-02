@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { KeyRound, ChevronLeft, ChevronRight, Search } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { useState, useEffect, useMemo } from "react";
+import { ChevronLeft, ChevronRight, Search, PanelRightOpen } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
@@ -15,18 +14,18 @@ import { NotificationBell } from "../../components/NotificationBell";
 import {
   buildQueue,
   getQueueStatusClass,
-  markViolationAsReleased,
   RELEASE_QUEUE_STATUS,
   type QueueRow,
 } from "../../lib/release";
+import ReleaseDetailsDrawer from "../../components/ReleaseDetailsDrawer";
+import { confirmAndRelease } from "../../lib/releaseFlow";
 import "./QueueMonitor.css";
 
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
 import queueIcon from "../../assets/queue.png";
 import releaseLogIcon from "../../assets/releaselog.png";
-import logoutIcon from "../../assets/logout.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -51,16 +50,6 @@ type NavGroup = { label: string; items: NavItem[] };
 ------------------------------------------------------------------ */
 const ITEMS_PER_PAGE = 10;
 
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer in Charge",
-  "it-admin": "IT Admin",
-  supervisor: "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  finance: "Finance",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -89,9 +78,6 @@ const NAV_GROUPS: NavGroup[] = [
    COMPONENT
 ------------------------------------------------------------------ */
 export default function QueueMonitor() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
@@ -101,9 +87,11 @@ export default function QueueMonitor() {
 
   const [rows, setRows] = useState<QueueRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actioning, setActioning] = useState<string | null>(null);
+  /** The vehicle open in the Release Details panel */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [districtFilter, setDistrictFilter] = useState("All Districts");
   const [currentPage, setCurrentPage] = useState(1);
 
   /* Fetch current user */
@@ -152,92 +140,43 @@ export default function QueueMonitor() {
     return () => unsubscribe();
   }, []);
 
-  /* Click outside */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleLogout = async () => {
+  /** Release from the details panel: same checks as before (lib/releaseFlow.ts). */
+  const handleRelease = async (violationId: string) => {
     try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
+      const outcome = await confirmAndRelease({ violationId, officerName: currentUser.name });
+      if (outcome === "released" || outcome === "already-released") setSelectedId(null);
     } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    }
-  };
-
-  const handleMarkAsReleased = async (row: QueueRow) => {
-    if (!row.canRelease) {
-      alert(
-        "Payment is not yet verified for this vehicle. It cannot be released."
-      );
-      return;
-    }
-
-    const firstReleasable = rows.find((r) => r.canRelease);
-    if (firstReleasable && firstReleasable.id !== row.id) {
-      const proceed = window.confirm(
-        `FIFO order puts ${firstReleasable.cin} (${firstReleasable.queue}) ahead of ${row.cin}.\n\n` +
-          `Releasing out of order breaks the First-In, First-Out rule. Continue anyway?`
-      );
-      if (!proceed) return;
-    }
-
-    if (
-      !window.confirm(
-        `Mark ${row.cin} as released?\n\nPlate: ${row.plateNo}\nLocation: ${row.location}\n\nThis will also reset the clamp to "available" for reuse.`
-      )
-    ) {
-      return;
-    }
-
-    setActioning(row.id);
-    try {
-      await markViolationAsReleased({
-        violationId: row.id,
-        cin: row.cin,
-        plateNo: row.plateNo,
-        location: row.location,
-        clampId: row.clampId,
-        verifiedAt: row.verifiedAt,
-        officerName: currentUser.name,
-        totalPaid: row.totalPaid ?? 0,
-      });
-    } catch (err: any) {
       console.error("Release failed:", err);
-      alert(err.message || "Failed to mark as released.");
-    } finally {
-      setActioning(null);
+      alert((err as Error)?.message || "Failed to mark as released.");
     }
   };
 
-  /* Filter + Pagination */
+  /* District filter — Release Officers are assigned per district */
+  const districtOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(rows.map((r) => r.details.district).filter((d): d is string => !!d))
+      ).sort(),
+    [rows]
+  );
+
   const filteredRows = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return rows;
-    return rows.filter(
-      (r) =>
+    return rows.filter((r) => {
+      if (districtFilter !== "All Districts" && r.details.district !== districtFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
         r.cin.toLowerCase().includes(q) ||
         r.plateNo.toLowerCase().includes(q) ||
         r.location.toLowerCase().includes(q) ||
+        r.details.exact.toLowerCase().includes(q) ||
+        (r.details.barangay ?? "").toLowerCase().includes(q) ||
         r.queue.toLowerCase().includes(q)
-    );
-  }, [rows, searchQuery]);
+      );
+    });
+  }, [rows, searchQuery, districtFilter]);
 
   const totalPages = Math.max(
     1,
@@ -249,49 +188,18 @@ export default function QueueMonitor() {
     startIndex + ITEMS_PER_PAGE
   );
 
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+  // Keep the page valid if the list shrinks (during render)
+  if (currentPage > totalPages) setCurrentPage(totalPages);
 
   return (
     <div className="release-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Release Officer</p>
-            </div>
-          </div>
-          <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={NAV_GROUPS} role={<>Release Officer</>} />
 
         {/* MAIN */}
         <div className="main">
+          <AppTopbar groups={NAV_GROUPS} />
           <header className="main-header">
             <div>
               <h1>Release Queue</h1>
@@ -306,54 +214,43 @@ export default function QueueMonitor() {
 
             <div className="header-right-group">
               {currentUserUid && (
-                <NotificationBell currentUserUid={currentUserUid} />
+                <NotificationBell currentUserUid={currentUserUid} officerName={currentUser.name} />
               )}
-              <div className="avatar-container" ref={dropdownRef}>
-                <img
-                  src={officerAvatar}
-                  alt="Officer Profile"
-                  className="avatar-img"
-                  onClick={() => setIsMenuOpen(!isMenuOpen)}
-                />
-                {isMenuOpen && (
-                  <div className="profile-dropdown">
-                    <div className="dropdown-header">
-                      <p className="dropdown-name">{currentUser.name}</p>
-                      <p className="dropdown-role">
-                        {ROLE_LABELS[currentUser.role]}
-                      </p>
-                    </div>
-                    <button className="dropdown-item">
-                      <KeyRound size={18} />
-                      <span>Change Password</span>
-                    </button>
-                    <button
-                      className="dropdown-item logout"
-                      onClick={handleLogout}
-                    >
-                      <img src={logoutIcon} alt="" className="dropdown-icon" />
-                      <span>Log Out</span>
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           </header>
 
           <main className="main-content">
-            {/* SEARCH BAR */}
-            <div className="queue-search-bar">
-              <Search size={18} className="queue-search-icon" />
-              <input
-                type="text"
-                className="queue-search-input"
-                placeholder="Search..."
-                value={searchQuery}
+            {/* SEARCH BAR + DISTRICT FILTER */}
+            <div className="search-with-filter">
+              <div className="queue-search-bar">
+                <Search size={18} className="queue-search-icon" />
+                <input
+                  type="text"
+                  className="queue-search-input"
+                  placeholder="Search CIN, plate, street or barangay..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+              <select
+                className="district-filter"
+                value={districtFilter}
                 onChange={(e) => {
-                  setSearchQuery(e.target.value);
+                  setDistrictFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-              />
+                aria-label="Filter by district"
+              >
+                <option value="All Districts">All Districts</option>
+                {districtOptions.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="card">
@@ -370,30 +267,38 @@ export default function QueueMonitor() {
                 </div>
               ) : (
                 <>
-                  <div className="table-wrapper">
+                  <div className="table-wrapper" tabIndex={0} role="region" aria-label="Data table" data-scroll-region>
                     <table className="data-table queue-table">
                       <thead>
                         <tr>
                           <th>Queue</th>
                           <th>CIN</th>
                           <th>Plate No.</th>
-                          <th>Vehicle Type</th>
-                          <th>Location</th>
+                          <th>District</th>
                           <th>Waiting</th>
                           <th>Status</th>
-                          <th>Action</th>
+                          <th>Details</th>
                         </tr>
                       </thead>
                       <tbody>
                         {paginatedRows.map((row) => (
-                          <tr key={row.id}>
+                          <tr
+                            key={row.id}
+                            className="rd-row"
+                            onClick={() => setSelectedId(row.id)}
+                          >
                             <td className="cell-queue">{row.queue}</td>
                             <td>
                               <span className="cin-pill">{row.cin}</span>
                             </td>
                             <td className="cell-plate">{row.plateNo}</td>
-                            <td className="cell-vehicle">{row.vehicleType}</td>
-                            <td className="cell-location">{row.location}</td>
+                            <td>
+                              {row.details.district ? (
+                                <span className="district-pill">{row.details.district}</span>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
                             <td className="cell-waiting">
                               {row.waitingMinutes} min
                             </td>
@@ -409,20 +314,14 @@ export default function QueueMonitor() {
                             <td className="cell-action">
                               <button
                                 type="button"
-                                className="btn-mark-released"
-                                onClick={() => handleMarkAsReleased(row)}
-                                disabled={
-                                  actioning === row.id || !row.canRelease
-                                }
-                                title={
-                                  row.canRelease
-                                    ? "Mark as released"
-                                    : "Payment not yet verified"
-                                }
+                                className="rd-view-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedId(row.id);
+                                }}
                               >
-                                {actioning === row.id
-                                  ? "Processing..."
-                                  : "Mark as Released"}
+                                <PanelRightOpen size={15} />
+                                View &amp; Release
                               </button>
                             </td>
                           </tr>
@@ -468,6 +367,13 @@ export default function QueueMonitor() {
           </main>
         </div>
       </div>
+      {selectedId && (
+        <ReleaseDetailsDrawer
+          violationId={selectedId}
+          onClose={() => setSelectedId(null)}
+          onRelease={handleRelease}
+        />
+      )}
     </div>
   );
-}
+}

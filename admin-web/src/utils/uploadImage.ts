@@ -1,17 +1,23 @@
 import { supabase, SUPABASE_BUCKET } from "../supabase";
 
-// Image compression helper
+// Image compression helper — re-encodes as JPEG (which also drops anything
+// that isn't image data), shrinking quality until it fits maxSizeKB.
 export const compressImage = async (
   file: File,
-  _maxSizeKB: number = 500,
+  maxSizeKB: number = 500,
   maxDimension: number = 1024
 ): Promise<File> => {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Only image files can be uploaded.");
+  }
   return new Promise((resolve, reject) => {
     const img = new Image();
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
+    const objectUrl = URL.createObjectURL(file);
 
     img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
       let { width, height } = img;
       if (width > height) {
         if (width > maxDimension) {
@@ -29,26 +35,33 @@ export const compressImage = async (
       canvas.height = height;
       ctx?.drawImage(img, 0, 0, width, height);
 
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            reject(new Error("Failed to compress image"));
-            return;
-          }
-          const compressedFile = new File(
-            [blob],
-            file.name.replace(/\.[^.]+$/, ".jpg"),
-            { type: "image/jpeg" }
-          );
-          resolve(compressedFile);
-        },
-        "image/jpeg",
-        0.7
-      );
+      const qualities = [0.7, 0.55, 0.4];
+      const encode = (i: number) =>
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error("Failed to compress image"));
+              return;
+            }
+            if (blob.size > maxSizeKB * 1024 && i < qualities.length - 1) {
+              encode(i + 1);
+              return;
+            }
+            resolve(
+              new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" })
+            );
+          },
+          "image/jpeg",
+          qualities[i]
+        );
+      encode(0);
     };
 
-    img.onerror = () => reject(new Error("Failed to load image"));
-    img.src = URL.createObjectURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Failed to load image"));
+    };
+    img.src = objectUrl;
   });
 };
 

@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { KeyRound, MoreHorizontal, ChevronDown } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { useState, useEffect } from "react";
+import { MoreHorizontal, ChevronDown } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
   collection,
@@ -17,8 +16,6 @@ import { auth, db } from "../../firebase";
 import "./QueueMonitor.css";
 
 // Asset imports
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
 import queueMonitorIcon from "../../assets/queue.png";
 import allViolationsIcon from "../../assets/allviolations.png";
@@ -30,7 +27,9 @@ import releaseOrdersIcon from "../../assets/releaseorder.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
-import logoutIcon from "../../assets/logout.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
+import { clientIp } from "../../lib/staffSession";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -74,20 +73,10 @@ type NavGroup = {
   items: NavItem[];
 };
 
+
 // ---------------------------------------------------------------------------
 // CONSTANTS
 // ---------------------------------------------------------------------------
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer in Charge",
-  "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  "finance": "Finance Staff",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
-
 const STATUS_OPTIONS: QueueStatus[] = [
   "Ready for release",
   "Awaiting for verification",
@@ -144,9 +133,6 @@ const getQueueStatusClass = (status: QueueStatus): string => {
 // COMPONENT
 // ---------------------------------------------------------------------------
 export default function QueueMonitor() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
@@ -225,15 +211,6 @@ export default function QueueMonitor() {
   // -----------------------------------------------------------------------
   // EFFECT: Click-outside for dropdown
   // -----------------------------------------------------------------------
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   // -----------------------------------------------------------------------
   // EFFECT: Escape key for status dropdown
@@ -251,25 +228,6 @@ export default function QueueMonitor() {
   // -----------------------------------------------------------------------
   // HANDLERS
   // -----------------------------------------------------------------------
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/");
-    }
-  };
-
-  const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
-    setIsMenuOpen(false);
-  };
 
   const handleStatusChange = async (row: QueueRow, newStatus: QueueStatus) => {
     if (newStatus === row.status) {
@@ -300,12 +258,12 @@ export default function QueueMonitor() {
           newStatus,
         },
         timestamp: serverTimestamp(),
+        ipAddress: clientIp(),
       });
 
-      console.log(`Queue ${row.queue} updated: ${row.status} → ${newStatus}`);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error updating status:", err);
-      alert(err.message || "Failed to update status.");
+      alert((err as Error)?.message || "Failed to update status.");
     } finally {
       setSaving(null);
     }
@@ -318,40 +276,11 @@ export default function QueueMonitor() {
     <div className="record-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Record Officer</p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${item.active ? "nav-item-active" : ""}`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={NAV_GROUPS} role={<>Record Officer</>} />
 
         {/* MAIN CONTENT */}
         <div className="main">
+          <AppTopbar groups={NAV_GROUPS} />
           <header className="main-header">
             <div>
               <h1>Queue Monitor</h1>
@@ -364,33 +293,6 @@ export default function QueueMonitor() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={officerAvatar}
-                alt="Officer Profile"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button className="dropdown-item" onClick={handleChangePassword}>
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button className="dropdown-item logout" onClick={handleLogout}>
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
@@ -407,7 +309,7 @@ export default function QueueMonitor() {
                   <p>No vehicles in queue.</p>
                 </div>
               ) : (
-                <div className="table-wrapper">
+                <div className="table-wrapper" tabIndex={0} role="region" aria-label="Data table" data-scroll-region>
                   <table className="data-table queue-table">
                     <thead>
                       <tr>

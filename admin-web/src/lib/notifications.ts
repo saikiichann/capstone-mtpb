@@ -5,6 +5,17 @@
  * System. Handles creation, delivery, and read-state management of in-app
  * notifications across all user roles.
  *
+ * Uses roleRegistry collection (instead of users collection) para sa
+ * cross-user role queries — hindi ma-expose ang sensitive user info.
+ *
+ * roleRegistry structure: roleRegistry/{role}/users/{uid}
+ *   - name: string
+ *   - active: boolean
+ *   - updatedAt: timestamp
+ *
+ * Naka-sync sa UserManagement page: kapag nag-create/edit/disable ng
+ * user, sabay na naka-sync dito.
+ *
  * @module lib/notifications
  */
 
@@ -12,6 +23,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -20,15 +32,12 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { locationDetailsOf, placeLine, type LocationDetails } from "./locationDetails";
 
 /* ---------------------------------------------------------------------------
    TYPE DEFINITIONS
 --------------------------------------------------------------------------- */
 
-/**
- * Supported notification categories. Used for client-side filtering,
- * icon selection, and deep-linking behavior.
- */
 export type NotificationType =
   | "release-approved"
   | "release-rejected"
@@ -37,9 +46,6 @@ export type NotificationType =
   | "impound-approved"
   | "general";
 
-/**
- * Payload contract for creating a single notification document.
- */
 export interface NotificationPayload {
   /** Firebase Auth UID of the notification recipient. */
   recipientUid: string;
@@ -63,9 +69,6 @@ export interface NotificationPayload {
   link?: string;
 }
 
-/**
- * Parameters for notifying all release officers of an OIC approval.
- */
 export interface ReleaseApprovalParams {
   cin: string;
   plateNo: string;
@@ -74,9 +77,6 @@ export interface ReleaseApprovalParams {
   location?: string;
 }
 
-/**
- * Parameters for notifying all release officers of an OIC rejection.
- */
 export interface ReleaseRejectionParams {
   cin: string;
   plateNo: string;
@@ -85,9 +85,6 @@ export interface ReleaseRejectionParams {
   reason?: string;
 }
 
-/**
- * Parameters for notifying OIC of a new release request.
- */
 export interface ReleaseRequestParams {
   cin: string;
   plateNo: string;
@@ -126,8 +123,10 @@ export async function createNotification(
 /**
  * Creates notifications for every active user holding the specified role.
  *
- * Uses a single batch write to minimize round-trips and ensure atomicity.
- * If no active users match the role, returns 0 without throwing.
+ * ✅ BAGO: Ginagamit ang `roleRegistry/{role}/users` collection sa halip
+ * na `users` collection. Ito ay lightweight directory (name + active flag
+ * lang) na walang sensitive info, at pwede itong basahin ng kahit sinong
+ * active user.
  *
  * @param role    - The target role slug (e.g., "release-officer").
  * @param payload - The notification content (without recipient fields).
@@ -137,15 +136,17 @@ export async function notifyAllWithRole(
   role: string,
   payload: Omit<NotificationPayload, "recipientUid" | "recipientRole">
 ): Promise<number> {
-  const usersSnapshot = await getDocs(
+  // Query roleRegistry/{role}/users — dito naka-listahan ang lahat ng
+  // active users na may ganitong role. Walang sensitive info (name +
+  // active flag lang ang laman).
+  const registrySnapshot = await getDocs(
     query(
-      collection(db, "users"),
-      where("role", "==", role),
-      where("status", "==", "active")
+      collection(db, "roleRegistry", role, "users"),
+      where("active", "==", true)
     )
   );
 
-  if (usersSnapshot.empty) {
+  if (registrySnapshot.empty) {
     console.warn(`No active users found with role: ${role}`);
     return 0;
   }
@@ -153,7 +154,7 @@ export async function notifyAllWithRole(
   const batch = writeBatch(db);
   let count = 0;
 
-  usersSnapshot.docs.forEach((userDoc) => {
+  registrySnapshot.docs.forEach((userDoc) => {
     const notificationRef = doc(collection(db, "notifications"));
     batch.set(notificationRef, {
       recipientUid: userDoc.id,
@@ -233,9 +234,23 @@ export async function markAllNotificationsAsRead(
 export async function notifyReleaseOfficersOfApproval(
   params: ReleaseApprovalParams
 ): Promise<number> {
+  // Where the vehicle is: district, barangay, exact spot (lib/locationDetails.ts).
+  let details: LocationDetails | null = null;
+  try {
+    const snap = await getDoc(doc(db, "violations", params.violationId));
+    if (snap.exists()) details = locationDetailsOf(snap.data());
+  } catch (err) {
+    console.warn("Location for the notification not loaded:", err);
+  }
+  const place = details ? placeLine(details) : params.location ?? "";
+
   return notifyAllWithRole("release-officer", {
-    title: "New Vehicle Ready for Release",
-    message: `${params.cin} (${params.plateNo}) has been approved by ${params.approvedBy}. Ready for release.`,
+    title: details?.district
+      ? `New Vehicle Ready for Release · ${details.district}`
+      : "New Vehicle Ready for Release",
+    message:
+      `${params.cin} (${params.plateNo}) has been approved by ${params.approvedBy}. Ready for release.` +
+      (place && place !== "—" ? ` Location: ${place}.` : ""),
     type: "release-approved",
     link: "/release-officer/queue",
     metadata: {
@@ -244,6 +259,10 @@ export async function notifyReleaseOfficersOfApproval(
       plateNo: params.plateNo,
       approvedBy: params.approvedBy,
       location: params.location ?? null,
+      district: details?.district ?? null,
+      barangay: details?.barangay ?? null,
+      exactLocation: details ? placeLine(details) : null,
+      mapUrl: details?.mapUrl ?? null,
       approvedAt: new Date().toISOString(),
     },
   });

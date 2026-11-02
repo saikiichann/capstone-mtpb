@@ -1,0 +1,758 @@
+/* ==================================================================
+   Homepage.css
+   Release Officer — Base layout + Notification Bell styles
+================================================================== */
+
+/* ---------------- OUTER WRAPPER ---------------- */
+.release-page {
+  display: flex;
+  min-height: 100vh;
+  background: #F8F9FA;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #111827;
+}
+
+.release-page .dashboard {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background: #F8F9FA;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+/* ---------------- SIDEBAR ---------------- */
+.release-page .sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: #010A16;
+  color: #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 24px;
+}
+
+.release-page .sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.release-page .sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #FFFFFF;
+}
+
+.release-page .sidebar-brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.release-page .sidebar-brand-role {
+  font-size: 11px;
+  color: #FFFFFF;
+  margin: 2px 0 0;
+  line-height: 1.2;
+}
+
+.release-page .sidebar-nav {
+  padding-top: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.release-page .nav-group {
+  padding: 0 16px;
+  margin-bottom: 20px;
+}
+
+.release-page .nav-group-label {
+  margin: 0 0 8px;
+  padding: 0 18px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+}
+
+.release-page .nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.release-page .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 18px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.release-page .nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #FFFFFF;
+}
+
+.release-page .nav-item-active {
+  background: rgba(59, 130, 246, 0.12);
+  border-left-color: #3B82F6;
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.release-page .nav-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* ---------------- MAIN ---------------- */
+.release-page .main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.release-page .main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  background: #F8F9FA;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.release-page .main-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+.release-page .main-header p {
+  font-size: 14px;
+  color: #6B7280;
+  font-weight: 500;
+  margin: 4px 0 0;
+}
+
+/* ---------------- AVATAR & DROPDOWN ---------------- */
+.release-page .avatar-container {
+  position: relative;
+}
+
+.release-page .avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  cursor: pointer;
+  border: 2px solid #E5E7EB;
+  transition: opacity 0.2s ease;
+  background-color: #D1D5DB;
+}
+
+.release-page .avatar-img:hover {
+  opacity: 0.8;
+}
+
+.release-page .profile-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 240px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.release-page .profile-dropdown::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: 14px;
+  width: 12px;
+  height: 12px;
+  background: #010A16;
+  transform: rotate(45deg);
+}
+
+.release-page .dropdown-header {
+  background: #010A16;
+  padding: 16px;
+}
+
+.release-page .dropdown-header .dropdown-name {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: #FFFFFF !important;
+  letter-spacing: 0.2px;
+  opacity: 1;
+}
+
+.release-page .dropdown-header .dropdown-role {
+  font-size: 13px;
+  font-weight: 500;
+  color: #FFFFFF !important;
+  margin: 4px 0 0;
+  opacity: 1;
+}
+
+.release-page .dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #ffffff;
+  border: none;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.release-page .dropdown-item:hover {
+  background: #F3F4F6;
+}
+
+.release-page .dropdown-item + .dropdown-item {
+  border-top: 1px solid #F3F4F6;
+}
+
+.release-page .dropdown-item.logout {
+  color: #DC2626;
+}
+
+.release-page .dropdown-item.logout:hover {
+  background: #FEF2F2;
+}
+
+.release-page .dropdown-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.release-page .dropdown-item.logout img {
+  filter: invert(24%) sepia(94%) saturate(1800%) hue-rotate(343deg)
+    brightness(90%) contrast(90%);
+}
+
+/* ---------------- MAIN CONTENT ---------------- */
+.release-page .main-content {
+  flex: 1;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.release-page .card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #F3F4F6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  width: 100%;
+}
+
+/* ---------------- METRIC CARDS (4 cols) ---------------- */
+.release-page .metric-grid-four {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.release-page .metric-card {
+  padding: 20px 24px;
+}
+
+.release-page .metric-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.release-page .metric-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #000;
+  margin: 8px 0 4px;
+  line-height: 1;
+}
+
+.release-page .metric-subtitle {
+  font-size: 12px;
+  margin: 4px 0 0;
+  color: #6B7280;
+}
+
+/* ---------------- CARD HEADER ROW ---------------- */
+.release-page .card-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.release-page .card-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.release-page .card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+}
+
+.release-page .card-link {
+  font-size: 13px;
+  color: #0035A9;
+  text-decoration: none;
+  font-weight: 600;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+
+.release-page .card-link:hover {
+  text-decoration: underline;
+}
+
+/* ---------------- DATA TABLE ---------------- */
+.release-page .table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.release-page .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.release-page .data-table thead {
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.release-page .data-table th {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  padding: 12px;
+  white-space: nowrap;
+}
+
+.release-page .data-table td {
+  padding: 14px 12px;
+  color: #374151;
+  vertical-align: middle;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.release-page .data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.release-page .data-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+.release-page .cell-queue {
+  font-weight: 600;
+  color: #374151;
+}
+
+.release-page .cin-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.release-page .cell-plate {
+  font-weight: 600;
+  color: #111827;
+}
+
+.release-page .cell-vehicle {
+  color: #374151;
+}
+
+.release-page .cell-location {
+  color: #374151;
+}
+
+.release-page .cell-waiting {
+  color: #374151;
+  white-space: nowrap;
+}
+
+.release-page .cell-order-id {
+  font-weight: 600;
+  color: #111827;
+}
+
+.release-page .cell-cleared-by {
+  color: #374151;
+}
+
+.release-page .cell-datetime {
+  color: #6B7280;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.release-page .cell-fine {
+  color: #111827;
+  font-weight: 600;
+}
+
+.release-page .cell-duration {
+  color: #374151;
+  white-space: nowrap;
+}
+
+.release-page .cell-more {
+  text-align: center;
+  width: 50px;
+}
+
+.release-page .row-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: #6B7280;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.release-page .row-more-btn:hover {
+  background: #F3F4F6;
+  color: #111827;
+}
+
+/* ---------------- STATUS PILLS ---------------- */
+.release-page .status-pill {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.release-page .status-ready {
+  background: #DCFCE7;
+  color: #166534;
+}
+
+.release-page .status-awaiting {
+  background: #FEF9C3;
+  color: #854D0E;
+}
+
+.release-page .status-inqueue {
+  background: #E5E7EB;
+  color: #374151;
+}
+
+.release-page .status-completed {
+  background: #DCFCE7;
+  color: #166534;
+}
+
+.release-page .status-pending {
+  background: #FEF9C3;
+  color: #854D0E;
+}
+
+.release-page .status-cancelled {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+/* ---------------- LOADING / EMPTY ---------------- */
+.release-page .table-loading,
+.release-page .table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #6B7280;
+  font-size: 14px;
+}
+
+/* ==================================================================
+   HEADER RIGHT GROUP (Notification Bell + Avatar)
+================================================================== */
+.release-page .header-right-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* ==================================================================
+   NOTIFICATION BELL
+================================================================== */
+.release-page .notification-bell-wrapper {
+  position: relative;
+}
+
+.release-page .notification-bell-btn {
+  position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #111827;
+  transition: background 0.15s ease;
+}
+
+.release-page .notification-bell-btn:hover {
+  background: #F3F4F6;
+}
+
+.release-page .notification-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: #DC2626;
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 10px;
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  box-shadow: 0 0 0 2px #F8F9FA;
+}
+
+.release-page .notification-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 400px;
+  max-width: 92vw;
+  background: #FFFFFF;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14),
+    0 0 0 1px rgba(0, 0, 0, 0.04);
+  z-index: 1000;
+  overflow: hidden;
+  animation: notificationSlideIn 0.15s ease-out;
+}
+
+@keyframes notificationSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.release-page .notification-list {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.release-page .notification-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.release-page .notification-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.release-page .notification-list::-webkit-scrollbar-thumb {
+  background: #E5E7EB;
+  border-radius: 3px;
+}
+
+.release-page .notification-list::-webkit-scrollbar-thumb:hover {
+  background: #D1D5DB;
+}
+
+.release-page .notification-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 20px;
+  color: #9CA3AF;
+  font-size: 13px;
+}
+
+.release-page .notification-empty-icon {
+  color: #D1D5DB;
+}
+
+.release-page .notification-empty p {
+  margin: 0;
+}
+
+.release-page .notification-item {
+  display: flex;
+  gap: 14px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #F3F4F6;
+  cursor: pointer;
+  transition: background 0.12s ease;
+  position: relative;
+}
+
+.release-page .notification-item:last-child {
+  border-bottom: none;
+}
+
+.release-page .notification-item:hover {
+  background: #FAFAFA;
+}
+
+.release-page .notification-item.unread {
+  background: #F8FAFF;
+}
+
+.release-page .notification-item.unread:hover {
+  background: #F0F5FF;
+}
+
+.release-page .notification-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.release-page .notification-icon.icon-approved {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.release-page .notification-icon.icon-denied {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.release-page .notification-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.release-page .notification-item-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 4px 0;
+  line-height: 1.35;
+  letter-spacing: -0.1px;
+}
+
+.release-page .notification-item-message {
+  font-size: 12.5px;
+  color: #6B7280;
+  margin: 0 0 6px 0;
+  line-height: 1.45;
+}
+
+.release-page .notification-item-time {
+  font-size: 11.5px;
+  color: #9CA3AF;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* ---------------- RESPONSIVE ---------------- */
+@media (max-width: 1280px) {
+  .release-page .metric-grid-four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .release-page .metric-grid-four {
+    grid-template-columns: 1fr;
+  }
+
+  .release-page .sidebar {
+    width: 220px;
+  }
+
+  .release-page .main-content {
+    padding: 16px;
+  }
+
+  .release-page .notification-dropdown {
+    width: 340px;
+    right: -50px;
+  }
+
+  .release-page .header-right-group {
+    gap: 8px;
+  }
+}

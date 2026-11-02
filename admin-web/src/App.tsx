@@ -1,115 +1,126 @@
+  import "./allStyles";
+  import { lazy, Suspense } from "react";
   import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
   import { ProtectedRoute } from "./components/ProtectedRoute";
 
   // Authentication
   import LoginPage from "./pages/login/LoginPage";
 
+  // Each role's pages load only when opened (code splitting). Before this,
+  // every page of every role was in one 3.4 MB file that all users
+  // downloaded on the login page.
+
   // OIC Dashboard
-  import Homepage from "./pages/oic/Homepage";
-  import SectorAnalytics from "./pages/oic/SectorAnalytics";
-  import OICReleaseRequests from "./pages/oic/ReleaseRequests";
-  import GeospatialHeatmap from "./pages/oic/Geospatialheatmap";
-  import OICClampingLog from "./pages/oic/ClampingLog";
-  import OICActiveImpounding from "./pages/oic/ActiveImpounding";
-  import OICImpoundingLog from "./pages/oic/ImpoundingLog";
-  import OICVehicleHistory from "./pages/oic/VehicleHistory";
-  import OICPendingPayments from "./pages/oic/PendingPayments";
-  import OICPaymentVerification from "./pages/oic/PaymentVerification";
-  import OICTransactionHistory from "./pages/oic/TransactionHistory";
-  import OICRevenueReports from "./pages/oic/RevenueReports";
-  import OICReleaseQueue from "./pages/oic/ReleaseQueue";
-  import OICReleaseLog from "./pages/oic/ReleaseLog";
-  import OICActiveClampingTeams from "./pages/oic/ActiveClampingTeams";
-  import OICFieldUpdates from "./pages/oic/FieldUpdates";
-  import OICOperationScheduler from "./pages/oic/OperationScheduler";
+  const Homepage = lazy(() => import("./pages/oic/Homepage"));
+  const SectorAnalytics = lazy(() => import("./pages/oic/SectorAnalytics"));
+  const OICReleaseRequests = lazy(() => import("./pages/oic/ReleaseRequests"));
+  const GeospatialHeatmap = lazy(() => import("./pages/oic/Geospatialheatmap"));
+  const OICClampingLog = lazy(() => import("./pages/oic/ClampingLog"));
+  const OICImpoundingLog = lazy(() => import("./pages/oic/ImpoundingLog"));
+  const OICVehicleHistory = lazy(() => import("./pages/oic/VehicleHistory"));
+  const OICPendingPayments = lazy(() => import("./pages/oic/PendingPayments"));
+  const OICPaymentVerification = lazy(() => import("./pages/oic/PaymentVerification"));
+  const OICTransactionHistory = lazy(() => import("./pages/oic/TransactionHistory"));
+  const OICRevenueReports = lazy(() => import("./pages/oic/RevenueReports"));
+  const OICReleaseQueue = lazy(() => import("./pages/oic/ReleaseQueue"));
+  const OICReleaseLog = lazy(() => import("./pages/oic/ReleaseLog"));
+  const OICFieldUpdates = lazy(() => import("./pages/oic/FieldUpdates"));
+  const OICOperationScheduler = lazy(() => import("./pages/oic/OperationScheduler"));
+
+  // Supervisor — its own pages (pages/supervisor/), own routes (/supervisor/...)
+  const SupervisorHomepage = lazy(() => import("./pages/supervisor/Homepage"));
+  const SupervisorSectorAnalytics = lazy(() => import("./pages/supervisor/SectorAnalytics"));
+  const SupervisorGeospatialHeatmap = lazy(() => import("./pages/supervisor/GeospatialHeatmap"));
+  const SupervisorClampingLog = lazy(() => import("./pages/supervisor/ClampingLog"));
+  const SupervisorImpoundingLog = lazy(() => import("./pages/supervisor/ImpoundingLog"));
+  const SupervisorVehicleHistory = lazy(() => import("./pages/supervisor/VehicleHistory"));
+  const SupervisorReleaseRequests = lazy(() => import("./pages/supervisor/ReleaseRequests"));
+  const SupervisorReleaseQueue = lazy(() => import("./pages/supervisor/ReleaseQueue"));
+  const SupervisorReleaseLog = lazy(() => import("./pages/supervisor/ReleaseLog"));
+  const SupervisorFieldUpdates = lazy(() => import("./pages/supervisor/FieldUpdates"));
+  const SupervisorOperationScheduler = lazy(() => import("./pages/supervisor/OperationScheduler"));
 
   // Impounding Staff
-  import ImpoundingStaffHomepage from "./pages/impounding-staff/Homepage";
-  import ImpoundingLog from "./pages/impounding-staff/ImpoundingLog";
-  import ActiveImpounding from "./pages/impounding-staff/ActiveImpounding";
-  import FieldUpdates from "./pages/impounding-staff/FieldUpdates";
+  const ImpoundingStaffHomepage = lazy(() => import("./pages/impounding-staff/Homepage"));
+  const ImpoundingLog = lazy(() => import("./pages/impounding-staff/ImpoundingLog"));
+  const ActiveImpounding = lazy(() => import("./pages/impounding-staff/ActiveImpounding"));
 
   // Release Officer
-  import ReleaseOfficerHomepage from "./pages/release-officer/Homepage";
-  import QueueMonitor from "./pages/release-officer/QueueMonitor";
-  import ReleaseLog from "./pages/release-officer/ReleaseLog";
+  const ReleaseOfficerHomepage = lazy(() => import("./pages/release-officer/Homepage"));
+  const QueueMonitor = lazy(() => import("./pages/release-officer/QueueMonitor"));
+  const ReleaseLog = lazy(() => import("./pages/release-officer/ReleaseLog"));
 
   // Finance Staff
-  import FinanceHomepage from "./pages/finance/Homepage";
-  import PendingPayments from "./pages/finance/PendingPayments";
-  import PaymentVerification from "./pages/finance/PaymentVerification";
-  import TransactionHistory from "./pages/finance/TransactionHistory";
-  import RevenueReports from "./pages/finance/RevenueReports";
-  import FinanceAllReports from "./pages/finance/AllReports";
-  import FinanceExportCenter from "./pages/finance/ExportCenter";
+  const FinanceHomepage = lazy(() => import("./pages/finance/Homepage"));
+  const PendingPayments = lazy(() => import("./pages/finance/PendingPayments"));
+  const PaymentVerification = lazy(() => import("./pages/finance/PaymentVerification"));
+  const TransactionHistory = lazy(() => import("./pages/finance/TransactionHistory"));
+  const RevenueReports = lazy(() => import("./pages/finance/RevenueReports"));
+  const FinanceAllReports = lazy(() => import("./pages/finance/AllReports"));
+  const FinanceExportCenter = lazy(() => import("./pages/finance/ExportCenter"));
 
   // Record Officer — trimmed to match the new sidebar design.
   // Queue Monitor, Vehicle History, Release Requests, and Release Orders
   // have been removed from the sidebar and their routes removed here so
   // navigating directly to those URLs now falls through to the fallback.
-  import RecordOfficerHomepage from "./pages/record-officer/Homepage";
-  import RecordOfficerAllViolations from "./pages/record-officer/AllViolations";
-  import RecordOfficerClampingLog from "./pages/record-officer/ClampingLog";
-  import RecordOfficerImpoundingLog from "./pages/record-officer/ImpoundingLog";
-  import RecordOfficerReleaseLog from "./pages/record-officer/ReleaseLog";
-  import RecordOfficerAllReports from "./pages/record-officer/AllReports";
-  import RecordOfficerExportCenter from "./pages/record-officer/ExportCenter";
+  const RecordOfficerHomepage = lazy(() => import("./pages/record-officer/Homepage"));
+  const RecordOfficerAllViolations = lazy(() => import("./pages/record-officer/AllViolations"));
+  const RecordOfficerClampingLog = lazy(() => import("./pages/record-officer/ClampingLog"));
+  const RecordOfficerImpoundingLog = lazy(() => import("./pages/record-officer/ImpoundingLog"));
+  const RecordOfficerReleaseLog = lazy(() => import("./pages/record-officer/ReleaseLog"));
+  const RecordOfficerAllReports = lazy(() => import("./pages/record-officer/AllReports"));
+  const RecordOfficerExportCenter = lazy(() => import("./pages/record-officer/ExportCenter"));
 
   // IT Admin
-  import ITAdminHomePage from "./pages/it-admin/ITAdminHomepage";
-  import UserManagement from "./pages/it-admin/UserManagement";
-  import QRManagement from "./pages/it-admin/QRManagement";
-  import SystemHealth from "./pages/it-admin/SystemHealth";
-  import BackupRestore from "./pages/it-admin/BackupRestore";
-  import RolesPermission from "./pages/it-admin/RolesPermission";
-  import SessionMonitor from "./pages/it-admin/SessionMonitor";
-  import AuditLog from "./pages/it-admin/AuditLog";
-  import DataPrivacyLog from "./pages/it-admin/DataPrivacyLog";
-  import Settings from "./pages/it-admin/Settings";
+  const ITAdminHomePage = lazy(() => import("./pages/it-admin/ITAdminHomepage"));
+  const UserManagement = lazy(() => import("./pages/it-admin/UserManagement"));
+  const QRManagement = lazy(() => import("./pages/it-admin/QRManagement"));
+  const SystemHealth = lazy(() => import("./pages/it-admin/SystemHealth"));
+  const BackupRestore = lazy(() => import("./pages/it-admin/BackupRestore"));
+  const RolesPermission = lazy(() => import("./pages/it-admin/RolesPermission"));
+  const SessionMonitor = lazy(() => import("./pages/it-admin/SessionMonitor"));
+  const AuditLog = lazy(() => import("./pages/it-admin/AuditLog"));
+  const DataPrivacyLog = lazy(() => import("./pages/it-admin/DataPrivacyLog"));
+  const Settings = lazy(() => import("./pages/it-admin/Settings"));
+
+  /** Shown for a moment while a page's code downloads. */
+  function PageLoading() {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", color: "#6B7280" }}
+      >
+        Loading...
+      </div>
+    );
+  }
 
   function App() {
     return (
       <BrowserRouter>
+        <Suspense fallback={<PageLoading />}>
         <Routes>
           {/* Authentication - Public */}
           <Route path="/" element={<LoginPage />} />
 
           {/* ================================================================
-              OIC DASHBOARD (shared with Supervisor)
+              OIC DASHBOARD (/dashboard/...) — OIC only.
 
-              Supervisors use the same pages as the OIC. Their Payment/Finance
-              menu is hidden inside each page, and the Finance routes further
-              below do NOT include "supervisor", so typing those URLs
-              directly is still blocked.
+              The Supervisor has its own routes (/supervisor/..., further
+              below) showing the same pages without Payment/Finance. The
+              Payment/Finance routes here are OIC-only, so typing those URLs
+              as a Supervisor redirects back to /supervisor.
 
-              Clamping Log and Active Impounding are also shared with
-              Supervisor for VIEWING — but the "Subject to Impound" action on
-              Clamping Log is OIC-only. That is enforced two ways: the button
-              itself is hidden for anyone whose role isn't "oic" (see
-              ClampingLog.tsx), and the write is additionally guarded in the
-              handler as a safety net. Neither of those is the real security
-              boundary — a Firestore rule restricting writes to
-              `violations.impoundStatus` and to the `impoundRecords`
-              collection (create) to role == "oic" still needs to be added,
-              or a Supervisor could trigger the same write straight from the
-              browser console.
-
-              All four Payment/Finance pages (Pending Payments, Payment
-              Verification, Transaction History, Revenue Reports) are
-              OIC-only — NOT shared with Supervisor — for consistency with
-              the Payment/Finance group being hidden from Supervisor's
-              sidebar on every OIC page. Transaction History and Revenue
-              Reports have no write actions at all; they're OIC-only purely
-              for that consistency, not because viewing them is risky.
-
-              Sidebar items without a route here send the user back to the
-              login page through the catch-all at the bottom, so add a route
-              for each one as its page is finished.
+              Flagging "Subject to Impound" is OIC-only: the Clamping Log
+              auto-flag runs for role "oic" only, and the Firestore rules
+              allow impoundStatus and impoundRecords writes to the OIC
+              (and Impounding Staff for Scheduled / Impounded / Released).
           ================================================================ */}
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <Homepage />
               </ProtectedRoute>
             }
@@ -117,7 +128,7 @@
           <Route
             path="/dashboard/sector-analytics"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <SectorAnalytics />
               </ProtectedRoute>
             }
@@ -125,7 +136,7 @@
           <Route
             path="/dashboard/heatmap"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <GeospatialHeatmap />
               </ProtectedRoute>
             }
@@ -133,7 +144,7 @@
           <Route
             path="/dashboard/clamping"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICClampingLog />
               </ProtectedRoute>
             }
@@ -141,7 +152,7 @@
           <Route
             path="/dashboard/impounding"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICImpoundingLog />
               </ProtectedRoute>
             }
@@ -193,7 +204,7 @@
           <Route
             path="/dashboard/vehicle-history"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICVehicleHistory />
               </ProtectedRoute>
             }
@@ -201,7 +212,7 @@
           <Route
             path="/dashboard/release-requests"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICReleaseRequests />
               </ProtectedRoute>
             }
@@ -209,7 +220,7 @@
           <Route
             path="/dashboard/release-queue"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICReleaseQueue />
               </ProtectedRoute>
             }
@@ -217,24 +228,8 @@
           <Route
             path="/dashboard/release-log"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICReleaseLog />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dashboard/clamping-teams"
-            element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
-                <OICActiveClampingTeams />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dashboard/active-impounding"
-            element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
-                <OICActiveImpounding />
               </ProtectedRoute>
             }
           />
@@ -242,7 +237,7 @@
           <Route
             path="/dashboard/field-updates"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICFieldUpdates />
               </ProtectedRoute>
             }
@@ -251,8 +246,105 @@
           <Route
             path="/dashboard/operation-scheduler"
             element={
-              <ProtectedRoute allowedRoles={["oic", "supervisor"]}>
+              <ProtectedRoute allowedRoles={["oic"]}>
                 <OICOperationScheduler />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ================================================================
+              SUPERVISOR — monitoring + release approval, no Payment/Finance.
+              Its own pages in pages/supervisor/ (same content as the OIC's,
+              with the Supervisor's sidebar and its own CSS files).
+              Can: approve/reject release requests, Release Queue actions,
+              Operation Scheduler. Cannot: payments,
+              or flag "Subject to Impound" (OIC-only, also in Firestore rules).
+          ================================================================ */}
+          <Route
+            path="/supervisor"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorHomepage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/sector-analytics"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorSectorAnalytics />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/heatmap"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorGeospatialHeatmap />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/clamping"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorClampingLog />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/impounding"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorImpoundingLog />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/vehicle-history"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorVehicleHistory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/release-requests"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorReleaseRequests />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/release-queue"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorReleaseQueue />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/release-log"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorReleaseLog />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/field-updates"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorFieldUpdates />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/supervisor/operation-scheduler"
+            element={
+              <ProtectedRoute allowedRoles={["supervisor"]}>
+                <SupervisorOperationScheduler />
               </ProtectedRoute>
             }
           />
@@ -279,14 +371,6 @@
             element={
               <ProtectedRoute allowedRoles={["impounding-staff", "it-admin"]}>
                 <ActiveImpounding />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/impounding-staff/field-updates"
-            element={
-              <ProtectedRoute allowedRoles={["impounding-staff", "it-admin"]}>
-                <FieldUpdates />
               </ProtectedRoute>
             }
           />
@@ -317,11 +401,13 @@
             }
           />
 
-          {/* Finance Staff — 7 pages only */}
+          {/* Finance Staff — 7 pages only. Finance only: the IT Admin has no
+              access to payments (separation of duties), so typing these
+              URLs as IT Admin goes back to /it-admin. */}
           <Route
             path="/finance"
             element={
-              <ProtectedRoute allowedRoles={["finance", "it-admin"]}>
+              <ProtectedRoute allowedRoles={["finance"]}>
                 <FinanceHomepage />
               </ProtectedRoute>
             }
@@ -329,7 +415,7 @@
           <Route
             path="/finance/pending"
             element={
-              <ProtectedRoute allowedRoles={["finance", "it-admin"]}>
+              <ProtectedRoute allowedRoles={["finance"]}>
                 <PendingPayments />
               </ProtectedRoute>
             }
@@ -337,7 +423,7 @@
           <Route
             path="/finance/verification"
             element={
-              <ProtectedRoute allowedRoles={["finance", "it-admin"]}>
+              <ProtectedRoute allowedRoles={["finance"]}>
                 <PaymentVerification />
               </ProtectedRoute>
             }
@@ -345,7 +431,7 @@
           <Route
             path="/finance/transactions"
             element={
-              <ProtectedRoute allowedRoles={["finance", "it-admin"]}>
+              <ProtectedRoute allowedRoles={["finance"]}>
                 <TransactionHistory />
               </ProtectedRoute>
             }
@@ -353,7 +439,7 @@
           <Route
             path="/finance/revenue"
             element={
-              <ProtectedRoute allowedRoles={["finance", "it-admin"]}>
+              <ProtectedRoute allowedRoles={["finance"]}>
                 <RevenueReports />
               </ProtectedRoute>
             }
@@ -361,7 +447,7 @@
           <Route
             path="/finance/reports"
             element={
-              <ProtectedRoute allowedRoles={["finance", "it-admin"]}>
+              <ProtectedRoute allowedRoles={["finance"]}>
                 <FinanceAllReports />
               </ProtectedRoute>
             }
@@ -369,7 +455,7 @@
           <Route
             path="/finance/export"
             element={
-              <ProtectedRoute allowedRoles={["finance", "it-admin"]}>
+              <ProtectedRoute allowedRoles={["finance"]}>
                 <FinanceExportCenter />
               </ProtectedRoute>
             }
@@ -535,6 +621,7 @@
               na button — mas malinaw at hindi nakakatakot. */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     );
   }

@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { KeyRound, ChevronLeft, ChevronRight, Search } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { useState, useEffect, useMemo } from "react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
@@ -12,17 +11,19 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { useRegisteredOwners } from "../../lib/registeredOwners";
 import {
   AWAITING_OIC_STATUS,
   decideReleaseRequest,
   queueSortKey,
   computeWaitingMinutes,
 } from "../../lib/release";
+import {
+  notifyReleaseOfficersOfApproval,
+  notifyReleaseOfficersOfRejection,
+} from "../../lib/notifications";
 import "./ReleaseRequests.css";
 
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
 
 import overviewIcon from "../../assets/overview.png";
 import sectorAnalyticsIcon from "../../assets/sectoranalytics.png";
@@ -37,10 +38,10 @@ import revenueIcon from "../../assets/revenue.png";
 import releaseRequestIcon from "../../assets/releaserequest.png";
 import queueIcon from "../../assets/queue.png";
 import releaseLogIcon from "../../assets/releaselog.png";
-import clampingTeamsIcon from "../../assets/clampingteams.png";
-import towTruckIcon from "../../assets/tow-truck.png";
 import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -69,7 +70,6 @@ type ReleaseRequestRow = {
   waitingMinutes: number;
   verifiedBy: string;
   verifiedAt: Timestamp | null;
-  // ⚠️ ADDED: violator identity fields
   violatorUid: string | null;
   guestId: string | null;
   violatorName: string | null;
@@ -89,16 +89,6 @@ type NavGroup = { label: string; items: NavItem[] };
 ------------------------------------------------------------------ */
 const ITEMS_PER_PAGE = 10;
 
-/**
- * Mga releaseStatus na ibig sabihin ay "bayad at verified na, pero wala
- * pang desisyon ang OIC":
- *  - AWAITING_OIC_STATUS — ang tamang value (OIC / Finance Payment Verification)
- *  - "Ready for Release" — lumang value na sinulat ng Finance Payment Verification
- *  - "Pending" / walang laman — na-verify gamit ang lumang Approve button sa
- *    Finance Overview, na hindi nagsusulat ng releaseStatus
- * Pag na-approve o na-reject ng OIC, "Approved by OIC" / "Rejected by OIC" na
- * sila, kaya mawawala na sila dito.
- */
 const AWAITING_DECISION_STATUSES = new Set<string>([
   AWAITING_OIC_STATUS,
   "Ready for Release",
@@ -109,21 +99,7 @@ const AWAITING_DECISION_STATUSES = new Set<string>([
 const isAwaitingOicDecision = (data: { releaseStatus?: unknown }): boolean =>
   AWAITING_DECISION_STATUSES.has(String(data.releaseStatus ?? "").trim());
 
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer in Charge",
-  "it-admin": "IT Admin",
-  supervisor: "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  finance: "Finance Staff",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
-/**
- * Kapareho ng sidebar ng OIC Homepage — pareho ang assets at pareho ang
- * paths. Kung may babaguhin sa isa, dapat pareho silang baguhin.
- */
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
@@ -199,16 +175,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Operations",
     items: [
       {
-        label: "Active Clamping Teams",
-        icon: clampingTeamsIcon,
-        path: "/dashboard/clamping-teams",
-      },
-      {
-        label: "Active Impounding",
-        icon: towTruckIcon,
-        path: "/dashboard/active-impounding",
-      },
-      {
         label: "Field Updates",
         icon: fieldUpdateIcon,
         path: "/dashboard/field-updates",
@@ -245,16 +211,15 @@ const formatWaiting = (minutes: number): string => {
    COMPONENT
 ------------------------------------------------------------------ */
 export default function ReleaseRequests() {
-  const navigate = useNavigate();
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "oic",
   });
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const [rows, setRows] = useState<ReleaseRequestRow[]>([]);
+  const [rawRows, setRows] = useState<ReleaseRequestRow[]>([]);
+  /** Guest → Registered kapag naka-register (active) ang plate sa violator app */
+  const rows = useRegisteredOwners(rawRows);
   const [loading, setLoading] = useState(true);
   const [actioning, setActioning] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -284,9 +249,6 @@ export default function ReleaseRequests() {
   }, []);
 
   useEffect(() => {
-    // Lahat ng verified na bayad, tapos sa client sinasala kung wala pang
-    // desisyon ang OIC. Hindi kayang i-query ng Firestore ang "walang field",
-    // kaya hindi ito puwedeng where("releaseStatus", ...) lang.
     const q = query(
       collection(db, "violations"),
       where("paymentStatus", "==", "Verified")
@@ -325,7 +287,6 @@ export default function ReleaseRequests() {
               waitingMinutes: computeWaitingMinutes(sortKey),
               verifiedBy: data.verifiedBy ?? "—",
               verifiedAt: (data.verifiedAt as Timestamp) ?? null,
-              // ⚠️ ADDED: violator identity (null-safe fallbacks)
               violatorUid: (data.violatorUid as string) ?? null,
               guestId: (data.guestId as string) ?? null,
               violatorName: (data.violatorName as string) ?? null,
@@ -343,37 +304,8 @@ export default function ReleaseRequests() {
     return () => unsubscribe();
   }, []);
 
-  /* Click outside */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    }
-  };
-
   const handleApprove = async (row: ReleaseRequestRow) => {
-    // FIFO guard — pareho ng nasa release queue.
+    // FIFO guard
     if (rows.length > 0 && rows[0].id !== row.id) {
       const proceed = window.confirm(
         `FIFO order puts ${rows[0].cin} (${rows[0].queue}) ahead of ${row.cin}.\n\n` +
@@ -382,7 +314,6 @@ export default function ReleaseRequests() {
       if (!proceed) return;
     }
 
-    // ⚠️ CHANGED: include violator info in confirmation dialog
     const violatorDisplay = row.violatorName
       ? row.violatorName
       : row.violatorUid
@@ -414,16 +345,24 @@ export default function ReleaseRequests() {
         approve: true,
         officerName: currentUser.name,
       });
-    } catch (err: any) {
+
+      // ✅ BAGO: Notify all active release officers
+      await notifyReleaseOfficersOfApproval({
+        cin: row.cin,
+        plateNo: row.plateNo,
+        violationId: row.id,
+        approvedBy: currentUser.name,
+        location: row.location,
+      });
+    } catch (err) {
       console.error("Approve failed:", err);
-      alert(err.message || "Failed to approve the release request.");
+      alert((err as Error)?.message || "Failed to approve the release request.");
     } finally {
       setActioning(null);
     }
   };
 
   const handleReject = async (row: ReleaseRequestRow) => {
-    // ⚠️ CHANGED: include violator info in rejection prompt
     const violatorDisplay = row.violatorName
       ? row.violatorName
       : row.violatorUid
@@ -454,9 +393,18 @@ export default function ReleaseRequests() {
         reason: reason.trim(),
         officerName: currentUser.name,
       });
-    } catch (err: any) {
+
+      // ✅ BAGO: Notify all active release officers of rejection
+      await notifyReleaseOfficersOfRejection({
+        cin: row.cin,
+        plateNo: row.plateNo,
+        violationId: row.id,
+        rejectedBy: currentUser.name,
+        reason: reason.trim(),
+      });
+    } catch (err) {
       console.error("Reject failed:", err);
-      alert(err.message || "Failed to reject the release request.");
+      alert((err as Error)?.message || "Failed to reject the release request.");
     } finally {
       setActioning(null);
     }
@@ -472,7 +420,6 @@ export default function ReleaseRequests() {
         r.plateNo.toLowerCase().includes(q) ||
         r.location.toLowerCase().includes(q) ||
         r.queue.toLowerCase().includes(q) ||
-        // ⚠️ ADDED: search by violator name
         (r.violatorName?.toLowerCase().includes(q) ?? false)
     );
   }, [rows, searchQuery]);
@@ -483,53 +430,18 @@ export default function ReleaseRequests() {
     currentPage * ITEMS_PER_PAGE
   );
 
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+  // Keep the page valid if the list shrinks (during render)
+  if (currentPage > totalPages) setCurrentPage(totalPages);
 
-  /* ----------------------------------------------------------------
-     RENDER
-  ---------------------------------------------------------------- */
   return (
     <div className="oic-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Officer in Charge</p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        <span>{item.label}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={NAV_GROUPS} role={<>Officer in Charge</>} />
 
         {/* MAIN */}
         <div className="main">
+          <AppTopbar groups={NAV_GROUPS} />
           <header className="main-header">
             <div>
               <h1>Release Requests</h1>
@@ -542,35 +454,6 @@ export default function ReleaseRequests() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={avatarImg}
-                alt="Account menu"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button className="dropdown-item">
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
@@ -617,14 +500,14 @@ export default function ReleaseRequests() {
                 </div>
               ) : (
                 <>
-                  <div className="table-wrapper">
+                  <div className="table-wrapper" tabIndex={0} role="region" aria-label="Data table" data-scroll-region>
                     <table className="data-table request-table">
                       <thead>
                         <tr>
                           <th>Queue No.</th>
                           <th>CIN</th>
                           <th>Plate No.</th>
-                          <th>Violator</th>{/* ⚠️ ADDED */}
+                          <th>Violator</th>
                           <th>Vehicle Type</th>
                           <th>Location</th>
                           <th>Amount Paid</th>
@@ -641,7 +524,6 @@ export default function ReleaseRequests() {
                             </td>
                             <td className="cell-plate">{row.plateNo}</td>
 
-                            {/* ⚠️ ADDED: Violator cell */}
                             <td className="cell-violator">
                               {row.violatorName ? (
                                 <div className="violator-cell">
@@ -671,7 +553,6 @@ export default function ReleaseRequests() {
                                 <span className="cell-empty">—</span>
                               )}
                             </td>
-                            {/* End */}
 
                             <td className="cell-vehicle">{row.vehicleType}</td>
                             <td className="cell-location">{row.location}</td>
@@ -744,4 +625,4 @@ export default function ReleaseRequests() {
       </div>
     </div>
   );
-}
+}

@@ -1,0 +1,230 @@
+/* ==================================================================
+   SessionMonitor.css
+   Extends ITAdminHomePage.css — Session monitor page
+================================================================== */
+
+.it-admin-page .session-content {
+  flex: 1;
+  padding: 24px 32px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(100vh - 100px);
+}
+
+.it-admin-page .session-content::-webkit-scrollbar {
+  width: 8px;
+}
+.it-admin-page .session-content::-webkit-scrollbar-track {
+  background: #F3F4F6;
+}
+.it-admin-page .session-content::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 4px;
+}
+.it-admin-page .session-content::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* ==================================================================
+   WARNING BANNER
+================================================================== */
+.it-admin-page .session-warning {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #fde16765;
+  border: 1px solid #FDE047;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.it-admin-page .session-warning-icon {
+  color: #CA8A04;
+  flex-shrink: 0;
+}
+
+.it-admin-page .session-warning-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #854D0E;
+}
+
+.it-admin-page .session-warning-text em {
+  font-style: italic;
+}
+
+/* ==================================================================
+   SESSION TABLE
+================================================================== */
+.it-admin-page .session-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.it-admin-page .session-table thead {
+  background: #FFFFFF;
+}
+
+.it-admin-page .session-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+  padding: 12px 16px;
+  border-bottom: 1px solid #E5E7EB;
+  white-space: nowrap;
+}
+
+.it-admin-page .session-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #F3F4F6;
+  color: #374151;
+  vertical-align: middle;
+}
+
+.it-admin-page .session-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.it-admin-page .session-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+.it-admin-page .cell-user {
+  font-weight: 600;
+  color: #111827;
+}
+
+.it-admin-page .cell-device {
+  color: #374151;
+}
+
+.it-admin-page .cell-ip {
+  color: #6B7280;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+}
+
+.it-admin-page .cell-time {
+  color: #374151;
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   ROLE PILLS (session-specific)
+================================================================== */
+.it-admin-page .session-role-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.it-admin-page .session-role-pill.role-oic {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.it-admin-page .session-role-pill.role-admin {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.it-admin-page .session-role-pill.role-release {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.it-admin-page .session-role-pill.role-finance {
+  background: #F3E8FF;
+  color: #6B21A8;
+}
+
+.it-admin-page .session-role-pill.role-clamping {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.it-admin-page .session-role-pill.role-impounding {
+  background: #FEF9C3;
+  color: #854D0E;
+}
+
+.it-admin-page .session-role-pill.role-it {
+  background: #DCFCE7;
+  color: #166534;
+}
+
+/* ==================================================================
+   REVOKE BUTTON
+================================================================== */
+.it-admin-page .btn-revoke {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 16px;
+  background: #FFFFFF;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    color 0.15s ease;
+  white-space: nowrap;
+}
+
+.it-admin-page .btn-revoke:hover:not(:disabled) {
+  background: #FEF2F2;
+  border-color: #FCA5A5;
+  color: #991B1B;
+}
+
+.it-admin-page .btn-revoke:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .it-admin-page .session-content {
+    padding: 20px 24px 24px;
+  }
+
+  .it-admin-page .session-table th,
+  .it-admin-page .session-table td {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .it-admin-page .session-content {
+    padding: 16px 16px 20px;
+  }
+
+  .it-admin-page .session-table {
+    font-size: 12px;
+  }
+
+  .it-admin-page .session-table th,
+  .it-admin-page .session-table td {
+    padding: 10px 8px;
+  }
+
+  .it-admin-page .cell-ip {
+    font-size: 11px;
+  }
+}

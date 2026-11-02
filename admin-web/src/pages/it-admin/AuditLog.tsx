@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Activity,
@@ -19,7 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
@@ -29,15 +28,14 @@ import {
   query,
   limit,
   Timestamp,
+  type DocumentData
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./ITAdminHomepage.css";
 import "./AuditLog.css";
 
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
-import keyIcon from "../../assets/key.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -71,7 +69,6 @@ type CurrentUser = {
 };
 
 type LogCategory =
-  | "Payment"
   | "Release"
   | "Clamping"
   | "Impounding"
@@ -92,7 +89,7 @@ type AuditLogRow = {
   ipAddress: string;
   flagged: boolean;
   category: LogCategory;
-  metadata?: Record<string, any>;
+  metadata?: DocumentData;
 };
 
 type AuditLogFull = AuditLogRow & {
@@ -108,7 +105,6 @@ const PAGE_SIZE = 10;
 
 const CATEGORY_FILTERS: CategoryFilter[] = [
   "All",
-  "Payment",
   "Release",
   "Clamping",
   "Impounding",
@@ -120,17 +116,6 @@ const CATEGORY_FILTERS: CategoryFilter[] = [
 /* ------------------------------------------------------------------
    ROLE MAP
 ------------------------------------------------------------------ */
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer-in-Charge",
-  "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  "finance": "Finance",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-  "system": "System",
-};
 
 /* Labels shown in the table pills (matches the design) */
 const ROLE_SHORT_LABELS: Record<RoleSlug, string> = {
@@ -155,6 +140,20 @@ const ROLE_BADGE_CLASS: Record<RoleSlug, string> = {
   "clamping-staff": "role-clamping",
   "impounding-staff": "role-impounding",
   "system": "role-system",
+};
+
+/**
+ * The role of whoever did it. Most entries (admin pages, enforcer app,
+ * violator app server) write `userRole`; a few older ones write `role`.
+ * Labels like "IT Admin" are turned into their slug. Anything unknown
+ * (e.g. "violator-app") shows as System.
+ */
+const roleOf = (data: { role?: unknown; userRole?: unknown }): RoleSlug => {
+  const raw = String(data.role ?? data.userRole ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-");
+  return raw in ROLE_SHORT_LABELS ? (raw as RoleSlug) : "system";
 };
 
 /* ------------------------------------------------------------------
@@ -224,7 +223,6 @@ const formatDateForInput = (date: Date): string => {
 };
 
 const VALID_CATEGORIES: LogCategory[] = [
-  "Payment",
   "Release",
   "Clamping",
   "Impounding",
@@ -232,6 +230,24 @@ const VALID_CATEGORIES: LogCategory[] = [
   "Users",
   "System",
 ];
+
+/**
+ * Payment entries are left out of the IT Admin's Audit Log: payments
+ * (cash, GCash, verification, OR numbers, amounts) belong to Finance and
+ * the OIC, not to IT. Matched by the log's type, its category, the payment
+ * details in its metadata, or the wording of the action.
+ */
+const isPaymentLog = (data: DocumentData): boolean => {
+  const type = String(data.type ?? "").toLowerCase();
+  if (/payment|cash|gcash|revenue|finance|receipt|refund/.test(type)) return true;
+  if (String(data.category ?? "").toLowerCase() === "payment") return true;
+  const meta = (data.metadata ?? {}) as DocumentData;
+  if (meta.paymentId || meta.orNumber || meta.cashReceived != null) return true;
+  const action = String(data.action ?? "").toLowerCase();
+  return /payment|paid|receipt|\bor\s*(no\.?|#|number)|cash|gcash|impound(ing)? fee|refund|revenue/.test(
+    action
+  );
+};
 
 /**
  * Uses the `category` field from Firestore if present.
@@ -247,7 +263,6 @@ const resolveCategory = (rawCategory: unknown, action: string): LogCategory => {
 
   const a = action.toLowerCase();
   if (/(login|logout|log in|log out|password|sign in|sign out|auth)/.test(a)) return "Auth";
-  if (/payment|paid|receipt|or no/.test(a)) return "Payment";
   if (/release/.test(a)) return "Release";
   if (/clamp/.test(a)) return "Clamping";
   if (/impound/.test(a)) return "Impounding";
@@ -348,11 +363,8 @@ function ViewModal({ row, onClose }: ViewModalProps) {
    MAIN COMPONENT
 ------------------------------------------------------------------ */
 export default function AuditLog() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
+  const [, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "it-admin",
   });
@@ -407,23 +419,25 @@ export default function AuditLog() {
     const unsubscribe = onSnapshot(
       auditQuery,
       (snapshot) => {
-        const fetched: AuditLogRow[] = snapshot.docs.map((d) => {
-          const data = d.data();
-          const action: string = data.action ?? "";
-          return {
-            id: d.id,
-            timestamp: data.timestamp ?? null,
-            time: formatTime(data.timestamp ?? null),
-            userName: data.userName ?? "Unknown",
-            role: (data.role ?? "system") as RoleSlug,
-            action,
-            record: data.record ?? data.targetId ?? "—",
-            ipAddress: data.ipAddress ?? "—",
-            flagged: data.flagged === true,
-            category: resolveCategory(data.category, action),
-            metadata: data.metadata,
-          };
-        });
+        const fetched: AuditLogRow[] = snapshot.docs
+          .filter((d) => !isPaymentLog(d.data()))
+          .map((d) => {
+            const data = d.data();
+            const action: string = data.action ?? "";
+            return {
+              id: d.id,
+              timestamp: data.timestamp ?? null,
+              time: formatTime(data.timestamp ?? null),
+              userName: data.userName ?? "Unknown",
+              role: roleOf(data),
+              action,
+              record: data.record ?? data.targetId ?? "—",
+              ipAddress: data.ipAddress ?? "—",
+              flagged: data.flagged === true,
+              category: resolveCategory(data.category, action),
+              metadata: data.metadata,
+            };
+          });
         setLogs(fetched);
         setLoading(false);
       },
@@ -435,41 +449,6 @@ export default function AuditLog() {
 
     return () => unsubscribe();
   }, []);
-
-  /* Click-outside + Escape */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
-    }
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setMenuOpen(false);
-        setViewingLog(null);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-    } catch (err) {
-      console.error("Logout error:", err);
-    } finally {
-      setMenuOpen(false);
-      navigate("/");
-    }
-  };
 
   /* Filter logs: search + date + category */
   const filteredLogs = useMemo(() => {
@@ -506,20 +485,23 @@ export default function AuditLog() {
     return filteredLogs.slice(start, start + PAGE_SIZE);
   }, [filteredLogs, currentPage]);
 
-  // Back to page 1 whenever filters change
-  useEffect(() => {
+  // Back to page 1 when these change (during render, not in an effect)
+  const pageResetKey = JSON.stringify([searchQuery, selectedDate, activeCategory]);
+  const [prevPageResetKey, setPrevPageResetKey] = useState(pageResetKey);
+  if (pageResetKey !== prevPageResetKey) {
+    setPrevPageResetKey(pageResetKey);
     setCurrentPage(1);
-  }, [searchQuery, selectedDate, activeCategory]);
+  }
 
-  // Keep current page valid if data shrinks
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+  // Keep the page valid if the list shrinks (during render)
+  if (currentPage > totalPages) setCurrentPage(totalPages);
 
-  // Sync the page box with the current page
-  useEffect(() => {
+  // Sync the page box with the current page (during render)
+  const [prevCurrentPage, setPrevCurrentPage] = useState(currentPage);
+  if (currentPage !== prevCurrentPage) {
+    setPrevCurrentPage(currentPage);
     setPageInput(String(currentPage));
-  }, [currentPage]);
+  }
 
   const goToPage = (page: number) => {
     const clamped = Math.min(Math.max(1, page), totalPages);
@@ -549,42 +531,11 @@ export default function AuditLog() {
     <div className="it-admin-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">IT Admin</p>
-            </div>
-          </div>
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div className="nav-group" key={group.title}>
-                <p className="nav-group-title">{group.title}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => {
-                    const IconComponent = item.icon;
-                    return (
-                      <li key={item.label}>
-                        <button
-                          type="button"
-                          className={`nav-item${item.active ? " active" : ""}`}
-                          onClick={() => navigate(item.path)}
-                        >
-                          <IconComponent size={16} className="nav-icon-svg" />
-                          <span>{item.label}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>IT Admin</>} />
 
         {/* MAIN */}
         <main className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>Audit Log</h1>
@@ -597,38 +548,6 @@ export default function AuditLog() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={menuRef}>
-              <img
-                src={avatarImg}
-                alt="Account menu"
-                className="avatar-img"
-                onClick={() => setMenuOpen((open) => !open)}
-              />
-              {menuOpen && (
-                <div className="profile-dropdown" role="menu">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">{ROLE_LABELS[currentUser.role]}</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="dropdown-item"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    <img src={keyIcon} alt="" className="dropdown-icon" />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <div className="audit-content">
@@ -647,6 +566,7 @@ export default function AuditLog() {
               <div className="date-box">
                 <input
                   type="date"
+                  aria-label="Filter by date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
                 />

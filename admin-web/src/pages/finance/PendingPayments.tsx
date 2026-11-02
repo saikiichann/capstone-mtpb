@@ -1,25 +1,23 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { KeyRound, ChevronLeft, ChevronRight, X, Search } from "lucide-react";
-import { signOut as firebaseSignOut } from "firebase/auth";
+import { useState, useEffect, useMemo } from "react";
+import { ChevronLeft, ChevronRight, X, Search } from "lucide-react";
 import {
   collection,
-  doc,
   onSnapshot,
   query,
-  runTransaction,
-  serverTimestamp,
   where,
   Timestamp,
+  type DocumentData
 } from "firebase/firestore";
-import { auth, db } from "../../firebase";
+import { db } from "../../firebase";
+import { useRegisteredOwners } from "../../lib/registeredOwners";
 import { useStaffProfile } from "../../lib/useStaffProfile";
+import { amountDueFor, overdueFeeFor } from "../../lib/clampFee";
+import { impoundFeeDue, isImpoundViolation } from "../../lib/impoundFlag";
 import "./PendingPayments.css";
 import CashPaymentSlip from "../../components/CashPaymentSlip";
+import { recordOnsitePayment } from "../../lib/onsitePayment";
 
 // Asset imports
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
 import pendingPaymentsIcon from "../../assets/pendingpayments.png";
 import paymentVerificationIcon from "../../assets/paymentverification.png";
@@ -27,21 +25,21 @@ import transactionIcon from "../../assets/transaction.png";
 import revenueIcon from "../../assets/revenue.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
-import logoutIcon from "../../assets/logout.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
   TYPES
 ------------------------------------------------------------------ */
 type RoleSlug = "finance";
 
-// ⚠️ WALANG "Both" — dalawa lang
 type AssignedLocation = "City Hall" | "Central";
 
 type CurrentUser = {
   name: string;
   role: RoleSlug;
-  assignedLocation: AssignedLocation | null;   // "City Hall" | "Central" — para sa payment
-  assignedLocationName: string | null;         // buong pangalan — para sa display
+  assignedLocation: AssignedLocation | null;
+  assignedLocationName: string | null;
 };
 
 type PendingStatus = "Unpaid" | "Overdue";
@@ -52,25 +50,28 @@ type PendingRow = {
   id: string;
   violationNo: string;
   cin: string;
+  uovrNo: string | null; /** UOVR No. — for impounded */
   plateNo: string;
+  fineAmount: number; 
+  overdueFee: number; /** ₱2,000 once the clamp is past 24 hours (replaces the fine), else 0 */
+  impoundFee: number; /** Impound fee if impounded (per weight class + per km). 0 if clamp only. */
+  impounded: boolean;  /** True if it is impounded (impounded o released) */
   amount: number;
   recordedAt: Timestamp | null;
   dueDate: Timestamp | null;
   daysLeft: number;
   status: PendingStatus;
-  impoundStatus: string | null;
-  impoundAutoFlagged: boolean;
-  impoundFlaggedBy: string | null;
   violatorUid: string | null;
   guestId: string | null;
   violatorName: string | null;
-  paymentLocation: PaymentLocation | null;   // ⚠️ BAGO
+  location: string | null;
+  paymentLocation: PaymentLocation | null;
 };
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
-type StatusFilter = "All" | "Unpaid" | "Overdue" | "Subject to Impound" | "Impounded";
+type StatusFilter = "All" | "Unpaid" | "Overdue";
 type SortOption = "oldest" | "newest" | "amount-high" | "amount-low" | "plate-asc";
 
 /* ------------------------------------------------------------------
@@ -84,9 +85,6 @@ const PAYMENT_LOCATION_LABELS: Record<PaymentLocation, string> = {
   "City Hall": "City Hall",
 };
 
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  finance: "Finance Staff",
-};
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "oldest", label: "Oldest First" },
@@ -96,13 +94,7 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "plate-asc", label: "Plate No. (A → Z)" },
 ];
 
-const STATUS_FILTERS: StatusFilter[] = [
-  "All",
-  "Unpaid",
-  "Overdue",
-  "Subject to Impound",
-  "Impounded",
-];
+const STATUS_FILTERS: StatusFilter[] = ["All", "Unpaid", "Overdue"];
 
 /* ------------------------------------------------------------------
   FINANCE SIDEBAR
@@ -168,10 +160,34 @@ const formatDate = (ts: Timestamp | null): string => {
 const computeDaysLeft = (ts: Timestamp | null): number => {
   if (!ts) return 0;
   try {
-    return Math.ceil((ts.toDate().getTime() - new Date().getTime()) / 86400000);
+    const diffDays = (ts.toDate().getTime() - new Date().getTime()) / 86400000;
+    return diffDays < 0 ? Math.floor(diffDays) : Math.ceil(diffDays);
   } catch {
     return 0;
   }
+};
+
+const isDueToday = (ts: Timestamp | null): boolean => {
+  if (!ts) return false;
+  try {
+    const due = ts.toDate();
+    const now = new Date();
+    return due.getTime() >= now.getTime() && due.toDateString() === now.toDateString();
+  } catch {
+    return false;
+  }
+};
+
+const formatTimeLeft = (ts: Timestamp | null, daysLeft: number): string => {
+  if (daysLeft < 0) return "Overdue";
+  if (!ts) return "—";
+  try {
+    const hours = Math.ceil((ts.toDate().getTime() - Date.now()) / 3600000);
+    if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"}`;
+  } catch {
+    return "—";
+  }
+  return `${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
 };
 
 const getStatusClass = (status: PendingStatus): string =>
@@ -185,13 +201,14 @@ const generateViolationNo = (cin: string): string => {
   return `${prefix}-${match[1].padStart(5, "0")}`;
 };
 
-/** ⚠️ BAGO: Derive payment location from violation data */
-const derivePaymentLocation = (data: any): PaymentLocation | null => {
+const derivePaymentLocation = (data: DocumentData): PaymentLocation | null => {
   const raw = String(data.paymentLocation ?? data.location ?? "").toLowerCase();
   if (raw.includes("city") || raw.includes("hall")) return "City Hall";
   if (raw.includes("central") || raw.includes("mtpb")) return "Central";
-  return null; // walang naka-set pa — violator hindi pa nagbabayad
+  return null;
 };
+
+const isImpounded = (data: DocumentData): boolean => isImpoundViolation(data);
 
 const numberToWords = (num: number): string => {
   const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
@@ -233,146 +250,10 @@ const numberToWords = (num: number): string => {
 };
 
 /* ------------------------------------------------------------------
-  RECORD CASH PAYMENT (Finance)
------------------------------------------------------------------- */
-const recordCashPaymentFinance = async (params: {
-  violationId: string;
-  cin: string;
-  plateNo: string;
-  amountDue: number;
-  paymentLocation: PaymentLocation;
-  violatorUid: string | null;
-  guestId: string | null;
-  violatorName: string | null;
-  officerName: string;
-}): Promise<{ referenceNumber: string; orNumber: string; paymentId: string }> => {
-  const year = new Date().getFullYear();
-  const counterRef = doc(db, "counters", "paymentReference");
-  const orCounterRef = doc(db, "counters", "orNumber");
-  const violationRef = doc(db, "violations", params.violationId);
-  const paymentRef = doc(collection(db, "payments"));
-  const auditRef = doc(collection(db, "auditLogs"));
-
-  return runTransaction(db, async (tx) => {
-    /* Step 1: Reference Number */
-    const counterSnap = await tx.get(counterRef);
-    const lastRef = counterSnap.exists()
-      ? Number(counterSnap.data().lastValue ?? 0)
-      : 0;
-    const nextRef = lastRef + 1;
-    const referenceNumber = `REF-${year}-${String(nextRef).padStart(5, "0")}`;
-
-    /* Step 2: OR Number */
-    const orCounterSnap = await tx.get(orCounterRef);
-    const lastOr = orCounterSnap.exists()
-      ? Number(orCounterSnap.data().lastValue ?? 0)
-      : 0;
-    const nextOr = lastOr + 1;
-    const orNumber = `OR-${year}-${String(nextOr).padStart(5, "0")}`;
-
-    /* Step 3: Persist both counters */
-    tx.set(
-      counterRef,
-      { lastValue: nextRef, prefix: "REF", updatedAt: serverTimestamp() },
-      { merge: true }
-    );
-
-    tx.set(
-      orCounterRef,
-      { lastValue: nextOr, prefix: "OR", updatedAt: serverTimestamp() },
-      { merge: true }
-    );
-
-    /* Step 4: Update violation */
-    tx.update(violationRef, {
-      paymentStatus: "Pending Verification",
-      paymentMethod: "Cash",
-      paymentReference: referenceNumber,
-      referenceNumber,
-      orNumber,
-      totalPaid: params.amountDue,
-      cashReceived: params.amountDue,
-      cashChange: 0,
-      amountInWords: numberToWords(params.amountDue),
-      paymentLocation: params.paymentLocation,
-      paidAt: serverTimestamp(),
-      cashRecordedBy: params.officerName,
-      cashRecordedByRole: "finance",
-      orIssuedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      updatedBy: params.officerName,
-      violatorUid: params.violatorUid,
-      guestId: params.guestId,
-      violatorName: params.violatorName,
-    });
-
-    /* Step 5: Create payment record */
-    tx.set(paymentRef, {
-      violationId: params.violationId,
-      cin: params.cin,
-      plateNo: params.plateNo,
-      violatorUid: params.violatorUid,
-      guestId: params.guestId,
-      violatorName: params.violatorName,
-      amount: params.amountDue,
-      convenienceFee: 0,
-      totalAmount: params.amountDue,
-      cashReceived: params.amountDue,
-      amountInWords: numberToWords(params.amountDue),
-      referenceNumber,
-      orNumber,
-      paymentLocation: params.paymentLocation,
-      method: "Cash",
-      status: "Pending Verification",
-      verificationStatus: null,
-      recordedBy: params.officerName,
-      recordedByRole: "finance",
-      createdAt: serverTimestamp(),
-      orIssuedAt: serverTimestamp(),
-      orIssuedBy: params.officerName,
-    });
-
-    /* Step 6: Audit log */
-    tx.set(auditRef, {
-      userName: params.officerName,
-      userRole: "finance",
-      action: `recorded cash payment for ${params.cin} — OR #${orNumber}, Ref ${referenceNumber}, Location: ${params.paymentLocation}`,
-      record: params.cin,
-      type: "cash-payment",
-      metadata: {
-        cin: params.cin,
-        plateNo: params.plateNo,
-        amountDue: params.amountDue,
-        amountInWords: numberToWords(params.amountDue),
-        referenceNumber,
-        orNumber,
-        paymentLocation: params.paymentLocation,
-        paymentId: paymentRef.id,
-        violatorUid: params.violatorUid,
-        guestId: params.guestId,
-        violatorName: params.violatorName,
-      },
-      timestamp: serverTimestamp(),
-    });
-
-    return {
-      referenceNumber,
-      orNumber,
-      paymentId: paymentRef.id,
-    };
-  });
-};
-
-/* ------------------------------------------------------------------
   COMPONENT: PendingPaymentsFinance
 ------------------------------------------------------------------ */
 export default function PendingPaymentsFinance() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
-  /* Profile ng naka-login na staff — naka-cache sa lahat ng Finance pages,
-     kaya hindi na nagfi-flash ang data ng ibang location paglipat ng tab. */
   const { profile, ready: userReady } = useStaffProfile();
   const currentUser: CurrentUser = useMemo(
     () => ({
@@ -384,11 +265,11 @@ export default function PendingPaymentsFinance() {
     [profile]
   );
 
-  const [rows, setRows] = useState<PendingRow[]>([]);
+  const [rawRows, setRows] = useState<PendingRow[]>([]);
+  const rows = useRegisteredOwners(rawRows);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
 
-  /* Search + Filter state */
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [sortOption, setSortOption] = useState<SortOption>("oldest");
@@ -401,6 +282,11 @@ export default function PendingPaymentsFinance() {
   const [savedOrNumber, setSavedOrNumber] = useState<string | null>(null);
   const [savedPaymentId, setSavedPaymentId] = useState<string | null>(null);
   const [showPrintSlip, setShowPrintSlip] = useState(false);
+  const [cashGiven, setCashGiven] = useState("");
+  const [savedCashReceived, setSavedCashReceived] = useState<number | null>(null);
+  /** Impound: verified and released */
+  const [savedReleased, setSavedReleased] = useState(false);
+  const [savedReleaseOrderId, setSavedReleaseOrderId] = useState<string | null>(null);
 
   /* Effect: Fetch pending payments (paymentStatus == "Unpaid") */
   useEffect(() => {
@@ -412,11 +298,29 @@ export default function PendingPaymentsFinance() {
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        let pending: PendingRow[] = snap.docs
+        const pending: PendingRow[] = snap.docs
           .map((d) => {
             const data = d.data();
             const recordedAt = (data.recordedAt as Timestamp) ?? null;
+            const impounded = isImpounded(data);
 
+            // Impound fee (per weight class + per km) — 0 if clamp only
+            const impoundFee = impoundFeeDue(
+              data.impoundStatus,
+              data.impoundFee,
+              data.weightClass,
+              data.distanceKm
+            );
+
+            // Clamp-related fees
+            const fineAmount = Number(data.fineAmount ?? 0);
+            const overdueFee = overdueFeeFor(data);
+            const clampAmount = amountDueFor(data);
+
+            // Total amount due = impound fee kung impounded, else clamp amount
+            const amount = impounded && impoundFee > 0 ? impoundFee : clampAmount;
+
+            // Due date (24 hrs from recordedAt)
             let dueDate: Timestamp | null = null;
             if (recordedAt) {
               try {
@@ -433,24 +337,32 @@ export default function PendingPaymentsFinance() {
 
             const daysLeft = computeDaysLeft(dueDate);
             const cin = data.cin ?? "—";
+            const status: PendingStatus = impounded
+              ? "Unpaid"
+              : daysLeft < 0
+                ? "Overdue"
+                : "Unpaid";
 
             return {
               id: d.id,
               violationNo: generateViolationNo(cin),
               cin,
+              uovrNo: data.uovrNo ?? null,
               plateNo: data.plateNo ?? "—",
-              amount: Number(data.fineAmount ?? 0),
+              fineAmount,
+              overdueFee: impounded ? 0 : overdueFee,
+              impoundFee: impounded ? impoundFee : 0,
+              impounded,
+              amount,
               recordedAt,
               dueDate,
               daysLeft,
-              status: (daysLeft < 0 ? "Overdue" : "Unpaid") as PendingStatus,
-              impoundStatus: data.impoundStatus ?? null,
-              impoundAutoFlagged: data.impoundAutoFlagged ?? false,
-              impoundFlaggedBy: data.impoundFlaggedBy ?? null,
+              status,
               violatorUid: data.violatorUid ?? null,
               guestId: data.guestId ?? null,
               violatorName: data.violatorName ?? null,
-              paymentLocation: derivePaymentLocation(data),   // ⚠️ BAGO
+              location: data.location ?? null,
+              paymentLocation: derivePaymentLocation(data),
             };
           })
           .sort((a, b) => {
@@ -458,15 +370,6 @@ export default function PendingPaymentsFinance() {
             const bt = b.recordedAt?.toMillis() ?? 0;
             return at - bt;
           });
-
-        // ⚠️ BAGO: Location-based filtering para sa Finance
-        // Ang Finance (City Hall) ay makikita lang ang City Hall violations
-        // Ang Finance (Central) ay makikita lang ang Central violations
-        // Pero — dahil "Unpaid" pa lang, wala pang location. Base sa
-        // assignedLocation ng Finance, hindi pa ito applicable.
-        // Ang location-based filtering ay applicable lang sa
-        // Payment Verification page (kung saan may location na).
-        // Kaya dito, walang filter — lahat ng Unpaid ay nakikita.
 
         setRows(pending);
         setLoading(false);
@@ -479,48 +382,19 @@ export default function PendingPaymentsFinance() {
     return () => unsubscribe();
   }, []);
 
-  /* Click outside */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  /* Handler: Sign out */
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    }
-  };
-
-  const handleChangePassword = () => {
-    setIsMenuOpen(false);
-  };
-
-  /* PAYMENT LOCATION — automatic, galing sa assignedLocation ng naka-login
-     na Finance staff (users/{uid}.assignedLocation). Hindi na pinipili. */
   const paymentLocation: PaymentLocation | null = currentUser.assignedLocation;
 
   /* CASH PAYMENT MODAL HANDLERS */
   const openCashModal = (row: PendingRow) => {
     setCashRow(row);
     setCashError("");
+    setCashGiven("");
+    setSavedCashReceived(null);
     setSavedReference(null);
     setSavedOrNumber(null);
     setSavedPaymentId(null);
+    setSavedReleased(false);
+    setSavedReleaseOrderId(null);
     setShowPrintSlip(false);
   };
 
@@ -530,6 +404,8 @@ export default function PendingPaymentsFinance() {
     setSavedReference(null);
     setSavedOrNumber(null);
     setSavedPaymentId(null);
+    setSavedReleased(false);
+    setSavedReleaseOrderId(null);
     setShowPrintSlip(false);
   };
 
@@ -544,26 +420,42 @@ export default function PendingPaymentsFinance() {
       return;
     }
 
+    const cashReceivedValue = cashGiven.trim() === "" ? cashRow.amount : Number(cashGiven);
+    if (!Number.isFinite(cashReceivedValue) || cashReceivedValue < cashRow.amount) {
+      setCashError(`Cash received must be at least ${formatCurrency(cashRow.amount)}.`);
+      return;
+    }
+
     setSaving(true);
     try {
-      const result = await recordCashPaymentFinance({
+      const result = await recordOnsitePayment({
         violationId: cashRow.id,
         cin: cashRow.cin,
+        uovrNo: cashRow.uovrNo,
         plateNo: cashRow.plateNo,
-        amountDue: cashRow.amount,
-        paymentLocation,
+        fineAmount: cashRow.fineAmount,
+        impoundFee: cashRow.impoundFee,
+        isImpound: cashRow.impounded,
+        location: cashRow.location,
+        amountInWords: numberToWords(cashRow.amount),
+        cashReceived: cashReceivedValue,
+        counterLocation: paymentLocation,
+        recordedByRole: "finance",
+        officerName: currentUser.name,
         violatorUid: cashRow.violatorUid || null,
         guestId: cashRow.guestId || null,
         violatorName: cashRow.violatorName || null,
-        officerName: currentUser.name,
       });
 
+      setSavedCashReceived(cashReceivedValue);
       setSavedReference(result.referenceNumber);
       setSavedOrNumber(result.orNumber);
       setSavedPaymentId(result.paymentId);
-    } catch (err: any) {
+      setSavedReleased(result.released);
+      setSavedReleaseOrderId(result.releaseOrderId);
+    } catch (err) {
       console.error("Cash payment failed:", err);
-      setCashError(err.message || "Failed to record cash payment.");
+      setCashError((err as Error)?.message || "Failed to record cash payment.");
     } finally {
       setSaving(false);
     }
@@ -579,7 +471,8 @@ export default function PendingPaymentsFinance() {
         (row) =>
           row.cin.toLowerCase().includes(q) ||
           row.plateNo.toLowerCase().includes(q) ||
-          row.violationNo.toLowerCase().includes(q)
+          row.violationNo.toLowerCase().includes(q) ||
+          (row.uovrNo ?? "").toLowerCase().includes(q)
       );
     }
 
@@ -587,10 +480,6 @@ export default function PendingPaymentsFinance() {
       result = result.filter((row) => {
         if (statusFilter === "Unpaid") return row.status === "Unpaid";
         if (statusFilter === "Overdue") return row.status === "Overdue";
-        if (statusFilter === "Subject to Impound")
-          return row.impoundStatus === "Subject to Impound";
-        if (statusFilter === "Impounded")
-          return row.impoundStatus === "Impounded";
         return true;
       });
     }
@@ -619,8 +508,10 @@ export default function PendingPaymentsFinance() {
   /* METRICS */
   const metrics = useMemo(() => {
     const totalPending = rows.length;
-    const overdue = rows.filter((r) => r.daysLeft < 0).length;
-    const dueToday = rows.filter((r) => r.daysLeft === 0).length;
+    const overdue = rows.filter((r) => r.status === "Overdue").length;
+    const dueToday = rows.filter(
+      (r) => !r.impounded && r.daysLeft >= 0 && isDueToday(r.dueDate)
+    ).length;
     return { totalPending, overdue, dueToday };
   }, [rows]);
 
@@ -636,61 +527,32 @@ export default function PendingPaymentsFinance() {
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
   const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+  // Keep the page valid if the list shrinks (during render)
+  if (currentPage > totalPages) setCurrentPage(totalPages);
 
-  useEffect(() => {
+  // Back to page 1 when these change (during render, not in an effect)
+  const pageResetKey = JSON.stringify([searchQuery, statusFilter, sortOption]);
+  const [prevPageResetKey, setPrevPageResetKey] = useState(pageResetKey);
+  if (pageResetKey !== prevPageResetKey) {
+    setPrevPageResetKey(pageResetKey);
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, sortOption]);
+  }
 
   return (
     <div className="finance-page finance-pending-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">
-                Finance Staff
-                {/* ⚠️ BAGO: Location indicator */}
+        <AppSidebar groups={NAV_GROUPS} role={<>Finance Staff
                 {currentUser.assignedLocationName && (
                   <span className="sidebar-brand-location">
                     {" · "}
                     {currentUser.assignedLocationName}
                   </span>
-                )}
-              </p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${item.active ? "nav-item-active" : ""}`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+                )}</>} />
 
         {/* MAIN CONTENT */}
         <div className="main">
+          <AppTopbar groups={NAV_GROUPS} />
           <header className="main-header">
             <div>
               <h1>Pending Payments</h1>
@@ -703,34 +565,6 @@ export default function PendingPaymentsFinance() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={officerAvatar}
-                alt="Staff Profile"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                      {currentUser.assignedLocationName && ` · ${currentUser.assignedLocationName}`}
-                    </p>
-                  </div>
-                  <button className="dropdown-item" onClick={handleChangePassword}>
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button className="dropdown-item logout" onClick={handleLogout}>
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
@@ -754,7 +588,7 @@ export default function PendingPaymentsFinance() {
                   <input
                     type="text"
                     className="toolbar-search-input"
-                    placeholder="Search by CIN, plate no., or violation no..."
+                    placeholder="Search by CIN, plate no., UOVR, or violation no..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
@@ -771,6 +605,7 @@ export default function PendingPaymentsFinance() {
                 </div>
 
                 <select
+                  aria-label="Filter by status"
                   className="toolbar-select"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
@@ -783,6 +618,7 @@ export default function PendingPaymentsFinance() {
                 </select>
 
                 <select
+                  aria-label="Sort by"
                   className="toolbar-select"
                   value={sortOption}
                   onChange={(e) => setSortOption(e.target.value as SortOption)}
@@ -818,7 +654,7 @@ export default function PendingPaymentsFinance() {
                 </div>
               ) : (
                 <>
-                  <div className="table-wrapper">
+                  <div className="table-wrapper" tabIndex={0} role="region" aria-label="Data table" data-scroll-region>
                     <table className="data-table">
                       <thead>
                         <tr>
@@ -840,12 +676,20 @@ export default function PendingPaymentsFinance() {
                               <span className="cin-pill">{row.cin}</span>
                             </td>
                             <td className="cell-plate">{row.plateNo}</td>
-                            <td className="cell-amount">{formatCurrency(row.amount)}</td>
-                            <td className="cell-due-date">{formatDate(row.dueDate)}</td>
-                            <td className={`cell-days-left ${row.daysLeft < 0 ? "text-red" : ""}`}>
-                              {row.daysLeft < 0
-                                ? "Overdue"
-                                : `${row.daysLeft} day${row.daysLeft === 1 ? "" : "s"}`}
+                            <td className="cell-amount">
+                              {formatCurrency(row.amount)}
+                              {row.impounded && row.impoundFee > 0 && (
+                                <small className="amount-note">impound fee</small>
+                              )}
+                              {!row.impounded && row.overdueFee > 0 && (
+                                <small className="amount-note">overdue clamp fee</small>
+                              )}
+                            </td>
+                            <td className="cell-due-date">
+                              {row.impounded ? "—" : formatDate(row.dueDate)}
+                            </td>
+                            <td className={`cell-days-left ${row.daysLeft < 0 && !row.impounded ? "text-red" : ""}`}>
+                              {row.impounded ? "—" : formatTimeLeft(row.dueDate, row.daysLeft)}
                             </td>
                             <td>
                               <span className={`status-pill ${getStatusClass(row.status)}`}>
@@ -860,25 +704,6 @@ export default function PendingPaymentsFinance() {
                               >
                                 Cash Payment
                               </button>
-
-                              {row.impoundStatus === "Subject to Impound" && (
-                                <span
-                                  className={`badge-impound ${
-                                    row.impoundAutoFlagged ? "badge-impound-auto" : ""
-                                  }`}
-                                  title={
-                                    row.impoundAutoFlagged
-                                      ? "Automatically flagged by system (24hr grace period expired)"
-                                      : `Flagged by ${row.impoundFlaggedBy ?? "OIC"}`
-                                  }
-                                >
-                                  {row.impoundAutoFlagged ? "🤖 Auto-flagged" : "Subject to Impound"}
-                                </span>
-                              )}
-
-                              {row.impoundStatus === "Impounded" && (
-                                <span className="badge-impounded">Impounded</span>
-                              )}
                             </td>
                           </tr>
                         ))}
@@ -925,7 +750,7 @@ export default function PendingPaymentsFinance() {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">Cash Payment — {cashRow.violationNo}</h3>
-              <button
+              <button aria-label="Close"
                 type="button"
                 className="modal-close-btn"
                 onClick={closeCashModal}
@@ -948,18 +773,34 @@ export default function PendingPaymentsFinance() {
                       <p className="cash-reference-value">{savedOrNumber}</p>
                     </div>
                   )}
-                  <p className="cash-saved-note">
-                    Cash payment recorded by <strong>{currentUser.name}</strong> (Finance) —{" "}
-                    <strong>
-                      {paymentLocation ? PAYMENT_LOCATION_LABELS[paymentLocation] : "—"}
-                    </strong>. {cashRow.cin} now appears under
-                    Payment Verification for confirmation by a different staff member
-                    (segregation of duties).
-                  </p>
-                  <p className="cash-saved-hint">
-                    Next step: Print the acknowledgment slip for the violator. It
-                    contains a QR code that will be scanned to verify this payment.
-                  </p>
+                  {savedReleased ? (
+                    <>
+                    <p className="cash-saved-note">
+                      Impound payment received by <strong>{currentUser.name}</strong> (Finance). {cashRow.cin} is
+                      now <strong>Verified</strong> and <strong>Released</strong>
+                      {savedReleaseOrderId ? <> ({savedReleaseOrderId})</> : null} — no Payment Verification
+                      or release approval needed for impound.
+                    </p>
+                    <p className="cash-saved-hint">
+                      Next step: Print the slip. The violator presents it to claim the vehicle.
+                    </p>
+                    </>
+                  ) : (
+                    <>
+                    <p className="cash-saved-note">
+                      Cash payment recorded by <strong>{currentUser.name}</strong> (Finance) —{" "}
+                      <strong>
+                        {paymentLocation ? PAYMENT_LOCATION_LABELS[paymentLocation] : "—"}
+                      </strong>. {cashRow.cin} now appears under
+                      Payment Verification for confirmation by a different staff member
+                      (segregation of duties).
+                    </p>
+                    <p className="cash-saved-hint">
+                      Next step: Print the acknowledgment slip for the violator. It
+                      contains a QR code that will be scanned to verify this payment.
+                    </p>
+                    </>
+                  )}
                 </>
               ) : (
                 <>
@@ -973,6 +814,12 @@ export default function PendingPaymentsFinance() {
                       <span>CIN</span>
                       <strong>{cashRow.cin}</strong>
                     </div>
+                    {cashRow.uovrNo && (
+                      <div className="cash-summary-row">
+                        <span>UOVR No.</span>
+                        <strong>{cashRow.uovrNo}</strong>
+                      </div>
+                    )}
                     <div className="cash-summary-row">
                       <span>Plate No.</span>
                       <strong>{cashRow.plateNo}</strong>
@@ -983,6 +830,35 @@ export default function PendingPaymentsFinance() {
                         <strong>{cashRow.violatorName}</strong>
                       </div>
                     )}
+
+                    {/* FEE BREAKDOWN — Impound o Clamp */}
+                    {cashRow.impounded && cashRow.impoundFee > 0 ? (
+                      <div className="cash-summary-row">
+                        <span>
+                          Impound Fee
+                          <small className="amount-note">
+                            Per weight class + distance
+                          </small>
+                        </span>
+                        <strong>{formatCurrency(cashRow.impoundFee)}</strong>
+                      </div>
+                    ) : cashRow.overdueFee > 0 ? (
+                      <div className="cash-summary-row">
+                        <span>
+                          Overdue Clamp Fee
+                          <small className="amount-note">
+                            Past 24 hours — replaces the {formatCurrency(cashRow.fineAmount)} fine
+                          </small>
+                        </span>
+                        <strong>{formatCurrency(cashRow.overdueFee)}</strong>
+                      </div>
+                    ) : (
+                      <div className="cash-summary-row">
+                        <span>Fine</span>
+                        <strong>{formatCurrency(cashRow.fineAmount)}</strong>
+                      </div>
+                    )}
+
                     <div className="cash-summary-row">
                       <span>Amount Due</span>
                       <strong className="cash-summary-amount">
@@ -996,14 +872,39 @@ export default function PendingPaymentsFinance() {
                       </strong>
                     </div>
                     <div className="cash-summary-row">
-                      <span>Cash Received</span>
+                      <span>Change</span>
                       <strong className="cash-summary-amount">
-                        {formatCurrency(cashRow.amount)}
+                        {formatCurrency(
+                          Math.max(
+                            0,
+                            (cashGiven.trim() === "" ? cashRow.amount : Number(cashGiven) || 0) -
+                              cashRow.amount
+                          )
+                        )}
                       </strong>
                     </div>
                   </div>
 
-                  {/* PAYMENT LOCATION — automatic (assignedLocation ng staff) */}
+                  <div className="form-group">
+                    <label htmlFor="cashGiven">Cash Received</label>
+                    <input
+                      id="cashGiven"
+                      className="form-input"
+                      type="number"
+                      inputMode="decimal"
+                      min={cashRow.amount}
+                      step="0.01"
+                      placeholder={cashRow.amount.toFixed(2)}
+                      value={cashGiven}
+                      onChange={(e) => setCashGiven(e.target.value)}
+                      disabled={saving}
+                    />
+                    <small className="form-hint">
+                      Amount handed over by the payer. Leave blank if exact. GCash is paid
+                      online through the violator app.
+                    </small>
+                  </div>
+
                   <div className="form-group">
                     <label>Payment Location</label>
                     <div className="read-only-field">
@@ -1019,7 +920,6 @@ export default function PendingPaymentsFinance() {
                     </small>
                   </div>
 
-                  {/* OR NUMBER — Auto-generated */}
                   <div className="form-group">
                     <label>OR Number</label>
                     <div className="read-only-field">Auto-generated on save</div>
@@ -1031,11 +931,18 @@ export default function PendingPaymentsFinance() {
 
                   {cashError && <p className="form-error">{cashError}</p>}
 
-                  <p className="modal-note">
-                    Recorded by <strong>{currentUser.name}</strong> (Finance). The
-                    violation moves to Payment Verification for confirmation by a
-                    different staff member.
-                  </p>
+                  {cashRow.impounded ? (
+                    <p className="modal-note">
+                      Recorded by <strong>{currentUser.name}</strong> (Finance). <strong>Impound:</strong>{" "}
+                      saving verifies the payment and releases the vehicle right away.
+                    </p>
+                  ) : (
+                    <p className="modal-note">
+                      Recorded by <strong>{currentUser.name}</strong> (Finance). The
+                      violation moves to Payment Verification for confirmation by a
+                      different staff member.
+                    </p>
+                  )}
                 </>
               )}
             </div>
@@ -1043,9 +950,6 @@ export default function PendingPaymentsFinance() {
             <div className="modal-footer">
               {savedReference ? (
                 <>
-                  <button className="btn-secondary" onClick={closeCashModal}>
-                    Skip Print
-                  </button>
                   <button className="btn-primary" onClick={() => setShowPrintSlip(true)}>
                     🖨️ Print Slip
                   </button>
@@ -1064,7 +968,11 @@ export default function PendingPaymentsFinance() {
                     onClick={handleSaveCash}
                     disabled={saving || !userReady || !paymentLocation}
                   >
-                    {saving ? "Saving..." : "Confirm Payment"}
+                    {saving
+                      ? "Saving..."
+                      : cashRow.impounded
+                        ? "Confirm Payment & Release"
+                        : "Confirm Payment"}
                   </button>
                 </>
               )}
@@ -1080,10 +988,20 @@ export default function PendingPaymentsFinance() {
           referenceNumber={savedReference || ""}
           cin={cashRow.cin}
           plateNo={cashRow.plateNo}
-          amount={cashRow.amount}
+          amount={
+            cashRow.impoundFee > 0
+              ? 0
+              : cashRow.overdueFee > 0
+                ? 0
+                : cashRow.fineAmount
+          }
+          overdueFee={cashRow.overdueFee}
+          impoundFee={cashRow.impoundFee}
           totalAmount={cashRow.amount}
+          cashReceived={savedCashReceived ?? undefined}
           orNumber={savedOrNumber || ""}
           recordedBy={currentUser.name}
+          released={savedReleased}
           createdAt={new Date()}
           onClose={() => {
             setShowPrintSlip(false);

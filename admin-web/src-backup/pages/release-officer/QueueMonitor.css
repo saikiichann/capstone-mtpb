@@ -1,0 +1,552 @@
+/* ==================================================================
+   QueueMonitor.css
+   Extends Homepage.css (release-officer) — Queue Monitor styles
+   + Notification Bell (shared)
+================================================================== */
+
+/* ==================================================================
+   HEADER RIGHT GROUP (Notification Bell + Avatar)
+================================================================== */
+.release-page .header-right-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* ==================================================================
+   SEARCH BAR
+================================================================== */
+.release-page .queue-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 14px 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.release-page .queue-search-icon {
+  color: #9CA3AF;
+  flex-shrink: 0;
+}
+
+.release-page .queue-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: #111827;
+  font-family: inherit;
+}
+
+.release-page .queue-search-input::placeholder {
+  color: #9CA3AF;
+}
+
+/* ==================================================================
+   QUEUE TABLE
+================================================================== */
+.release-page .queue-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.release-page .queue-table thead {
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.release-page .queue-table th {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  padding: 12px 8px;
+  white-space: nowrap;
+}
+
+.release-page .queue-table td {
+  padding: 16px 8px;
+  color: #374151;
+  vertical-align: middle;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.release-page .queue-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.release-page .queue-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+/* Queue cell */
+.release-page .cell-queue {
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+}
+
+/* CIN cell */
+.release-page .queue-table .cin-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Plate cell */
+.release-page .queue-table .cell-plate {
+  color: #111827;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Vehicle Type cell */
+.release-page .queue-table .cell-vehicle {
+  color: #374151;
+  white-space: nowrap;
+}
+
+/* Location cell
+   Siya ang pinakamahabang column, kaya siya ang binibigyan ng natitirang
+   espasyo at pinapayagang mag-wrap. Kung nowrap siya, tinutulak niya ang
+   action button sa dulong kanan, malayo sa "Action" header nito. */
+.release-page .queue-table .cell-location {
+  color: #374151;
+  white-space: normal;
+  min-width: 180px;
+}
+
+/* Waiting cell — bagong column. Tabular figures para pantay ang basa
+   ng mga numero pababa. */
+.release-page .queue-table .cell-waiting {
+  color: #64748B;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Status cell */
+.release-page .queue-table .cell-status {
+  white-space: nowrap;
+  width: 200px;
+}
+
+/* Action cell
+   Naka-left pareho ang header at ang button. Dati, right ang cell pero
+   left ang header, kaya mukhang hindi magkaugnay. Ang width: 1% ay
+   nangangahulugang "gamitin mo lang ang kailangang lapad" — doon
+   napupunta sa Location ang natitira. */
+.release-page .queue-table th:last-child,
+.release-page .queue-table .cell-action {
+  white-space: nowrap;
+  text-align: left;
+  width: 1%;
+}
+
+/* ==================================================================
+   STATUS PILLS
+================================================================== */
+.release-page .status-pill {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.release-page .status-ready {
+  background: #FEF9C3;
+  color: #854D0E;
+}
+
+.release-page .status-awaiting {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.release-page .status-inqueue {
+  background: #E5E7EB;
+  color: #374151;
+}
+
+/* ==================================================================
+   MARK AS RELEASED BUTTON
+================================================================== */
+.release-page .btn-mark-released {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 18px;
+  background: #16A34A;
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+
+.release-page .btn-mark-released:hover:not(:disabled) {
+  background: #15803D;
+}
+
+.release-page .btn-mark-released:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* Naka-disable kapag hindi pa verified ang bayad. Kasama ang grayscale
+   kasi sa opacity lang, mukhang pindot-able pa rin ang matingkad na
+   berde — at akalain ng user na sira ang sistema. */
+.release-page .btn-mark-released:disabled {
+  background: #9CA3AF;
+  cursor: not-allowed;
+  opacity: 0.6;
+  filter: grayscale(0.4);
+  transform: none;
+}
+
+/* ==================================================================
+   PAGINATION
+================================================================== */
+.release-page .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 24px 0 0;
+  margin-top: 16px;
+  border-top: 1px solid #F3F4F6;
+}
+
+.release-page .pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #FFFFFF;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.release-page .pagination-btn:hover:not(:disabled) {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.release-page .pagination-btn:disabled {
+  color: #9CA3AF;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.release-page .pagination-btn svg {
+  flex-shrink: 0;
+}
+
+.release-page .pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.release-page .pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  background: #F3F4F6;
+  color: #111827;
+  font-weight: 700;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.release-page .pagination-sep {
+  color: #6B7280;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   NOTIFICATION BELL
+================================================================== */
+.release-page .notification-bell-wrapper {
+  position: relative;
+}
+
+.release-page .notification-bell-btn {
+  position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #374151;
+  transition: background 0.15s ease;
+}
+
+.release-page .notification-bell-btn:hover {
+  background: #F3F4F6;
+}
+
+.release-page .notification-bell-btn:active {
+  background: #E5E7EB;
+}
+
+.release-page .notification-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: #DC2626;
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 10px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1.2;
+  box-shadow: 0 0 0 2px #FFFFFF;
+}
+
+.release-page .notification-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 380px;
+  max-width: 90vw;
+  background: #FFFFFF;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  border: 1px solid #E5E7EB;
+  z-index: 1000;
+  overflow: hidden;
+  animation: notificationSlideIn 0.15s ease-out;
+}
+
+@keyframes notificationSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.release-page .notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.release-page .notification-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+  color: #111827;
+}
+
+.release-page .notification-mark-all {
+  background: none;
+  border: none;
+  color: #2563EB;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.release-page .notification-mark-all:hover {
+  text-decoration: underline;
+}
+
+.release-page .notification-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.release-page .notification-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.release-page .notification-list::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 3px;
+}
+
+.release-page .notification-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: #9CA3AF;
+  font-size: 13px;
+}
+
+.release-page .notification-empty-icon {
+  color: #D1D5DB;
+}
+
+.release-page .notification-empty p {
+  margin: 0;
+}
+
+.release-page .notification-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #F9FAFB;
+  cursor: pointer;
+  transition: background 0.1s ease;
+  position: relative;
+}
+
+.release-page .notification-item:last-child {
+  border-bottom: none;
+}
+
+.release-page .notification-item:hover {
+  background: #F9FAFB;
+}
+
+.release-page .notification-item.unread {
+  background: #EFF6FF;
+}
+
+.release-page .notification-item.unread:hover {
+  background: #DBEAFE;
+}
+
+.release-page .notification-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.release-page .notification-icon.icon-approved {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.release-page .notification-icon.icon-denied {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.release-page .notification-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.release-page .notification-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 4px 0;
+  line-height: 1.3;
+}
+
+.release-page .notification-item-message {
+  font-size: 12px;
+  color: #6B7280;
+  margin: 0 0 6px 0;
+  line-height: 1.4;
+}
+
+.release-page .notification-item-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #9CA3AF;
+  margin: 0;
+}
+
+.release-page .notification-unread-dot {
+  position: absolute;
+  top: 18px;
+  right: 16px;
+  width: 8px;
+  height: 8px;
+  background: #2563EB;
+  border-radius: 50%;
+}
+
+.release-page .notification-footer {
+  padding: 12px 16px;
+  border-top: 1px solid #F3F4F6;
+  text-align: center;
+}
+
+.release-page .notification-view-all {
+  background: none;
+  border: none;
+  color: #2563EB;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.release-page .notification-view-all:hover {
+  text-decoration: underline;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 640px) {
+  .release-page .notification-dropdown {
+    width: 320px;
+    right: -60px;
+  }
+
+  .release-page .header-right-group {
+    gap: 8px;
+  }
+
+  .release-page .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .release-page .btn-mark-released {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+}

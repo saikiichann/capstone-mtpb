@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Activity,
@@ -11,29 +10,31 @@ import {
   Lock,
   Settings as SettingsIcon,
   RefreshCw,
-  Loader2,
   QrCode,
 } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
   doc,
-  getDoc,
   onSnapshot,
   orderBy,
   query,
-  setDoc,
-  serverTimestamp,
   writeBatch,
 } from "firebase/firestore";
-import { auth, db } from "../../firebase";
+import { db } from "../../firebase";
 import "./ITAdminHomepage.css";
 import "./Settings.css";
+import { CLAMP_GRACE_HOURS, CLAMP_OVERDUE_FEE } from "../../lib/clampFee";
+import {
+  IMPOUND_BASE_FEES,
+  IMPOUND_FREE_KM,
+  IMPOUND_PER_KM_FEE,
+  computeImpoundFee,
+  weightClassFromVehicleType,
+  type VehicleWeightClass,
+} from "../../lib/impoundFlag";
 
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
-import keyIcon from "../../assets/key.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -50,21 +51,6 @@ type NavGroup = {
   items: NavItem[];
 };
 
-type RoleSlug =
-  | "oic"
-  | "it-admin"
-  | "supervisor"
-  | "record-officer"
-  | "release-officer"
-  | "finance"
-  | "clamping-staff"
-  | "impounding-staff";
-
-type CurrentUser = {
-  name: string;
-  role: RoleSlug;
-};
-
 type FineRow = {
   id: string;
   violationType: string;
@@ -74,16 +60,6 @@ type FineRow = {
 /* ------------------------------------------------------------------
    ROLE MAP
 ------------------------------------------------------------------ */
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer-in-Charge",
-  "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  "finance": "Finance",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
 /* ------------------------------------------------------------------
    NAV
@@ -152,71 +128,45 @@ const FALLBACK_CLAMPING: FineRow[] = [
   { id: "clamping-loading", violationType: "Loading & Unloading Area", amount: 900 },
 ];
 
-const FALLBACK_IMPOUNDING: FineRow[] = [
-  { id: "impounding-expired-ovr-top", violationType: "Expired OVR/TOP", amount: 1000 },
-  { id: "impounding-invalid-provincial", violationType: "Invalid Provincial Ticket", amount: 500 },
-  { id: "impounding-suspicious-license", violationType: "Suspicious License/OVR", amount: 1000 },
-  { id: "impounding-improper-license", violationType: "Improper Use of License (Restriction Code)", amount: 500 },
-  { id: "impounding-failure-carry", violationType: "Failure to Carry/Show OR/CR", amount: 1000 },
-  { id: "impounding-tampered-or-cr", violationType: "Tampered OR/CR (Pertaining to Date)", amount: 1000 },
-  { id: "impounding-expired-or-cr", violationType: "Expired OR/CR / Unregistered", amount: 500 },
-  { id: "impounding-out-of-route", violationType: "Out of Route / Cutting Trip", amount: 1000 },
-  { id: "impounding-driving-without-license", violationType: "Driving w/o License", amount: 500 },
-  { id: "impounding-failure-show-carry", violationType: "Failure to Show/Carry", amount: 1000 },
+
+/* ------------------------------------------------------------------
+   IMPOUND FEE (same constants used by Add/Edit Impound Record)
+------------------------------------------------------------------ */
+/* Vehicle types the impounding staff can pick in Add Impound Record */
+const IMPOUND_VEHICLE_TYPES = [
+  "PUB", "PUJ", "CAR", "MOTORCYCLE", "TAXI",
+  "TRAILER", "TRICYCLE", "VAN", "TRUCK", "OTHERS",
 ];
+
+const WEIGHT_CLASS_ORDER: VehicleWeightClass[] = ["light", "medium", "heavy"];
+const WEIGHT_CLASS_NAMES: Record<VehicleWeightClass, string> = {
+  light: "Light",
+  medium: "Medium",
+  heavy: "Heavy",
+};
+
+/* Group the vehicle types using the real classifier, so this table
+   always matches what the system computes. */
+const IMPOUND_FEE_ROWS = WEIGHT_CLASS_ORDER.map((weightClass) => ({
+  weightClass,
+  vehicles: IMPOUND_VEHICLE_TYPES.filter(
+    (v) => weightClassFromVehicleType(v) === weightClass
+  ),
+  base: IMPOUND_BASE_FEES[weightClass],
+}));
+
+const SAMPLE_KM = 8;
+const SAMPLE_FEE = computeImpoundFee("light", SAMPLE_KM);
+
+const peso = (n: number) => `₱${n.toLocaleString()}`;
 
 /* ------------------------------------------------------------------
    COMPONENT
 ------------------------------------------------------------------ */
 export default function Settings() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const navigate = useNavigate();
-
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
-    name: "Loading...",
-    role: "it-admin",
-  });
 
   const [clamping, setClamping] = useState<FineRow[]>([]);
   const [clampingLoading, setClampingLoading] = useState(true);
-
-  const [impounding, setImpounding] = useState<FineRow[]>([]);
-  const [impoundingLoading, setImpoundingLoading] = useState(true);
-
-  const [redemptionWindow, setRedemptionWindow] = useState("24");
-  const [overdueAlert, setOverdueAlert] = useState("72");
-  const [thresholdsSaving, setThresholdsSaving] = useState(false);
-  const [thresholdsSaved, setThresholdsSaved] = useState(false);
-
-  /* Fetch current user */
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
-      if (!loggedUser) {
-        setCurrentUser({ name: "Guest", role: "it-admin" });
-        return;
-      }
-      try {
-        const userDocRef = doc(db, "users", loggedUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const data = userDocSnap.data();
-          setCurrentUser({
-            name: data.name ?? "Unknown",
-            role: (data.role ?? "it-admin") as RoleSlug,
-          });
-        } else {
-          setCurrentUser({
-            name: loggedUser.email?.split("@")[0] ?? "Unknown",
-            role: "it-admin",
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching current user:", err);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
 
   /* ==================================================================
      Real-time: clampingFines — MAY AUTO-SEED
@@ -229,7 +179,6 @@ export default function Settings() {
       finesQuery,
       async (snapshot) => {
         if (snapshot.empty) {
-          console.log("📦 clampingFines is empty — auto-seeding...");
           try {
             const batch = writeBatch(db);
             FALLBACK_CLAMPING.forEach((fine, index) => {
@@ -241,7 +190,6 @@ export default function Settings() {
               });
             });
             await batch.commit();
-            console.log("✅ Auto-seeded 15 clamping fines");
           } catch (err) {
             console.error("Auto-seed clamping fines failed:", err);
             setClamping(FALLBACK_CLAMPING);
@@ -269,188 +217,15 @@ export default function Settings() {
     return () => unsubscribe();
   }, []);
 
-  /* ==================================================================
-     Real-time: impoundingFines — MAY AUTO-SEED
-  ================================================================== */
-  useEffect(() => {
-    const finesRef = collection(db, "impoundingFines");
-    const finesQuery = query(finesRef, orderBy("order", "asc"));
-
-    const unsubscribe = onSnapshot(
-      finesQuery,
-      async (snapshot) => {
-        if (snapshot.empty) {
-          console.log("📦 impoundingFines is empty — auto-seeding...");
-          try {
-            const batch = writeBatch(db);
-            FALLBACK_IMPOUNDING.forEach((fine, index) => {
-              const ref = doc(collection(db, "impoundingFines"));
-              batch.set(ref, {
-                violationType: fine.violationType,
-                amount: fine.amount,
-                order: index + 1,
-              });
-            });
-            await batch.commit();
-            console.log("✅ Auto-seeded 10 impounding fines");
-          } catch (err) {
-            console.error("Auto-seed impounding fines failed:", err);
-            setImpounding(FALLBACK_IMPOUNDING);
-            setImpoundingLoading(false);
-          }
-        } else {
-          const fetched: FineRow[] = snapshot.docs.map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              violationType: data.violationType ?? "Unknown",
-              amount: Number(data.amount ?? 0),
-            };
-          });
-          setImpounding(fetched);
-          setImpoundingLoading(false);
-        }
-      },
-      (error) => {
-        console.error("Error fetching impounding fines:", error);
-        setImpounding(FALLBACK_IMPOUNDING);
-        setImpoundingLoading(false);
-      }
-    );
-    return () => unsubscribe();
-  }, []);
-
-  /* Real-time: impoundingThresholds */
-  useEffect(() => {
-    const thresholdRef = doc(db, "settings", "impoundingThresholds");
-    const unsubscribe = onSnapshot(
-      thresholdRef,
-      (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          setRedemptionWindow(String(data.redemptionWindowHours ?? 24));
-          setOverdueAlert(String(data.overdueAlertHours ?? 72));
-        }
-      },
-      (error) => {
-        console.error("Error fetching thresholds:", error);
-      }
-    );
-    return () => unsubscribe();
-  }, []);
-
-  /* Click-outside + Escape */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
-    }
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setMenuOpen(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setMenuOpen(false);
-      navigate("/");
-    }
-  };
-
-  /* ================================================================
-     SAVE: Thresholds
-  ================================================================ */
-  const handleSaveThresholds = async () => {
-    setThresholdsSaving(true);
-    setThresholdsSaved(false);
-
-    try {
-      const redemption = parseInt(redemptionWindow, 10);
-      const overdue = parseInt(overdueAlert, 10);
-
-      if (isNaN(redemption) || redemption < 1) {
-        throw new Error("Redemption window must be a positive number.");
-      }
-      if (isNaN(overdue) || overdue < 1) {
-        throw new Error("Overdue alert must be a positive number.");
-      }
-
-      await setDoc(
-        doc(db, "settings", "impoundingThresholds"),
-        {
-          redemptionWindowHours: redemption,
-          overdueAlertHours: overdue,
-          updatedAt: serverTimestamp(),
-          updatedBy: currentUser.name,
-        },
-        { merge: true }
-      );
-
-      setThresholdsSaved(true);
-      setTimeout(() => setThresholdsSaved(false), 3000);
-    } catch (err: any) {
-      console.error("Error saving thresholds:", err);
-      alert(err.message || "Failed to save thresholds.");
-    } finally {
-      setThresholdsSaving(false);
-    }
-  };
-
   return (
     <div className="it-admin-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">IT Admin</p>
-            </div>
-          </div>
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div className="nav-group" key={group.title}>
-                <p className="nav-group-title">{group.title}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => {
-                    const IconComponent = item.icon;
-                    return (
-                      <li key={item.label}>
-                        <button
-                          type="button"
-                          className={`nav-item${item.active ? " active" : ""}`}
-                          onClick={() => navigate(item.path)}
-                        >
-                          <IconComponent size={16} className="nav-icon-svg" />
-                          <span>{item.label}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>IT Admin</>} />
 
         {/* MAIN */}
         <main className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>System Settings</h1>
@@ -463,38 +238,6 @@ export default function Settings() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={menuRef}>
-              <img
-                src={avatarImg}
-                alt="Account menu"
-                className="avatar-img"
-                onClick={() => setMenuOpen((open) => !open)}
-              />
-              {menuOpen && (
-                <div className="profile-dropdown" role="menu">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">{ROLE_LABELS[currentUser.role]}</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="dropdown-item"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    <img src={keyIcon} alt="" className="dropdown-icon" />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <div className="settings-content">
@@ -517,7 +260,7 @@ export default function Settings() {
                     <p>Loading...</p>
                   </div>
                 ) : (
-                  <div className="fine-table-wrapper">
+                  <div className="fine-table-wrapper" tabIndex={0} role="region" aria-label="Fines table" data-scroll-region>
                     <table className="fine-table">
                       <thead>
                         <tr>
@@ -530,7 +273,7 @@ export default function Settings() {
                           <tr key={row.id}>
                             <td className="cell-violation">{row.violationType}</td>
                             <td className="cell-amount cell-amount-static">
-                              ₱{row.amount.toLocaleString()}
+                              {peso(row.amount)}
                             </td>
                           </tr>
                         ))}
@@ -538,104 +281,78 @@ export default function Settings() {
                     </table>
                   </div>
                 )}
+
+                <div className="fee-rule">
+                  <p className="fee-rule-formula">
+                    Clamping fee = sum of the selected violations
+                  </p>
+                  <p>
+                    Unpaid after {CLAMP_GRACE_HOURS} hours: a fixed{" "}
+                    <strong>{peso(CLAMP_OVERDUE_FEE)}</strong> replaces the total.
+                  </p>
+                </div>
               </article>
 
-              {/* Impounding fines */}
+              {/* Impound fee */}
               <article className="card settings-card">
                 <div className="card-header-static">
                   <h2 className="card-title-static">
-                    Fine Amount – Impounding Violations
+                    Impound Fee – Towed Vehicles
                   </h2>
                   <p className="card-subtitle-static">
-                    Fixed by ordinance — view only
+                    Base fee by vehicle class + towing distance — view only
                   </p>
                 </div>
 
-                {impoundingLoading ? (
-                  <div className="table-loading">
-                    <RefreshCw size={20} className="spin" />
-                    <p>Loading...</p>
-                  </div>
-                ) : (
-                  <div className="fine-table-wrapper">
-                    <table className="fine-table">
-                      <thead>
-                        <tr>
-                          <th>Violation type</th>
-                          <th className="col-amount">Fine amount (₱)</th>
+                <div className="fine-table-wrapper" tabIndex={0} role="region" aria-label="Impound fee table" data-scroll-region>
+                  <table className="fine-table">
+                    <thead>
+                      <tr>
+                        <th>Vehicle class</th>
+                        <th className="col-amount">Base fee (₱)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {IMPOUND_FEE_ROWS.map((row) => (
+                        <tr key={row.weightClass}>
+                          <td className="cell-violation">
+                            {WEIGHT_CLASS_NAMES[row.weightClass]}
+                            <span className="cell-sub">
+                              {row.vehicles.length ? row.vehicles.join(", ") : "—"}
+                            </span>
+                          </td>
+                          <td className="cell-amount cell-amount-static">
+                            {peso(row.base)}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {impounding.map((row) => (
-                          <tr key={row.id}>
-                            <td className="cell-violation">{row.violationType}</td>
-                            <td className="cell-amount cell-amount-static">
-                              ₱{row.amount.toLocaleString()}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                      ))}
+                      <tr>
+                        <td className="cell-violation">
+                          Towing distance
+                          <span className="cell-sub">
+                            First {IMPOUND_FREE_KM} km free, then per km
+                          </span>
+                        </td>
+                        <td className="cell-amount cell-amount-static">
+                          {peso(IMPOUND_PER_KM_FEE)} / km
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="fee-rule">
+                  <p className="fee-rule-formula">
+                    Impound fee = base fee + {peso(IMPOUND_PER_KM_FEE)} × (km − {IMPOUND_FREE_KM})
+                  </p>
+                  <p>
+                    Example: CAR towed {SAMPLE_KM} km = {peso(IMPOUND_BASE_FEES.light)} +{" "}
+                    {peso(IMPOUND_PER_KM_FEE)} × {SAMPLE_KM - IMPOUND_FREE_KM} ={" "}
+                    <strong>{peso(SAMPLE_FEE)}</strong>
+                  </p>
+                </div>
               </article>
             </div>
-
-            {/* IMPOUNDING THRESHOLDS */}
-            <article className="card">
-              <div className="card-header-static">
-                <h2 className="card-title-static">Impounding Thresholds</h2>
-              </div>
-
-              <div className="thresholds-list">
-                <div className="threshold-row">
-                  <label htmlFor="redemption-window">
-                    Redemption window before impound (hrs)
-                  </label>
-                  <input
-                    id="redemption-window"
-                    type="number"
-                    min={1}
-                    value={redemptionWindow}
-                    onChange={(e) => setRedemptionWindow(e.target.value)}
-                    disabled={thresholdsSaving}
-                  />
-                </div>
-
-                <div className="threshold-row">
-                  <label htmlFor="overdue-alert">
-                    Overdue payment alert (hrs)
-                  </label>
-                  <input
-                    id="overdue-alert"
-                    type="number"
-                    min={1}
-                    value={overdueAlert}
-                    onChange={(e) => setOverdueAlert(e.target.value)}
-                    disabled={thresholdsSaving}
-                  />
-                </div>
-              </div>
-
-              <div className="fine-table-footer">
-                <button
-                  type="button"
-                  className="btn-save"
-                  onClick={handleSaveThresholds}
-                  disabled={thresholdsSaving}
-                >
-                  {thresholdsSaving ? (
-                    <>
-                      <Loader2 size={14} className="spin" /> Saving...
-                    </>
-                  ) : thresholdsSaved ? (
-                    "Saved!"
-                  ) : (
-                    "Save Changes"
-                  )}
-                </button>
-              </div>
-            </article>
 
             <div style={{ height: 24 }} />
           </div>

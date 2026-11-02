@@ -1,0 +1,272 @@
+/* ==================================================================
+   Settings.css
+   Extends ITAdminHomePage.css — System settings page
+================================================================== */
+
+.it-admin-page .settings-content {
+  flex: 1;
+  padding: 24px 32px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(100vh - 100px);
+}
+
+.it-admin-page .settings-content::-webkit-scrollbar {
+  width: 8px;
+}
+.it-admin-page .settings-content::-webkit-scrollbar-track {
+  background: #F3F4F6;
+}
+.it-admin-page .settings-content::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 4px;
+}
+.it-admin-page .settings-content::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* Two-column grid */
+.it-admin-page .settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.it-admin-page .settings-card {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ==================================================================
+   SCROLLABLE FINE TABLE
+================================================================== */
+.it-admin-page .fine-table-wrapper {
+  max-height: 340px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-radius: 6px;
+  border: 1px solid #F3F4F6;
+}
+
+.it-admin-page .fine-table-wrapper::-webkit-scrollbar {
+  width: 6px;
+}
+.it-admin-page .fine-table-wrapper::-webkit-scrollbar-track {
+  background: #F9FAFB;
+}
+.it-admin-page .fine-table-wrapper::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 3px;
+}
+.it-admin-page .fine-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+.it-admin-page .fine-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.it-admin-page .fine-table thead {
+  position: sticky;
+  top: 0;
+  background: #FFFFFF;
+  z-index: 1;
+}
+
+.it-admin-page .fine-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+  padding: 12px 16px;
+  border-bottom: 1px solid #E5E7EB;
+  white-space: nowrap;
+  background: #FFFFFF;
+}
+
+.it-admin-page .fine-table th.col-amount {
+  text-align: right;
+}
+
+.it-admin-page .fine-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid #F3F4F6;
+  color: #374151;
+  vertical-align: middle;
+}
+
+.it-admin-page .fine-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.it-admin-page .fine-table tbody tr:hover {
+  background: #FAFAFA;
+}
+
+.it-admin-page .fine-table .cell-violation {
+  font-weight: 500;
+  color: #111827;
+}
+
+.it-admin-page .fine-table .cell-amount {
+  text-align: right;
+  width: 140px;
+}
+
+.it-admin-page .fine-table .cell-amount input {
+  width: 100%;
+  padding: 6px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #111827;
+  text-align: right;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  background: #FFFFFF;
+  box-sizing: border-box;
+}
+
+.it-admin-page .fine-table .cell-amount input:focus {
+  outline: none;
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.it-admin-page .fine-table .cell-amount input:disabled {
+  background: #F3F4F6;
+  cursor: not-allowed;
+  color: #6B7280;
+}
+
+/* Remove number spinners */
+.it-admin-page .fine-table input[type="number"]::-webkit-outer-spin-button,
+.it-admin-page .fine-table input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.it-admin-page .fine-table input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ==================================================================
+   SAVE BUTTON FOOTER
+================================================================== */
+.it-admin-page .fine-table-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+/* ==================================================================
+   THRESHOLDS
+================================================================== */
+.it-admin-page .thresholds-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.it-admin-page .threshold-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.it-admin-page .threshold-row:last-child {
+  border-bottom: 0;
+}
+
+.it-admin-page .threshold-row label {
+  font-size: 13px;
+  color: #374151;
+  font-weight: 500;
+  flex: 1;
+}
+
+.it-admin-page .threshold-row input {
+  width: 120px;
+  padding: 8px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #111827;
+  text-align: right;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  background: #FFFFFF;
+  box-sizing: border-box;
+}
+
+.it-admin-page .threshold-row input:focus {
+  outline: none;
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.it-admin-page .threshold-row input:disabled {
+  background: #F3F4F6;
+  cursor: not-allowed;
+  color: #6B7280;
+}
+
+.it-admin-page .threshold-row input[type="number"]::-webkit-outer-spin-button,
+.it-admin-page .threshold-row input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.it-admin-page .threshold-row input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .it-admin-page .settings-content {
+    padding: 20px 24px 24px;
+  }
+
+  .it-admin-page .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .it-admin-page .settings-content {
+    padding: 16px 16px 20px;
+  }
+
+  .it-admin-page .fine-table-wrapper {
+    max-height: 280px;
+  }
+
+  .it-admin-page .fine-table th,
+  .it-admin-page .fine-table td {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .it-admin-page .threshold-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .it-admin-page .threshold-row input {
+    width: 100%;
+    text-align: left;
+  }
+}

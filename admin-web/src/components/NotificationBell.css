@@ -1,0 +1,119 @@
+/* NotificationBell additions: header (sound + mark all as read),
+   "Mark as Released" button and "Released" chip. The bell, dropdown and
+   items themselves are styled by each page's CSS (.release-page …). */
+
+.notification-dropdown .nb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px 12px 20px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.notification-dropdown .nb-header-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.notification-dropdown .nb-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notification-dropdown .nb-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  background: #FFFFFF;
+  color: #374151;
+  cursor: pointer;
+}
+
+.notification-dropdown .nb-icon-btn:hover {
+  background: #F3F4F6;
+}
+
+.notification-dropdown .nb-text-btn {
+  border: none;
+  background: none;
+  color: #1D4ED8;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 6px 4px;
+}
+
+.notification-dropdown .nb-text-btn:disabled {
+  color: #9CA3AF;
+  cursor: default;
+}
+
+.notification-dropdown .nb-release-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: #059669;
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.notification-dropdown .nb-release-btn:hover:not(:disabled) {
+  background: #047857;
+}
+
+.notification-dropdown .nb-release-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.notification-dropdown .nb-released-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #D1FAE5;
+  color: #047857;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.notification-dropdown .nb-spin {
+  animation: nb-spin 0.8s linear infinite;
+}
+
+@keyframes nb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.notification-dropdown .nb-map-link {
+  display: inline-block;
+  margin-top: 6px;
+  margin-right: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1D4ED8;
+  text-decoration: none;
+}
+
+.notification-dropdown .nb-map-link:hover {
+  text-decoration: underline;
+}

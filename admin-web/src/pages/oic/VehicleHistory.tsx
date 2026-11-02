@@ -1,22 +1,17 @@
-import { useState, useEffect, useRef, useMemo, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
-import { KeyRound, Search } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { useState, useEffect, useMemo, type FormEvent } from "react";
+import { ArrowLeft, Search } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
   getDoc,
-  getDocs,
-  query,
-  where,
+  onSnapshot,
   Timestamp,
+  type DocumentData
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./VehicleHistory.css";
 
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
 
 import overviewIcon from "../../assets/overview.png";
 import sectorAnalyticsIcon from "../../assets/sectoranalytics.png";
@@ -31,10 +26,10 @@ import revenueIcon from "../../assets/revenue.png";
 import releaseRequestIcon from "../../assets/releaserequest.png";
 import queueIcon from "../../assets/queue.png";
 import releaseLogIcon from "../../assets/releaselog.png";
-import clampingTeamsIcon from "../../assets/clampingteams.png";
-import towTruckIcon from "../../assets/tow-truck.png";
 import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -61,7 +56,21 @@ type ViolationGroup = {
   events: TimelineEvent[];
 };
 
-type SearchState = "idle" | "loading" | "empty" | "results";
+/** One vehicle (all spellings of the same plate), for the list. */
+type VehicleRow = {
+  key: string;
+  plate: string;
+  count: number;
+  unpaid: number;
+  lastType: string;
+  lastAt: Timestamp | null;
+  location: string | null;
+  barangay: string | null;
+  groups: ViolationGroup[];
+};
+
+/** Rows shown before "Show more". */
+const PAGE_STEP = 15;
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
@@ -159,16 +168,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Operations",
     items: [
       {
-        label: "Active Clamping Teams",
-        icon: clampingTeamsIcon,
-        path: "/dashboard/clamping-teams",
-      },
-      {
-        label: "Active Impounding",
-        icon: towTruckIcon,
-        path: "/dashboard/active-impounding",
-      },
-      {
         label: "Field Updates",
         icon: fieldUpdateIcon,
         path: "/dashboard/field-updates",
@@ -234,14 +233,20 @@ const formatPeso = (amount: number): string =>
 const normalizePlate = (value: string): string =>
   value.trim().toUpperCase().replace(/\s+/g, " ");
 
+/** "abc 1234", "ABC-1234", "ABC1234" → "ABC1234": one key per vehicle,
+ *  however the plate was typed in the enforcer app or Add Impound. */
+const plateKey = (value: unknown): string =>
+  String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
 /**
  * Builds this violation's narrative timeline from its real fields, in the
  * same four-stage shape the design uses — but reflecting actual payment
  * and release state instead of frozen sample text.
  */
-const buildEvents = (cin: string, data: Record<string, any>): TimelineEvent[] => {
+const buildEvents = (cin: string, data: DocumentData): TimelineEvent[] => {
   const events: TimelineEvent[] = [];
-  const fineAmount = Number(data.fineAmount ?? 0);
+  const isImpound = String(data.enforcementType ?? "") === "impounded";
+  const fineAmount = Number(data.fineAmount ?? 0) || Number(data.impoundFee ?? 0);
 
   events.push({
     title: `Violation recorded — ${data.violationType ?? "Violation"}`,
@@ -249,8 +254,10 @@ const buildEvents = (cin: string, data: Record<string, any>): TimelineEvent[] =>
   });
 
   events.push({
-    title: `Fine computed — ${formatPeso(fineAmount)}`,
-    detail: "Automated, based on vehicle classification",
+    title: `${isImpound ? "Impound fee" : "Fine computed"} — ${formatPeso(fineAmount)}`,
+    detail: isImpound
+      ? "Based on weight class and towing distance"
+      : "Automated, based on vehicle classification",
   });
 
   const paymentStatus = data.paymentStatus ?? "Unpaid";
@@ -294,19 +301,18 @@ const buildEvents = (cin: string, data: Record<string, any>): TimelineEvent[] =>
    COMPONENT
 ------------------------------------------------------------------ */
 export default function VehicleHistory() {
-  const navigate = useNavigate();
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "oic",
   });
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const [searchInput, setSearchInput] = useState("");
-  const [queriedPlate, setQueriedPlate] = useState<string | null>(null);
-  const [searchState, setSearchState] = useState<SearchState>("idle");
-  const [groups, setGroups] = useState<ViolationGroup[]>([]);
+  /** Plate key of the vehicle being viewed, or null for the list. */
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [shown, setShown] = useState(PAGE_STEP);
 
   /* Current user */
   useEffect(() => {
@@ -331,35 +337,6 @@ export default function VehicleHistory() {
     return () => unsubscribe();
   }, []);
 
-  /* Click outside */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    }
-  };
-
   /** Supervisors see the same pages as the OIC, minus Payment/Finance. */
   const navGroups = useMemo(
     () =>
@@ -371,95 +348,104 @@ export default function VehicleHistory() {
   );
 
   /**
-   * One-off lookup, not a live listener — a plate search is an on-demand
-   * query the OIC triggers, not something that needs to auto-update while
-   * the page sits open.
+   * Every violation, grouped by vehicle. Live, so a new clamp or impound
+   * shows up without reloading. Plates are matched by letters and digits
+   * only, so "abc 1234", "ABC-1234" and "ABC1234" are the same vehicle.
    */
-  const handleSearch = async (e: FormEvent) => {
-    e.preventDefault();
-    const plate = normalizePlate(searchInput);
-    if (!plate) return;
-
-    setQueriedPlate(plate);
-    setSearchState("loading");
-
-    try {
-      const snap = await getDocs(
-        query(collection(db, "violations"), where("plateNo", "==", plate))
-      );
-
-      const built: ViolationGroup[] = snap.docs
-        .map((d) => {
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, "violations"),
+      (snap) => {
+        const byKey = new Map<string, { rows: DocumentData[]; ids: string[] }>();
+        snap.docs.forEach((d) => {
           const data = d.data();
-          const cin = data.cin ?? d.id;
-          return {
-            cin,
-            recordedAt: (data.recordedAt as Timestamp) ?? null,
-            location: data.location ?? null,
-            barangay: data.barangay ?? null,
-            events: buildEvents(cin, data),
-          };
-        })
-        .sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
+          const key = plateKey(data.plateNo);
+          if (!key) return;
+          const entry = byKey.get(key) ?? { rows: [], ids: [] };
+          entry.rows.push(data);
+          entry.ids.push(d.id);
+          byKey.set(key, entry);
+        });
 
-      setGroups(built);
-      setSearchState(built.length === 0 ? "empty" : "results");
-    } catch (err) {
-      console.error("Vehicle history search failed:", err);
-      setGroups([]);
-      setSearchState("empty");
-    }
+        const built: VehicleRow[] = Array.from(byKey.entries()).map(([key, entry]) => {
+          const groups: ViolationGroup[] = entry.rows
+            .map((data, i) => {
+              const cin = data.cin ?? entry.ids[i];
+              return {
+                cin,
+                recordedAt: (data.recordedAt as Timestamp) ?? null,
+                location: data.location ?? null,
+                barangay: data.barangay ?? null,
+                events: buildEvents(cin, data),
+              };
+            })
+            .sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
+          const newest = entry.rows
+            .slice()
+            .sort((a, b) => millis(b.recordedAt ?? null) - millis(a.recordedAt ?? null))[0];
+          return {
+            key,
+            plate: normalizePlate(String(newest?.plateNo ?? key)),
+            count: entry.rows.length,
+            unpaid: entry.rows.filter((r) => (r.paymentStatus ?? "Unpaid") === "Unpaid").length,
+            lastType: String(newest?.violationType ?? "—"),
+            lastAt: (newest?.recordedAt as Timestamp) ?? null,
+            location: newest?.location ?? null,
+            barangay: newest?.barangay ?? null,
+            groups,
+          };
+        });
+        built.sort((a, b) => millis(b.lastAt) - millis(a.lastAt));
+        setVehicles(built);
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Vehicle history fetch failed:", err);
+        setVehicles([]);
+        setLoading(false);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  /** Typing filters the list; part of a plate is enough ("1234", "ABC"). */
+  const matches = useMemo(() => {
+    const q = plateKey(searchInput);
+    return q ? vehicles.filter((v) => v.key.includes(q)) : vehicles;
+  }, [vehicles, searchInput]);
+
+  const selected = useMemo(
+    () => (selectedKey ? vehicles.find((v) => v.key === selectedKey) ?? null : null),
+    [vehicles, selectedKey]
+  );
+  const groups = selected?.groups ?? [];
+  const queriedPlate = selected?.plate ?? null;
+
+  /** Enter: open the exact plate, or the only match. */
+  const handleSearch = (e: FormEvent) => {
+    e.preventDefault();
+    const q = plateKey(searchInput);
+    if (!q) return;
+    const exact = vehicles.find((v) => v.key === q);
+    const pick = exact ?? (matches.length === 1 ? matches[0] : null);
+    if (pick) setSelectedKey(pick.key);
   };
 
   const latestLocationLabel = useMemo(() => {
-    const newest = groups[0];
-    if (!newest) return null;
-    if (newest.barangay) return `${newest.barangay}, Sector 3`;
-    return newest.location;
-  }, [groups]);
+    if (!selected) return null;
+    if (selected.barangay) return `${selected.barangay}, Sector 3`;
+    return selected.location;
+  }, [selected]);
 
   return (
     <div className="oic-page vehicle-history-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">
-                {ROLE_LABELS[currentUser.role]}
-              </p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        <span>{item.label}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>{ROLE_LABELS[currentUser.role]}</>} />
 
         {/* MAIN */}
         <div className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>Vehicle History</h1>
@@ -472,35 +458,6 @@ export default function VehicleHistory() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={avatarImg}
-                alt="Account menu"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button className="dropdown-item">
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
@@ -522,30 +479,47 @@ export default function VehicleHistory() {
                         )}
                       </>
                     ) : (
-                      "Enter a plate number to view enforcement history"
+                      "Type part of a plate number, or pick a vehicle below"
                     )}
                   </p>
                 </div>
 
-                <form onSubmit={handleSearch} className="vehicle-search">
+                <form onSubmit={handleSearch} className="vehicle-search" role="search">
                   <Search size={16} className="vehicle-search-icon" />
                   <input
                     value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
+                    onChange={(e) => {
+                      setSearchInput(e.target.value);
+                      setSelectedKey(null);
+                      setShown(PAGE_STEP);
+                    }}
                     placeholder="Search Plate Number"
+                    aria-label="Search plate number"
                     className="vehicle-search-input"
                   />
                 </form>
               </div>
             </div>
 
-            {/* RESULTS / EMPTY STATE */}
-            {searchState === "results" ? (
+            {selected ? (
+              /* TIMELINE OF ONE VEHICLE */
               <div className="card">
-                <p className="card-eyebrow">Timeline</p>
-                <h2 className="card-title" style={{ marginBottom: 16 }}>
-                  Enforcement history — {queriedPlate}
-                </h2>
+                <div className="vehicle-timeline-head">
+                  <div>
+                    <p className="card-eyebrow">Timeline</p>
+                    <h2 className="card-title">
+                      Enforcement history — {queriedPlate}
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    className="vehicle-back-btn"
+                    onClick={() => setSelectedKey(null)}
+                  >
+                    <ArrowLeft size={16} aria-hidden="true" />
+                    All vehicles
+                  </button>
+                </div>
 
                 <div className="vehicle-timeline-groups">
                   {groups.map((group) => (
@@ -575,16 +549,88 @@ export default function VehicleHistory() {
                 </div>
               </div>
             ) : (
+              /* ALL VEHICLES */
               <div className="card">
-                <div className="vehicle-empty">
-                  <p className="vehicle-empty-text">
-                    {searchState === "loading"
-                      ? "Searching..."
-                      : searchState === "empty"
-                      ? `No violations found for ${queriedPlate}.`
-                      : "No vehicle selected. Search a plate number to view its history."}
-                  </p>
+                <div className="vehicle-list-head">
+                  <div>
+                    <p className="card-eyebrow">Sector 3 · Most recent first</p>
+                    <h2 className="card-title">All vehicles</h2>
+                  </div>
+                  {!loading && (
+                    <p className="vehicle-list-count">
+                      {searchInput.trim()
+                        ? `${matches.length} of ${vehicles.length} vehicles`
+                        : `${vehicles.length} vehicle${vehicles.length === 1 ? "" : "s"}`}
+                    </p>
+                  )}
                 </div>
+
+                {loading ? (
+                  <div className="vehicle-empty">
+                    <p className="vehicle-empty-text">Loading vehicles...</p>
+                  </div>
+                ) : matches.length === 0 ? (
+                  <div className="vehicle-empty">
+                    <p className="vehicle-empty-text">
+                      {vehicles.length === 0
+                        ? "No violations have been recorded yet."
+                        : `No plate matches "${searchInput.trim()}".`}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="vehicle-table-wrap">
+                      <table className="vehicle-table">
+                        <thead>
+                          <tr>
+                            <th>Plate No.</th>
+                            <th>Violations</th>
+                            <th>Unpaid</th>
+                            <th>Latest violation</th>
+                            <th>Last recorded</th>
+                            <th aria-label="Actions" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {matches.slice(0, shown).map((v) => (
+                            <tr key={v.key}>
+                              <td className="vehicle-plate">{v.plate}</td>
+                              <td>{v.count}</td>
+                              <td>
+                                {v.unpaid > 0 ? (
+                                  <span className="vehicle-unpaid">{v.unpaid} unpaid</span>
+                                ) : (
+                                  <span className="vehicle-clear">None</span>
+                                )}
+                              </td>
+                              <td>{v.lastType}</td>
+                              <td>{formatDateTime(v.lastAt)}</td>
+                              <td className="vehicle-action">
+                                <button
+                                  type="button"
+                                  className="vehicle-view-btn"
+                                  onClick={() => setSelectedKey(v.key)}
+                                  aria-label={`View history of ${v.plate}`}
+                                >
+                                  View history
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {matches.length > shown && (
+                      <button
+                        type="button"
+                        className="vehicle-more-btn"
+                        onClick={() => setShown((n) => n + PAGE_STEP)}
+                      >
+                        Show more ({matches.length - shown} left)
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </main>

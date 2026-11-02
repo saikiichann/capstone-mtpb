@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -10,15 +9,15 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import { signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
   onSnapshot,
   orderBy,
   query,
   Timestamp,
+  type DocumentData
 } from "firebase/firestore";
-import { auth, db } from "../../firebase";
+import { db } from "../../firebase";
 import { useStaffProfile } from "../../lib/useStaffProfile";
 import {
   derivePaymentLocation,
@@ -30,8 +29,6 @@ import "./Homepage.css";
 // ---------------------------------------------------------------------------
 // ASSET IMPORTS
 // ---------------------------------------------------------------------------
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
 import pendingPaymentsIcon from "../../assets/pendingpayments.png";
 import paymentVerificationIcon from "../../assets/paymentverification.png";
@@ -39,7 +36,8 @@ import transactionIcon from "../../assets/transaction.png";
 import revenueIcon from "../../assets/revenue.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
-import logoutIcon from "../../assets/logout.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -54,7 +52,6 @@ type RoleSlug =
   | "clamping-staff"
   | "impounding-staff";
 
-// ⚠️ WALANG "Both" — dalawa lang
 type AssignedLocation = "City Hall" | "Central";
 
 type CurrentUser = {
@@ -107,20 +104,10 @@ type NavGroup = {
   items: NavItem[];
 };
 
+
 // ---------------------------------------------------------------------------
 // CONSTANTS
 // ---------------------------------------------------------------------------
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer in Charge",
-  "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  "finance": "Finance Staff",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
-
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
@@ -169,7 +156,6 @@ const getPriorityClass = (priority: PaymentPriority): string => {
   return map[priority] ?? "";
 };
 
-/** Lumampas na ba sa 24-hour grace period mula recordedAt? */
 const isOverdue = (recordedAt: Timestamp | null): boolean => {
   if (!recordedAt) return false;
   try {
@@ -179,22 +165,14 @@ const isOverdue = (recordedAt: Timestamp | null): boolean => {
   }
 };
 
-/** GCash → "Online"; cash → City Hall / Central (tingnan ang lib/paymentLocation).
- *  Violations doc: paymentMethod + paymentLocation (HINDI ang `location` —
- *  street iyon kung saan na-clamp). */
-const deriveLocation = (data: any): PaymentLocation =>
+const deriveLocation = (data: DocumentData): PaymentLocation =>
   derivePaymentLocation(data.paymentMethod, data.paymentLocation);
 
 // ---------------------------------------------------------------------------
 // COMPONENT
 // ---------------------------------------------------------------------------
 export default function FinanceHomepage() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-
-  /* Profile ng naka-login na staff — naka-cache sa lahat ng Finance pages,
-     kaya hindi na nagfi-flash ang data ng ibang location paglipat ng tab. */
   const { profile, ready: userReady } = useStaffProfile();
   const currentUser: CurrentUser = useMemo(
     () => ({
@@ -208,11 +186,6 @@ export default function FinanceHomepage() {
 
   const [allRows, setAllRows] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // -----------------------------------------------------------------------
-  // EFFECT: Fetch violations — raw lang; ang location filter at metrics
-  // ay nasa useMemo sa ibaba (hindi na nagre-resubscribe paglipat ng tab)
-  // -----------------------------------------------------------------------
   useEffect(() => {
     const q = query(collection(db, "violations"), orderBy("recordedAt", "desc"));
 
@@ -247,14 +220,6 @@ export default function FinanceHomepage() {
     return () => unsubscribe();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // DERIVED: location filter + metrics + table + chart
-  //
-  // Unpaid — wala pang location (hindi pa nagbabayad), kaya hindi
-  //   fini-filter. Pareho ng Pending Payments page.
-  // Pending Verification / Verified — may location na, kaya sariling
-  //   location lang ng Finance staff ang makikita.
-  // -----------------------------------------------------------------------
   const { metrics, pendingPayments, revenueData } = useMemo(() => {
     const empty = {
       metrics: {
@@ -268,8 +233,6 @@ export default function FinanceHomepage() {
       revenueData: [] as RevenuePoint[],
     };
     if (!userReady) return empty;
-
-    // Finance: sariling sakop lang (City Hall; o Central + GCash)
     const filterByLocation = currentUser.role === "finance";
     const inMyLocation = (p: PaymentRow) =>
       !filterByLocation || isInStaffScope(currentUser.assignedLocation, p.paymentLocation);
@@ -314,40 +277,8 @@ export default function FinanceHomepage() {
   }, [allRows, userReady, currentUser.role, currentUser.assignedLocation]);
 
   // -----------------------------------------------------------------------
-  // EFFECT: Click-outside for dropdown
-  // -----------------------------------------------------------------------
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // -----------------------------------------------------------------------
   // HANDLERS
   // -----------------------------------------------------------------------
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/");
-    }
-  };
-
-  const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
-    setIsMenuOpen(false);
-  };
 
   const metricCards = [
     {
@@ -379,49 +310,18 @@ export default function FinanceHomepage() {
     <div className="finance-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">
-                Finance Staff
-                {/* ⚠️ BAGO: Location indicator */}
+        <AppSidebar groups={NAV_GROUPS} role={<>Finance Staff
+                {/* New Location indicator */}
                 {currentUser.assignedLocationName && (
                   <span className="sidebar-brand-location">
                     {" · "}
                     {currentUser.assignedLocationName}
                   </span>
-                )}
-              </p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${item.active ? "nav-item-active" : ""}`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+                )}</>} />
 
         {/* MAIN CONTENT */}
         <div className="main">
+          <AppTopbar groups={NAV_GROUPS} />
           <header className="main-header">
             <div>
               <h1>Overview</h1>
@@ -434,34 +334,6 @@ export default function FinanceHomepage() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={officerAvatar}
-                alt="Staff Profile"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                      {currentUser.assignedLocationName && ` · ${currentUser.assignedLocationName}`}
-                    </p>
-                  </div>
-                  <button className="dropdown-item" onClick={handleChangePassword}>
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button className="dropdown-item logout" onClick={handleLogout}>
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
@@ -525,7 +397,7 @@ export default function FinanceHomepage() {
                   <p>No pending payments.</p>
                 </div>
               ) : (
-                <div className="table-wrapper">
+                <div className="table-wrapper" tabIndex={0} role="region" aria-label="Data table" data-scroll-region>
                   <table className="data-table">
                     <thead>
                       <tr>
@@ -554,9 +426,7 @@ export default function FinanceHomepage() {
                             </span>
                           </td>
                           <td className="cell-actions">
-                            {/* Approve/Reject ay sa Payment Verification page —
-                                doon ang segregation-of-duties check, rejection
-                                reason, OR, at pag-update ng payment record. */}
+                            {/* Approve/Reject */}
                             <button
                               type="button"
                               className="btn-approve"

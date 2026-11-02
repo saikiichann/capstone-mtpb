@@ -1,22 +1,20 @@
-import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { KeyRound, Search, ChevronDown } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { useState, useEffect, useMemo } from "react";
+import { Search, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
   getDoc,
   onSnapshot,
-  orderBy,
-  query,
   Timestamp,
+  type DocumentData,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { amountDue, impoundFeeDue } from "../../lib/impoundFlag";
+import ViolationDetailsModal from "./ViolationDetailsModal";
 import "./AllViolations.css";
 
 // Asset imports
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
 import allViolationsIcon from "../../assets/allviolations.png";
 import clampingIcon from "../../assets/clamping.png";
@@ -24,7 +22,8 @@ import impoundingLogIcon from "../../assets/impounding.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
-import logoutIcon from "../../assets/logout.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -47,7 +46,9 @@ type ViolationStatus =
   | "Awaiting OIC Approval"
   | "Approved — For Release"
   | "Released"
-  | "Payment Rejected";
+  | "Payment Rejected"
+  | "Subject to Impound"
+  | "Impounded";
 
 type ViolationRow = {
   id: string;
@@ -55,37 +56,34 @@ type ViolationRow = {
   plateNo: string;
   violationType: string;
   location: string;
+  /** Amount due: the ₱2,000 impound fee once impounded, else the fine */
   fine: number;
+  impounded: boolean;
   status: ViolationStatus;
   recordedAt: Timestamp | null;
+  raw: DocumentData & { id: string };
 };
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
+
 // ---------------------------------------------------------------------------
 // CONSTANTS
 // ---------------------------------------------------------------------------
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer in Charge",
-  "it-admin": "IT Admin",
-  supervisor: "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  finance: "Finance Staff",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
-
 const STATUS_FILTER_OPTIONS: Array<ViolationStatus | "All Status"> = [
   "All Status",
   "Unpaid",
   "Pending Verification",
   "Awaiting OIC Approval",
   "Approved — For Release",
+  "Subject to Impound",
+  "Impounded",
   "Released",
   "Payment Rejected",
 ];
+
+const ITEMS_PER_PAGE = 10;
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -160,6 +158,8 @@ const getStatusClass = (status: ViolationStatus): string => {
     "Approved — For Release": "status-approved",
     Released: "status-released",
     "Payment Rejected": "status-rejected",
+    "Subject to Impound": "status-subject-impound",
+    Impounded: "status-impounded-violation",
   };
   return map[status] ?? "";
 };
@@ -176,7 +176,7 @@ const getStatusClass = (status: ViolationStatus): string => {
  *   6. paymentStatus = "pending verification"   → Pending Verification
  *   7. default                       → Unpaid
  */
-const deriveStatus = (data: any): ViolationStatus => {
+const deriveStatus = (data: DocumentData): ViolationStatus => {
   const paymentStatus = String(data.paymentStatus ?? "").toLowerCase();
   const releaseStatus = String(data.releaseStatus ?? "").toLowerCase();
 
@@ -209,6 +209,13 @@ const deriveStatus = (data: any): ViolationStatus => {
     return "Pending Verification";
   }
 
+  // Not paid, and past the 24-hour grace period
+  const impoundStatus = String(data.impoundStatus ?? "").toLowerCase();
+  if (impoundStatus === "impounded") return "Impounded";
+  if (impoundStatus === "subject to impound" || impoundStatus === "scheduled for impounding") {
+    return "Subject to Impound";
+  }
+
   // Default — Unpaid
   return "Unpaid";
 };
@@ -217,11 +224,8 @@ const deriveStatus = (data: any): ViolationStatus => {
 // COMPONENT
 // ---------------------------------------------------------------------------
 export default function AllViolations() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
+  const [, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "record-officer",
   });
@@ -230,6 +234,8 @@ export default function AllViolations() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All Status");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selected, setSelected] = useState<ViolationRow | null>(null);
 
   // Fetch current user
   useEffect(() => {
@@ -262,25 +268,35 @@ export default function AllViolations() {
 
   // Fetch violations
   useEffect(() => {
-    const ref = collection(db, "violations");
-    const q = query(ref, orderBy("recordedAt", "desc"));
-
+    // No orderBy(): Firestore drops documents that lack the ordered field,
+    // so a record without recordedAt would vanish. Sorted below instead.
     const unsubscribe = onSnapshot(
-      q,
+      collection(db, "violations"),
       (snap) => {
         const rows: ViolationRow[] = snap.docs.map((d) => {
           const data = d.data();
+          const impoundFee = impoundFeeDue(data.impoundStatus, data.impoundFee);
           return {
             id: d.id,
             cin: data.cin ?? "—",
             plateNo: data.plateNo ?? "—",
             violationType: data.violationType ?? "—",
             location: data.location ?? "—",
-            fine: Number(data.fineAmount ?? 0),
+            fine: amountDue(Number(data.fineAmount ?? 0), impoundFee),
+            impounded: impoundFee > 0,
             status: deriveStatus(data),
             recordedAt: data.recordedAt ?? null,
+            raw: { id: d.id, ...data },
           };
         });
+        const ms = (t: Timestamp | null) => {
+          try {
+            return t ? t.toMillis() : 0;
+          } catch {
+            return 0;
+          }
+        };
+        rows.sort((a, b) => ms(b.recordedAt) - ms(a.recordedAt));
 
         setViolations(rows);
         setLoading(false);
@@ -293,94 +309,44 @@ export default function AllViolations() {
     return () => unsubscribe();
   }, []);
 
-  // Click-outside for dropdown
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/");
-    }
-  };
-
-  const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
-    setIsMenuOpen(false);
-  };
-
   // Filter
-  const filteredViolations = violations.filter((v) => {
+  const filteredViolations = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    const matchesSearch =
-      !q ||
-      v.cin.toLowerCase().includes(q) ||
-      v.plateNo.toLowerCase().includes(q);
+    return violations.filter((v) => {
+      const matchesSearch =
+        !q ||
+        v.cin.toLowerCase().includes(q) ||
+        v.plateNo.toLowerCase().includes(q) ||
+        v.violationType.toLowerCase().includes(q) ||
+        v.location.toLowerCase().includes(q);
+      const matchesStatus = statusFilter === "All Status" || v.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [violations, searchQuery, statusFilter]);
 
-    const matchesStatus =
-      statusFilter === "All Status" || v.status === statusFilter;
+  // Back to page 1 whenever the search or filter changes
+  // Back to page 1 when these change (during render, not in an effect)
+  const pageResetKey = JSON.stringify([searchQuery, statusFilter]);
+  const [prevPageResetKey, setPrevPageResetKey] = useState(pageResetKey);
+  if (pageResetKey !== prevPageResetKey) {
+    setPrevPageResetKey(pageResetKey);
+    setCurrentPage(1);
+  }
 
-    return matchesSearch && matchesStatus;
-  });
+  const totalPages = Math.max(1, Math.ceil(filteredViolations.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * ITEMS_PER_PAGE;
+  const pagedViolations = filteredViolations.slice(pageStart, pageStart + ITEMS_PER_PAGE);
 
   return (
     <div className="record-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Record Officer</p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={NAV_GROUPS} role={<>Record Officer</>} />
 
         {/* MAIN CONTENT */}
         <div className="main">
+          <AppTopbar groups={NAV_GROUPS} />
           <header className="main-header">
             <div>
               <h1>All Violations</h1>
@@ -393,39 +359,6 @@ export default function AllViolations() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={officerAvatar}
-                alt="Officer Profile"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button
-                    className="dropdown-item"
-                    onClick={handleChangePassword}
-                  >
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
@@ -434,7 +367,7 @@ export default function AllViolations() {
               <div className="search-box">
                 <input
                   type="text"
-                  placeholder="Search CIN, Plate No..."
+                  placeholder="Search CIN, plate no., violation, location..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -443,6 +376,7 @@ export default function AllViolations() {
 
               <div className="filter-box">
                 <select
+                  aria-label="Filter by status"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
@@ -467,7 +401,7 @@ export default function AllViolations() {
                   <p>No violations found.</p>
                 </div>
               ) : (
-                <div className="table-wrapper">
+                <div className="table-wrapper" tabIndex={0} role="region" aria-label="Data table" data-scroll-region>
                   <table className="data-table">
                     <thead>
                       <tr>
@@ -475,14 +409,26 @@ export default function AllViolations() {
                         <th>Plate No.</th>
                         <th>Violation</th>
                         <th>Location</th>
-                        <th>Fine</th>
+                        <th>Amount Due</th>
                         <th>Status</th>
                         <th>Recorded</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredViolations.map((row) => (
-                        <tr key={row.id}>
+                      {pagedViolations.map((row) => (
+                        <tr
+                          key={row.id}
+                          className="violation-row-clickable"
+                          onClick={() => setSelected(row)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setSelected(row);
+                            }
+                          }}
+                          tabIndex={0}
+                          title="View details"
+                        >
                           <td>
                             <span className="cin-pill">{row.cin}</span>
                           </td>
@@ -491,6 +437,7 @@ export default function AllViolations() {
                           <td className="cell-location">{row.location}</td>
                           <td className="cell-fine">
                             {formatCurrency(row.fine)}
+                            {row.impounded && <span className="fine-note">impound fee</span>}
                           </td>
                           <td>
                             <span
@@ -510,10 +457,53 @@ export default function AllViolations() {
                   </table>
                 </div>
               )}
+
+              {!loading && filteredViolations.length > 0 && (
+                <div className="pagination av-pagination">
+                  <p className="av-count">
+                    Showing {pageStart + 1}–{pageStart + pagedViolations.length} of{" "}
+                    {filteredViolations.length}
+                    {filteredViolations.length !== violations.length
+                      ? ` (filtered from ${violations.length})`
+                      : ""}
+                  </p>
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={safePage === 1}
+                  >
+                    <ChevronLeft size={16} />
+                    Previous
+                  </button>
+                  <div className="pagination-info">
+                    <span className="pagination-page">{safePage}</span>
+                    <span className="pagination-sep">of {totalPages} pages</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={safePage === totalPages}
+                  >
+                    Next
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              )}
             </div>
           </main>
         </div>
       </div>
+
+      {selected && (
+        <ViolationDetailsModal
+          data={selected.raw}
+          status={selected.status}
+          statusClass={getStatusClass(selected.status)}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }

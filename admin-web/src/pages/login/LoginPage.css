@@ -612,3 +612,423 @@
     font-size: 13px;
   }
 }
+
+/* =========================================
+   FORGOT PASSWORD
+========================================= */
+
+.forgot-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -6px;
+}
+
+.forgot-link {
+  border: none;
+  background: none;
+  padding: 2px 0;
+  color: #1d4ed8;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.forgot-link:hover {
+  text-decoration: underline;
+}
+
+.forgot-link:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.forgot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(2, 12, 26, 0.55);
+}
+
+.forgot-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 28px 28px 24px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+}
+
+.forgot-card h2 {
+  margin: 0 0 10px;
+  font-size: 20px;
+  color: #020c1a;
+}
+
+.forgot-text {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #374151;
+}
+
+.forgot-muted {
+  color: #6b7280;
+}
+
+.forgot-card .login-field {
+  margin-bottom: 14px;
+}
+
+.forgot-card .input-wrap input {
+  padding-left: 14px;
+}
+
+.forgot-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.forgot-actions .sign-in-btn {
+  width: auto;
+  height: 44px;
+  padding: 0 20px;
+  font-size: 15px;
+}
+
+.forgot-cancel {
+  height: 44px;
+  padding: 0 18px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.forgot-cancel:hover:not(:disabled) {
+  background: #f9fafb;
+}
+
+/* =========================================================================
+   MODERN LOGIN (Nov 2026)
+   Full-screen photo of Manila City Hall under a navy shade, the bureau on
+   the left, a light sign-in card on the right. Everything is scoped to
+   .login-modern so the Forgot password dialog keeps its own look.
+   Photo: src/assets/cityhall.webp, passed in as --login-photo (LoginPage.tsx).
+========================================================================= */
+.login-body.login-modern {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  padding: 40px 32px;
+  background: #010A16;
+  font-family: "Inter", -apple-system, "Segoe UI", sans-serif;
+  overflow: hidden;
+}
+
+.login-modern .login-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-color: #030914;
+  /* A plain dark shade over the photo: darkest behind the text on the left,
+     lighter on the right so the tower shows. No coloured glows. */
+  background-image:
+    linear-gradient(90deg, rgba(3, 9, 20, 0.94) 0%, rgba(3, 9, 20, 0.8) 38%, rgba(3, 9, 20, 0.38) 72%, rgba(3, 9, 20, 0.55) 100%),
+    linear-gradient(0deg, rgba(3, 9, 20, 0.7) 0%, rgba(3, 9, 20, 0) 35%),
+    var(--login-photo, none),
+    linear-gradient(160deg, #0B1B36 0%, #030914 70%);
+  background-size: cover, cover, cover, auto;
+  background-position: center, center, center 35%, center;
+  background-repeat: no-repeat;
+  transform-origin: 60% 40%;
+  animation: login-drift 40s ease-in-out infinite alternate;
+}
+
+@keyframes login-drift {
+  from { transform: scale(1); }
+  to { transform: scale(1.04); }
+}
+
+.login-modern .login-shell {
+  width: min(1200px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  align-items: center;
+  gap: 72px;
+}
+
+/* ---- Brand side ---- */
+.login-modern .login-hero {
+  color: #FFFFFF;
+  max-width: 700px;
+}
+
+.login-modern .login-hero-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 28px;
+  margin-bottom: 20px;
+}
+
+/* The seal leads the page. Thin rings instead of a heavy shadow. */
+.login-modern .login-hero-logo {
+  width: 158px;
+  height: 158px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #FFFFFF;
+  box-shadow:
+    0 0 0 6px rgba(255, 255, 255, 0.06),
+    0 0 0 7px rgba(255, 255, 255, 0.2),
+    0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+/* Gold city line. */
+.login-modern .login-hero-city {
+  display: inline-flex;
+  align-items: center;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #E8C15A;
+}
+
+.login-modern .login-hero-title {
+  margin: 0;
+  font-size: 60px;
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.login-modern .login-hero-sub {
+  margin: 20px 0 0;
+  font-size: 22px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* ---- Sign-in card ---- */
+.login-modern .login-card {
+  width: 100%;
+  max-width: 420px;
+  justify-self: end;
+  padding: 40px 36px 24px;
+  border-radius: 16px;
+  background: #FFFFFF;
+  border: 0;
+  box-shadow: 0 28px 70px -16px rgba(0, 0, 0, 0.6);
+  overflow: visible;
+}
+
+.login-modern .login-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.login-modern .login-card-logo {
+  display: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.login-modern .login-card-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #0B1220;
+}
+
+.login-modern .login-card-sub {
+  margin: 6px 0 0;
+  font-size: 14.5px;
+  color: #64748B;
+}
+
+.login-modern .login-form-section {
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.login-modern .login-form {
+  padding: 0;
+}
+
+.login-modern .login-field {
+  margin-bottom: 18px;
+}
+
+.login-modern .login-field label {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #334155;
+}
+
+.login-modern .input-wrap input {
+  height: 48px;
+  border-radius: 10px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  font-size: 15px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.login-modern .input-wrap input:hover {
+  border-color: #CBD5E1;
+}
+
+.login-modern .input-wrap input:focus {
+  background: #FFFFFF;
+  border-color: #1D4ED8;
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.16);
+}
+
+.login-modern .forgot-row {
+  margin-top: -6px;
+}
+
+.login-modern .submit-row {
+  margin-top: 22px;
+}
+
+.login-modern .sign-in-btn {
+  width: 100%;
+  height: 48px;
+  border-radius: 10px;
+  background: #1D4ED8;
+  font-family: inherit;
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: none;
+  transition: background 0.15s;
+}
+
+.login-modern .sign-in-btn:hover:not(:disabled) {
+  background: #1E40AF;
+  box-shadow: none;
+}
+
+.login-modern .sign-in-btn:focus-visible {
+  outline: 3px solid #93C5FD;
+  outline-offset: 3px;
+}
+
+.login-modern .login-footer {
+  margin-top: 26px;
+  padding: 16px 0 0;
+  border-top: 1px solid #EEF2F6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-style: normal;
+  font-size: 12px;
+  color: #94A3B8;
+  text-align: center;
+}
+
+.login-modern .login-credit {
+  position: fixed;
+  right: 16px;
+  bottom: 10px;
+  margin: 0;
+  max-width: 60vw;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: right;
+}
+
+/* ---- Tablet and phone: one column, photo stays behind ---- */
+@media (max-width: 900px) {
+  .login-body.login-modern {
+    padding: 28px 18px 40px;
+    align-items: flex-start;
+  }
+
+  .login-modern .login-bg {
+    background-image:
+      linear-gradient(180deg, rgba(3, 9, 20, 0.55) 0%, rgba(3, 9, 20, 0.88) 45%, rgba(3, 9, 20, 0.96) 100%),
+      var(--login-photo, none),
+      linear-gradient(160deg, #0B1B36 0%, #030914 70%);
+    background-size: cover, cover, auto;
+    background-position: center, center top, center;
+  }
+
+  .login-modern .login-shell {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    justify-items: center;
+  }
+
+  .login-modern .login-hero {
+    text-align: center;
+  }
+
+  .login-modern .login-hero-brand {
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .login-modern .login-hero-logo {
+    width: 108px;
+    height: 108px;
+  }
+
+  .login-modern .login-hero-sub {
+    margin-top: 10px;
+    font-size: 17px;
+  }
+
+  .login-modern .login-hero-title {
+    font-size: 36px;
+  }
+
+  .login-modern .login-hero-city {
+    font-size: 15px;
+  }
+
+  .login-modern .login-card {
+    justify-self: center;
+    padding: 28px 22px 18px;
+  }
+
+  .login-modern .login-card-title {
+    font-size: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-modern .login-bg {
+    animation: none;
+  }
+}

@@ -12,6 +12,8 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { locationDetailsOf, placeLine, type LocationDetails } from "./locationDetails";
+import { clientIp } from "./staffSession";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -30,6 +32,8 @@ export type QueueRow = {
   plateNo: string;
   vehicleType: string;
   location: string;
+  /** District, barangay and exact spot (lib/locationDetails.ts) */
+  details: LocationDetails;
   clampId: string | null;
   waitingMinutes: number;
   status: QueueStatus;
@@ -149,6 +153,7 @@ export const buildQueue = (
         plateNo: data.plateNo ?? "—",
         vehicleType: data.vehicleType ?? "—",
         location: data.location ?? "—",
+        details: locationDetailsOf(data),
         clampId: data.clampId ?? null,
         waitingMinutes: computeWaitingMinutes(sortKey),
         status,
@@ -195,6 +200,8 @@ export const markViolationAsReleased = async (params: {
   /** Written into the releaseLog entry — without it, "Total Fine Paid"
    *  shows ₱0.00 on every release, since nothing else captures it there. */
   totalPaid: number;
+  /** District / barangay / exact spot, kept in the release log too. */
+  details?: LocationDetails;
 }): Promise<string> => {
   const violationRef = doc(db, "violations", params.violationId);
   const durationMinutes = computeWaitingMinutes(params.verifiedAt);
@@ -254,6 +261,9 @@ export const markViolationAsReleased = async (params: {
         paidAt: null,
         readyAt: null,
         releasedAt: null,
+        impoundStatus: null,
+        impoundFee: null,
+        impoundUpdatedAt: null,
         lastReleasedAt: serverTimestamp(),
         lastReleasedBy: params.officerName,
         lastReleasedCin: params.cin,
@@ -268,6 +278,9 @@ export const markViolationAsReleased = async (params: {
       plateNo: params.plateNo,
       clampId: params.clampId,
       location: params.location,
+      district: params.details?.district ?? null,
+      barangay: params.details?.barangay ?? null,
+      exactLocation: params.details ? placeLine(params.details) : null,
       releasedBy: params.officerName,
       releaseDurationMinutes: durationMinutes,
       totalPaid: params.totalPaid,
@@ -288,6 +301,7 @@ export const markViolationAsReleased = async (params: {
         orderId: newOrderId,
       },
       timestamp: serverTimestamp(),
+      ipAddress: clientIp(),
     });
 
     return newOrderId;
@@ -320,8 +334,15 @@ export const decideReleaseRequest = async (params: {
   approve: boolean;
   reason?: string;
   officerName: string;
+  /** "oic" o "supervisor" — kung sino talaga ang nagdesisyon */
+  officerRole?: string;
 }): Promise<void> => {
   const batch = writeBatch(db);
+  // releaseStatus stays "Approved by OIC" / "Rejected by OIC": Release Queue
+  // and the violator app look for those exact words. Who decided (OIC or
+  // Supervisor) is kept in the *ByRole fields and the audit log.
+  const role = params.officerRole === "supervisor" ? "supervisor" : "oic";
+  const roleLabel = role === "supervisor" ? "Supervisor" : "OIC";
   const violationRef = doc(db, "violations", params.violationId);
 
   if (params.approve) {
@@ -329,6 +350,7 @@ export const decideReleaseRequest = async (params: {
       releaseStatus: RELEASE_QUEUE_STATUS,
       oicApprovedAt: serverTimestamp(),
       oicApprovedBy: params.officerName,
+      oicApprovedByRole: role,
       updatedAt: serverTimestamp(),
       updatedBy: params.officerName,
     });
@@ -358,6 +380,7 @@ export const decideReleaseRequest = async (params: {
       releaseStatus: "Rejected by OIC",
       oicRejectedAt: serverTimestamp(),
       oicRejectedBy: params.officerName,
+      oicRejectedByRole: role,
       oicRejectionReason: params.reason ?? null,
       updatedAt: serverTimestamp(),
       updatedBy: params.officerName,
@@ -366,6 +389,7 @@ export const decideReleaseRequest = async (params: {
 
   batch.set(doc(collection(db, "auditLogs")), {
     userName: params.officerName,
+    userRole: role,
     action: `${params.approve ? "approved" : "rejected"} release for ${
       params.cin
     }`,
@@ -374,10 +398,11 @@ export const decideReleaseRequest = async (params: {
     metadata: {
       cin: params.cin,
       plateNo: params.plateNo,
-      decision: params.approve ? "Approved by OIC" : "Rejected by OIC",
+      decision: `${params.approve ? "Approved" : "Rejected"} by ${roleLabel}`,
       ...(params.reason ? { reason: params.reason } : {}),
     },
     timestamp: serverTimestamp(),
+    ipAddress: clientIp(),
   });
 
   await batch.commit();

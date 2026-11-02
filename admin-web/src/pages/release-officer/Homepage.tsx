@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
@@ -15,6 +14,8 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import { NotificationBell } from "../../components/NotificationBell";
+import ReleaseDetailsDrawer from "../../components/ReleaseDetailsDrawer";
+import { confirmAndRelease } from "../../lib/releaseFlow";
 import {
   buildQueue,
   getQueueStatusClass,
@@ -23,12 +24,11 @@ import {
 } from "../../lib/release";
 import "./Homepage.css";
 
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
 import queueIcon from "../../assets/queue.png";
 import releaseLogIcon from "../../assets/releaselog.png";
-import logoutIcon from "../../assets/logout.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -62,16 +62,6 @@ type NavGroup = { label: string; items: NavItem[] };
 ------------------------------------------------------------------ */
 const RECENT_LOG_LIMIT = 25;
 
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer in Charge",
-  "it-admin": "IT Admin",
-  supervisor: "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  finance: "Finance",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -128,8 +118,6 @@ const formatDuration = (minutes: number | null): string => {
    MAIN COMPONENT
 ------------------------------------------------------------------ */
 export default function ReleaseOfficerHomepage() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
@@ -137,6 +125,8 @@ export default function ReleaseOfficerHomepage() {
     role: "release-officer",
   });
   const [currentUserUid, setCurrentUserUid] = useState<string>("");
+  /** The vehicle open in the Release Details panel */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [queueRows, setQueueRows] = useState<QueueRow[]>([]);
   const [logRows, setLogRows] = useState<ReleaseLogRow[]>([]);
@@ -226,32 +216,14 @@ export default function ReleaseOfficerHomepage() {
     return () => unsubscribe();
   }, []);
 
-  /* Click outside para isara ang profile dropdown */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleLogout = async () => {
+  /** Release from the details panel (lib/releaseFlow.ts). */
+  const handleRelease = async (violationId: string) => {
     try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
+      const outcome = await confirmAndRelease({ violationId, officerName: currentUser.name });
+      if (outcome === "released" || outcome === "already-released") setSelectedId(null);
     } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
+      console.error("Release failed:", err);
+      alert((err as Error)?.message || "Failed to mark as released.");
     }
   };
 
@@ -309,41 +281,11 @@ export default function ReleaseOfficerHomepage() {
     <div className="release-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Release Officer</p>
-            </div>
-          </div>
-          <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={NAV_GROUPS} role={<>Release Officer</>} />
 
         {/* MAIN */}
         <div className="main">
+          <AppTopbar groups={NAV_GROUPS} />
           <header className="main-header">
             <div>
               <h1>Overview</h1>
@@ -358,37 +300,8 @@ export default function ReleaseOfficerHomepage() {
 
             <div className="header-right-group">
               {currentUserUid && (
-                <NotificationBell currentUserUid={currentUserUid} />
+                <NotificationBell currentUserUid={currentUserUid} officerName={currentUser.name} />
               )}
-              <div className="avatar-container" ref={dropdownRef}>
-                <img
-                  src={officerAvatar}
-                  alt="Officer Profile"
-                  className="avatar-img"
-                  onClick={() => setIsMenuOpen(!isMenuOpen)}
-                />
-                {isMenuOpen && (
-                  <div className="profile-dropdown">
-                    <div className="dropdown-header">
-                      <p className="dropdown-name">{currentUser.name}</p>
-                      <p className="dropdown-role">
-                        {ROLE_LABELS[currentUser.role]}
-                      </p>
-                    </div>
-                    <button className="dropdown-item">
-                      <KeyRound size={18} />
-                      <span>Change Password</span>
-                    </button>
-                    <button
-                      className="dropdown-item logout"
-                      onClick={handleLogout}
-                    >
-                      <img src={logoutIcon} alt="" className="dropdown-icon" />
-                      <span>Log Out</span>
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           </header>
 
@@ -430,29 +343,33 @@ export default function ReleaseOfficerHomepage() {
                   <p>No vehicles in queue.</p>
                 </div>
               ) : (
-                <div className="table-wrapper">
+                <div className="table-wrapper" tabIndex={0} role="region" aria-label="Data table" data-scroll-region>
                   <table className="data-table">
                     <thead>
                       <tr>
                         <th>Queue</th>
                         <th>CIN</th>
                         <th>Plate No.</th>
-                        <th>Vehicle Type</th>
-                        <th>Location</th>
+                        <th>District</th>
                         <th>Waiting</th>
                         <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {queueRows.slice(0, 5).map((row) => (
-                        <tr key={row.id}>
+                        <tr key={row.id} className="rd-row" onClick={() => setSelectedId(row.id)}>
                           <td className="cell-queue">{row.queue}</td>
                           <td>
                             <span className="cin-pill">{row.cin}</span>
                           </td>
                           <td className="cell-plate">{row.plateNo}</td>
-                          <td className="cell-vehicle">{row.vehicleType}</td>
-                          <td className="cell-location">{row.location}</td>
+                          <td className="cell-district">
+                            {row.details.district ? (
+                              <span className="district-pill">{row.details.district}</span>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
                           <td className="cell-waiting">
                             {row.waitingMinutes} min
                           </td>
@@ -497,7 +414,7 @@ export default function ReleaseOfficerHomepage() {
                   <p>No release history yet.</p>
                 </div>
               ) : (
-                <div className="table-wrapper">
+                <div className="table-wrapper" tabIndex={0} role="region" aria-label="Data table" data-scroll-region>
                   <table className="data-table">
                     <thead>
                       <tr>
@@ -532,6 +449,13 @@ export default function ReleaseOfficerHomepage() {
           </main>
         </div>
       </div>
+      {selectedId && (
+        <ReleaseDetailsDrawer
+          violationId={selectedId}
+          onClose={() => setSelectedId(null)}
+          onRelease={handleRelease}
+        />
+      )}
     </div>
   );
 }

@@ -1,25 +1,3 @@
-/* ==================================================================
-   PendingPayments.css (Finance)
-   Sidebar, header at avatar — galing pa rin sa Finance Homepage.css
-   (.finance-page). Ang CONTENT styles dito (toolbar, table, pills,
-   impound badges, cash modal) ay kopya ng OIC PendingPayments.css
-   para pareho ang itsura ng dalawang page.
-
-   Wrapper: <div className="finance-page finance-pending-page">
-   Hindi ".pending-payments-page" — yun ang prefix ng OIC CSS, at kung
-   gagamitin din dito, tatamaan ng OIC sidebar styles ang Finance.
-
-   Kapag may binago sa OIC content CSS, gawin din dito (palitan lang
-   ang prefix ng ".finance-page.finance-pending-page").
-
-   Ang .btn-subject-impound, .btn-danger at .impound-warning ay hindi
-   ginagamit sa Finance (OIC-only ang impound action) — naiwan lang
-   para identical pa rin sa OIC file.
-================================================================== */
-
-/* ==================================================================
-   ⚠️ BAGO: LOCATION INDICATOR SA SIDEBAR (Finance assignment)
-================================================================== */
 .finance-page .sidebar-brand-location {
   font-size: 11px;
   color: #94A3B8;
@@ -720,7 +698,7 @@
 }
 
 .finance-page.finance-pending-page .cash-summary-amount {
-  color: #16A34A !important;
+  color: #166534 !important;
   font-size: 15px;
 }
 
@@ -952,4 +930,15 @@
   .finance-page.finance-pending-page .toolbar-select {
     width: 100%;
   }
+}
+
+/* ==================================================================
+   Impound fee note (Amount column / payment modal)
+================================================================== */
+.finance-page.finance-pending-page .amount-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #B45309;
 }

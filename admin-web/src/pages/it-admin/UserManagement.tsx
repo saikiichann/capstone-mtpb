@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Activity,
@@ -16,6 +15,8 @@ import {
   Loader2,
   QrCode,
   Pencil,
+  KeyRound,
+  Star,
 } from "lucide-react";
 import {
   collection,
@@ -24,26 +25,27 @@ import {
   setDoc,
   updateDoc,
   getDoc,
+  deleteDoc,
   serverTimestamp,
   query,
   orderBy,
   Timestamp,
+  writeBatch,
 } from "firebase/firestore";
+import { CLAMPING_DISTRICT, clampingTeamRef, useClampingTeam } from "../../lib/clampingTeam";
 import { initializeApp, deleteApp } from "firebase/app";
 import {
   getAuth,
   onAuthStateChanged,
-  createUserWithEmailAndPassword,
-  signOut as firebaseSignOut,
-} from "firebase/auth";
+  createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db, firebaseConfig } from "../../firebase";
+import { ResetPasswordDialog, ResetRequestsPanel, type ResetTarget } from "./PasswordReset";
 import "./ITAdminHomepage.css";
 import "./UserManagement.css";
 
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
-import keyIcon from "../../assets/key.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
+import { clientIp } from "../../lib/staffSession";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -69,8 +71,7 @@ type RoleSlug =
 
 type UserStatus = "active" | "inactive" | "suspended";
 
-// ⚠️ WALANG "Both" — dalawa lang
-type AssignedLocation = "City Hall" | "MTPB Central Market Impounding Area";
+type AssignedLocation = "City Hall" | "MTPB Central";
 
 type UserRow = {
   uid: string;
@@ -81,6 +82,10 @@ type UserRow = {
   status: UserStatus;
   lastLogin: Timestamp | null;
   assignedLocation: AssignedLocation | null;
+  /** Clamping Staff only: always District 3 (the one district the system covers). */
+  assignedDistrict: string | null;
+  /** Clamping Staff only: the one clamping team leader of District 3. */
+  isTeamLeader: boolean;
 };
 
 type CurrentUser = { name: string; role: RoleSlug };
@@ -88,7 +93,7 @@ type CurrentUser = { name: string; role: RoleSlug };
 /* ------------------------------------------------------------------
    NORMALIZE STATUS
 ------------------------------------------------------------------ */
-const normalizeStatus = (raw: any): UserStatus => {
+const normalizeStatus = (raw: unknown): UserStatus => {
   const val = String(raw ?? "active").toLowerCase().trim();
   if (val === "inactive" || val === "disabled" || val === "deactivated") return "inactive";
   if (val === "suspended") return "suspended";
@@ -115,27 +120,117 @@ const STATUSES: { slug: UserStatus; label: string; class: string }[] = [
   { slug: "suspended", label: "Suspended", class: "status-suspended" },
 ];
 
-// ⚠️ WALANG "Both"
 const LOCATION_OPTIONS: { slug: AssignedLocation; label: string }[] = [
   { slug: "City Hall", label: "City Hall" },
-  { slug: "MTPB Central Market Impounding Area", label: "MTPB Central Market Impounding Area" },
+  { slug: "MTPB Central", label: "MTPB Central" },
 ];
 
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer-in-Charge",
-  "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  "finance": "Finance",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
+/* The system covers one district only, so every Clamping Staff is in
+   District 3 and there is one team leader for the whole district
+   (CLAMPING_DISTRICT, from lib/clampingTeam). */
+
 
 const roleLabel = (slug: RoleSlug) => ROLES.find((r) => r.slug === slug)?.label ?? slug;
 const roleClass = (slug: RoleSlug) => ROLES.find((r) => r.slug === slug)?.class ?? "";
 const statusLabel = (slug: UserStatus) => STATUSES.find((s) => s.slug === slug)?.label ?? slug;
 const statusClass = (slug: UserStatus) => STATUSES.find((s) => s.slug === slug)?.class ?? "";
+
+/* ------------------------------------------------------------------
+   ROLE REGISTRY HELPERS
+   Para sa notification dispatch (roleRegistry/{role}/users/{uid}).
+   Walang sensitive info — name + active flag lang.
+------------------------------------------------------------------ */
+const syncRoleRegistry = async (
+  uid: string,
+  name: string,
+  role: RoleSlug,
+  active: boolean
+): Promise<void> => {
+  await setDoc(
+    doc(db, "roleRegistry", role, "users", uid),
+    {
+      name: name.trim(),
+      active,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+};
+
+const removeFromRoleRegistry = async (uid: string, role: RoleSlug): Promise<void> => {
+  try {
+    await deleteDoc(doc(db, "roleRegistry", role, "users", uid));
+  } catch (err) {
+    console.warn("Failed to remove from roleRegistry:", err);
+  }
+};
+
+/* ------------------------------------------------------------------
+   CLAMPING TEAM HELPERS
+   Isang leader lang para sa buong District 3. Kapag may bagong leader,
+   tinatanggal ang leader status ng dati (sa iisang batch, para sabay).
+------------------------------------------------------------------ */
+const isClampLeader = (u: UserRow) => u.role === "clamping-staff" && u.isTeamLeader;
+
+const currentLeader = (users: UserRow[], exceptUid: string | null): UserRow | undefined =>
+  users.find((u) => isClampLeader(u) && u.uid !== exceptUid);
+
+/** Leader(s) to step down when `uid` becomes the District 3 leader. */
+const leadersToReplace = (users: UserRow[], uid: string): UserRow[] =>
+  users.filter((u) => isClampLeader(u) && u.uid !== uid);
+
+/** District + leader fields, shown only when the role is Clamping Staff. */
+function ClampingTeamFields({
+  idPrefix,
+  isLeader,
+  setIsLeader,
+  users,
+  selfUid,
+  disabled,
+}: {
+  idPrefix: string;
+  isLeader: boolean;
+  setIsLeader: (value: boolean) => void;
+  users: UserRow[];
+  selfUid: string | null;
+  disabled: boolean;
+}) {
+  const current = currentLeader(users, selfUid);
+  return (
+    <>
+      <div className="form-field">
+        <label htmlFor={`${idPrefix}-district`}>Assigned District</label>
+        <input
+          id={`${idPrefix}-district`}
+          type="text"
+          value={CLAMPING_DISTRICT}
+          readOnly
+          disabled
+        />
+      </div>
+
+      <div className="form-field team-leader-field">
+        <label className="team-leader-check" htmlFor={`${idPrefix}-leader`}>
+          <input
+            id={`${idPrefix}-leader`}
+            type="checkbox"
+            checked={isLeader}
+            onChange={(e) => setIsLeader(e.target.checked)}
+            disabled={disabled}
+          />
+          <span>Clamping team leader of {CLAMPING_DISTRICT}</span>
+        </label>
+        <p className="team-leader-note">
+          {current
+            ? isLeader
+              ? `${current.name} is the current leader and will be changed to a member.`
+              : `Current leader: ${current.name}.`
+            : `${CLAMPING_DISTRICT} has no team leader yet.`}
+        </p>
+      </div>
+    </>
+  );
+}
 
 /* ------------------------------------------------------------------
    NAV
@@ -202,14 +297,17 @@ type AddUserModalProps = {
   onClose: () => void;
   onSave: () => void;
   currentUserId: string;
+  users: UserRow[];
 };
 
-function AddUserModal({ onClose, onSave, currentUserId }: AddUserModalProps) {
+function AddUserModal({ onClose, onSave, currentUserId, users }: AddUserModalProps) {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<RoleSlug | "">("");
   const [password, setPassword] = useState("");
   const [assignedLocation, setAssignedLocation] = useState<AssignedLocation | "">("");
+  const assignedDistrict = CLAMPING_DISTRICT;
+  const [isTeamLeader, setIsTeamLeader] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -244,6 +342,7 @@ function AddUserModal({ onClose, onSave, currentUserId }: AddUserModalProps) {
       await secondaryAuth.signOut();
       await deleteApp(secondaryApp);
 
+      // 1. Save sa users collection
       await setDoc(doc(db, "users", newUid), {
         name: name.trim(),
         username: username.trim(),
@@ -252,20 +351,60 @@ function AddUserModal({ onClose, onSave, currentUserId }: AddUserModalProps) {
         status: "active",
         lastLogin: null,
         ...(role === "finance" ? { assignedLocation } : {}),
+        ...(role === "clamping-staff" ? { assignedDistrict, isTeamLeader } : {}),
         createdAt: serverTimestamp(),
         createdBy: currentUserId,
       });
 
+      // 1b. One leader for District 3: the previous leader becomes a member.
+      const replaced =
+        role === "clamping-staff" && isTeamLeader
+          ? leadersToReplace(users, newUid)
+          : [];
+      if (replaced.length > 0) {
+        const batch = writeBatch(db);
+        replaced.forEach((u) =>
+          batch.update(doc(db, "users", u.uid), { isTeamLeader: false, updatedAt: serverTimestamp() })
+        );
+        await batch.commit();
+      }
+
+      // 2. Sync sa roleRegistry (para sa notification dispatch)
+      await syncRoleRegistry(newUid, name.trim(), role, true);
+
+      // 3. Audit log
+      try {
+        await setDoc(doc(collection(db, "auditLogs")), {
+          userName: "IT Admin",
+          userRole: "it-admin",
+          action: `created user ${username.trim()} (${role})`,
+          record: username.trim(),
+          type: "user-management",
+          metadata: {
+            uid: newUid,
+            role,
+            assignedLocation: assignedLocation || null,
+            assignedDistrict: role === "clamping-staff" ? assignedDistrict : null,
+            isTeamLeader: role === "clamping-staff" ? isTeamLeader : false,
+            replacedLeader: replaced.map((u) => u.username || u.name),
+          },
+          timestamp: serverTimestamp(),
+          ipAddress: clientIp(),
+        });
+      } catch (auditErr) {
+        console.warn("Audit log not written:", auditErr);
+      }
+
       onSave();
-    } catch (err: any) {
-      if (err.code === "auth/email-already-in-use") {
+    } catch (err) {
+      if ((err as { code?: string })?.code === "auth/email-already-in-use") {
         setError("Username already exists. Please choose another.");
-      } else if (err.code === "auth/weak-password") {
+      } else if ((err as { code?: string })?.code === "auth/weak-password") {
         setError("Password is too weak. Use at least 6 characters.");
-      } else if (err.code === "permission-denied") {
+      } else if ((err as { code?: string })?.code === "permission-denied") {
         setError("Permission denied. Please check your Firestore rules.");
       } else {
-        setError(err.message || "Failed to create user.");
+        setError((err as Error)?.message || "Failed to create user.");
       }
     } finally {
       setSaving(false);
@@ -277,7 +416,7 @@ function AddUserModal({ onClose, onSave, currentUserId }: AddUserModalProps) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Add New User</h2>
-          <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
+          <button aria-label="Close" type="button" className="modal-close" onClick={onClose} disabled={saving}>
             <X size={20} />
           </button>
         </div>
@@ -319,6 +458,9 @@ function AddUserModal({ onClose, onSave, currentUserId }: AddUserModalProps) {
                     if (newRole !== "finance") {
                       setAssignedLocation("");
                     }
+                    if (newRole !== "clamping-staff") {
+                      setIsTeamLeader(false);
+                    }
                   }}
                   disabled={saving}
                 >
@@ -350,6 +492,17 @@ function AddUserModal({ onClose, onSave, currentUserId }: AddUserModalProps) {
                 <ChevronDown size={16} className="select-icon" />
               </div>
             </div>
+          )}
+
+          {role === "clamping-staff" && (
+            <ClampingTeamFields
+              idPrefix="add"
+              isLeader={isTeamLeader}
+              setIsLeader={setIsTeamLeader}
+              users={users}
+              selfUid={null}
+              disabled={saving}
+            />
           )}
 
           <div className="form-field">
@@ -385,17 +538,21 @@ function AddUserModal({ onClose, onSave, currentUserId }: AddUserModalProps) {
 ------------------------------------------------------------------ */
 type EditUserModalProps = {
   user: UserRow;
+  users: UserRow[];
   onClose: () => void;
   onSave: () => void;
 };
 
-function EditUserModal({ user, onClose, onSave }: EditUserModalProps) {
+function EditUserModal({ user, users, onClose, onSave }: EditUserModalProps) {
   const [name, setName] = useState(user.name);
   const [role, setRole] = useState<RoleSlug>(user.role);
   const [status, setStatus] = useState<UserStatus>(user.status);
   const [assignedLocation, setAssignedLocation] = useState<AssignedLocation | "">(
     user.assignedLocation ?? ""
   );
+  // Old records may still hold an area name; saving moves them to District 3.
+  const assignedDistrict = CLAMPING_DISTRICT;
+  const [isTeamLeader, setIsTeamLeader] = useState(user.isTeamLeader);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -414,7 +571,7 @@ function EditUserModal({ user, onClose, onSave }: EditUserModalProps) {
     try {
       const userDocRef = doc(db, "users", user.uid);
 
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         name: name.trim(),
         role,
         status,
@@ -427,13 +584,75 @@ function EditUserModal({ user, onClose, onSave }: EditUserModalProps) {
         updateData.assignedLocation = null;
       }
 
-      await updateDoc(userDocRef, updateData);
+      if (role === "clamping-staff") {
+        updateData.assignedDistrict = assignedDistrict;
+        updateData.isTeamLeader = isTeamLeader;
+      } else {
+        updateData.assignedDistrict = null;
+        updateData.isTeamLeader = false;
+      }
+
+      // One leader for District 3: this user's change and the previous
+      // leader stepping down are saved together.
+      const replaced =
+        role === "clamping-staff" && isTeamLeader
+          ? leadersToReplace(users, user.uid)
+          : [];
+      const batch = writeBatch(db);
+      batch.update(userDocRef, updateData);
+      replaced.forEach((u) =>
+        batch.update(doc(db, "users", u.uid), { isTeamLeader: false, updatedAt: serverTimestamp() })
+      );
+      await batch.commit();
+
+      // Sync sa roleRegistry
+      const roleChanged = role !== user.role;
+      const isActive = status === "active";
+
+      if (roleChanged) {
+        // Remove from lumang role, add sa bagong role
+        await removeFromRoleRegistry(user.uid, user.role);
+        if (isActive) {
+          await syncRoleRegistry(user.uid, name.trim(), role, true);
+        }
+      } else {
+        // Same role — i-update ang name at active flag
+        await syncRoleRegistry(user.uid, name.trim(), role, isActive);
+      }
+
+      // Audit log
+      try {
+        await setDoc(doc(collection(db, "auditLogs")), {
+          userName: "IT Admin",
+          userRole: "it-admin",
+          action: `updated user ${user.username} (role: ${role}, status: ${status})`,
+          record: user.username,
+          type: "user-management",
+          metadata: {
+            uid: user.uid,
+            oldRole: user.role,
+            newRole: role,
+            oldStatus: user.status,
+            newStatus: status,
+            oldDistrict: user.assignedDistrict,
+            newDistrict: role === "clamping-staff" ? assignedDistrict : null,
+            oldTeamLeader: user.isTeamLeader,
+            newTeamLeader: role === "clamping-staff" ? isTeamLeader : false,
+            replacedLeader: replaced.map((u) => u.username || u.name),
+          },
+          timestamp: serverTimestamp(),
+          ipAddress: clientIp(),
+        });
+      } catch (auditErr) {
+        console.warn("Audit log not written:", auditErr);
+      }
+
       onSave();
-    } catch (err: any) {
-      if (err.code === "permission-denied") {
+    } catch (err) {
+      if ((err as { code?: string })?.code === "permission-denied") {
         setError("Permission denied. Please check your Firestore rules.");
       } else {
-        setError(err.message || "Failed to update user.");
+        setError((err as Error)?.message || "Failed to update user.");
       }
     } finally {
       setSaving(false);
@@ -445,7 +664,7 @@ function EditUserModal({ user, onClose, onSave }: EditUserModalProps) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Edit User: {user.name}</h2>
-          <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
+          <button aria-label="Close" type="button" className="modal-close" onClick={onClose} disabled={saving}>
             <X size={20} />
           </button>
         </div>
@@ -485,6 +704,9 @@ function EditUserModal({ user, onClose, onSave }: EditUserModalProps) {
                     setRole(newRole);
                     if (newRole !== "finance") {
                       setAssignedLocation("");
+                    }
+                    if (newRole !== "clamping-staff") {
+                      setIsTeamLeader(false);
                     }
                   }}
                   disabled={saving}
@@ -533,6 +755,17 @@ function EditUserModal({ user, onClose, onSave }: EditUserModalProps) {
                 <ChevronDown size={16} className="select-icon" />
               </div>
             </div>
+          )}
+
+          {role === "clamping-staff" && (
+            <ClampingTeamFields
+              idPrefix="edit"
+              isLeader={isTeamLeader}
+              setIsLeader={setIsTeamLeader}
+              users={users}
+              selfUid={user.uid}
+              disabled={saving}
+            />
           )}
 
           {error && <p className="modal-error">{error}</p>}
@@ -610,24 +843,47 @@ function DisableModal({ user, mode, onClose, onConfirm, loading }: DisableModalP
    MAIN COMPONENT
 ------------------------------------------------------------------ */
 export default function UserManagement() {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
   const [confirmUser, setConfirmUser] = useState<{ user: UserRow; mode: "disable" | "enable" } | null>(null);
+  /** Staff password reset (PasswordReset.tsx) */
+  const [resetTarget, setResetTarget] = useState<ResetTarget | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(8);
+
+  /* Keep settings/clampingTeam in step with the leader picked here. Only the
+     IT Admin can read users, so the OIC/Supervisor Operation Scheduler reads
+     the leader from that settings doc. Runs after every users change (add,
+     edit, rename), and also fixes it for a leader set before this existed. */
+  const team = useClampingTeam();
+  useEffect(() => {
+    if (loading || team === null || users.length === 0) return;
+    const leader = users.find(isClampLeader) ?? null;
+    const leaderUid = leader?.uid ?? null;
+    const leaderName = leader?.name ?? null;
+    if (
+      team.leaderUid === leaderUid &&
+      team.leaderName === leaderName &&
+      team.district === CLAMPING_DISTRICT
+    ) {
+      return;
+    }
+    setDoc(
+      clampingTeamRef(),
+      { district: CLAMPING_DISTRICT, leaderUid, leaderName, updatedAt: serverTimestamp() },
+      { merge: true }
+    ).catch((err) => console.warn("Clamping team sync failed:", err));
+  }, [users, loading, team]);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "it-admin",
   });
 
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
@@ -673,6 +929,8 @@ export default function UserManagement() {
             status: normalizeStatus(data.status),
             lastLogin: data.lastLogin ?? null,
             assignedLocation: (data.assignedLocation as AssignedLocation) ?? null,
+            assignedDistrict: (data.assignedDistrict as string) ?? null,
+            isTeamLeader: data.isTeamLeader === true,
           };
         });
         setUsers(fetchedUsers);
@@ -686,43 +944,6 @@ export default function UserManagement() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
-    }
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setMenuOpen(false);
-        setIsAddModalOpen(false);
-        setEditingUser(null);
-        setConfirmUser(null);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setMenuOpen(false);
-      navigate("/");
-    }
-  };
-
   const handleConfirmToggle = async () => {
     if (!confirmUser) return;
     setActionLoading(true);
@@ -734,18 +955,27 @@ export default function UserManagement() {
         updatedAt: serverTimestamp(),
       });
 
+      // Sync sa roleRegistry — i-update ang active flag
+      await syncRoleRegistry(
+        confirmUser.user.uid,
+        confirmUser.user.name,
+        confirmUser.user.role,
+        newStatus === "active"
+      );
+
       await setDoc(doc(collection(db, "auditLogs")), {
         userName: currentUser.name,
         action: `${confirmUser.mode === "disable" ? "disabled" : "enabled"} account ${confirmUser.user.username}`,
         record: confirmUser.user.username,
         type: "user-management",
         timestamp: serverTimestamp(),
+        ipAddress: clientIp(),
       });
 
       setConfirmUser(null);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error toggling user status:", err);
-      alert(err.message || "Failed to update user status.");
+      alert((err as Error)?.message || "Failed to update user status.");
     } finally {
       setActionLoading(false);
     }
@@ -762,71 +992,16 @@ export default function UserManagement() {
   return (
     <div className="it-admin-page">
       <div className="dashboard">
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">IT Admin</p>
-            </div>
-          </div>
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div className="nav-group" key={group.title}>
-                <p className="nav-group-title">{group.title}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => {
-                    const IconComponent = item.icon;
-                    return (
-                      <li key={item.label}>
-                        <button
-                          type="button"
-                          className={`nav-item${item.active ? " active" : ""}`}
-                          onClick={() => navigate(item.path)}
-                        >
-                          <IconComponent size={16} className="nav-icon-svg" />
-                          <span>{item.label}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>IT Admin</>} />
 
         <main className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>User Management</h1>
               <p>{new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
             </div>
 
-            <div className="avatar-container" ref={menuRef}>
-              <img
-                src={avatarImg}
-                alt="Account menu"
-                className="avatar-img"
-                onClick={() => setMenuOpen((open) => !open)}
-              />
-              {menuOpen && (
-                <div className="profile-dropdown" role="menu">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">{ROLE_LABELS[currentUser.role]}</p>
-                  </div>
-                  <button type="button" className="dropdown-item" onClick={() => setMenuOpen(false)}>
-                    <img src={keyIcon} alt="" className="dropdown-icon" />
-                    <span>Change Password</span>
-                  </button>
-                  <button type="button" className="dropdown-item logout" onClick={handleLogout}>
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <div className="main-content">
@@ -843,6 +1018,8 @@ export default function UserManagement() {
                 Add User
               </button>
             </div>
+
+            <ResetRequestsPanel roleLabel={(r) => roleLabel(r as RoleSlug)} onReset={setResetTarget} />
 
             <div className="card user-table-card">
               {loading ? (
@@ -877,7 +1054,6 @@ export default function UserManagement() {
                             <td className="cell-name">{user.name}</td>
                             <td className="cell-username">{user.username}</td>
 
-                            {/* ⚠️ CHANGED: Role pill + location sa TABI (inline) */}
                             <td>
                               <div className="role-cell-content">
                                 <span className={`role-pill ${roleClass(user.role)}`}>
@@ -886,6 +1062,17 @@ export default function UserManagement() {
                                 {user.role === "finance" && user.assignedLocation && (
                                   <span className="location-inline">
                                     — {user.assignedLocation}
+                                  </span>
+                                )}
+                                {user.role === "clamping-staff" && (
+                                  <span className="location-inline">
+                                    — {CLAMPING_DISTRICT}
+                                  </span>
+                                )}
+                                {user.role === "clamping-staff" && user.isTeamLeader && (
+                                  <span className="leader-pill">
+                                    <Star size={11} aria-hidden="true" />
+                                    Leader
                                   </span>
                                 )}
                               </div>
@@ -898,6 +1085,7 @@ export default function UserManagement() {
                             </td>
                             <td className="cell-last-login">{formatLastLogin(user.lastLogin)}</td>
                             <td className="cell-action">
+                              <div className="cell-action-buttons">
                               {isActive ? (
                                 <button
                                   type="button"
@@ -923,6 +1111,25 @@ export default function UserManagement() {
                               >
                                 <Pencil size={14} />
                               </button>
+                              {user.uid !== auth.currentUser?.uid && (
+                                <button
+                                  type="button"
+                                  className="um-reset-btn"
+                                  onClick={() =>
+                                    setResetTarget({
+                                      uid: user.uid,
+                                      name: user.name,
+                                      username: user.username,
+                                      role: user.role,
+                                    })
+                                  }
+                                  aria-label={`Reset password of ${user.name}`}
+                                  title="Reset password"
+                                >
+                                  <KeyRound size={14} />
+                                </button>
+                              )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -943,6 +1150,7 @@ export default function UserManagement() {
                     <input
                       type="number"
                       className="page-input"
+                      aria-label="Page number"
                       value={currentPage}
                       min={1}
                       max={totalPages}
@@ -974,15 +1182,21 @@ export default function UserManagement() {
           onClose={() => setIsAddModalOpen(false)}
           onSave={() => setIsAddModalOpen(false)}
           currentUserId={auth.currentUser.uid}
+          users={users}
         />
       )}
 
       {editingUser && (
         <EditUserModal
           user={editingUser}
+          users={users}
           onClose={() => setEditingUser(null)}
           onSave={() => setEditingUser(null)}
         />
+      )}
+
+      {resetTarget && (
+        <ResetPasswordDialog target={resetTarget} onClose={() => setResetTarget(null)} />
       )}
 
       {confirmUser && (
