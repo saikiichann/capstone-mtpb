@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Activity,
@@ -14,7 +13,7 @@ import {
   AlertTriangle,
   QrCode,
 } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
@@ -26,13 +25,12 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { ACTIVE_WINDOW_MS } from "../../lib/staffSession";
 import "./ITAdminHomepage.css";
 import "./SessionMonitor.css";
 
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
-import keyIcon from "../../assets/key.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -73,21 +71,16 @@ type SessionRow = {
   device: string;
   ipAddress: string;
   loginTime: string;
+  lastActive: string;
+  /** Last heartbeat (ms); sessions quiet for 30 min are hidden. */
+  lastActiveMs: number;
+  /** Closed by logging out, or revoked by the IT Admin. */
+  closed: boolean;
 };
 
 /* ------------------------------------------------------------------
    ROLE MAP
 ------------------------------------------------------------------ */
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer-in-Charge",
-  "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  "finance": "Finance",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
 const ROLE_SHORT_LABELS: Record<RoleSlug, string> = {
   "oic": "OIC",
@@ -172,9 +165,6 @@ const formatTime = (date: Date): string => {
    COMPONENT
 ------------------------------------------------------------------ */
 export default function SessionMonitor() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const navigate = useNavigate();
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     uid: "",
@@ -183,6 +173,15 @@ export default function SessionMonitor() {
   });
 
   const [sessions, setSessions] = useState<SessionRow[]>([]);
+  /** Re-checked every minute so quiet sessions drop off the list. */
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const activeSessions = sessions.filter(
+    (row) => !row.closed && now - row.lastActiveMs <= ACTIVE_WINDOW_MS
+  );
   const [loading, setLoading] = useState(true);
   const [revoking, setRevoking] = useState<string | null>(null);
 
@@ -241,6 +240,11 @@ export default function SessionMonitor() {
             loginTime: data.loginTime
               ? formatTime(data.loginTime.toDate())
               : formatTime(new Date()),
+            lastActive: data.lastActive
+              ? formatTime(data.lastActive.toDate())
+              : "—",
+            lastActiveMs: data.lastActive?.toMillis?.() ?? data.loginTime?.toMillis?.() ?? Date.now(),
+            closed: data.active === false || data.revoked === true || Boolean(data.endedAt),
           };
         });
         setSessions(fetched);
@@ -258,37 +262,6 @@ export default function SessionMonitor() {
   /* ================================================================
      Click-outside + Escape
   ================================================================ */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
-    }
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setMenuOpen(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setMenuOpen(false);
-      navigate("/");
-    }
-  };
 
   /* ================================================================
      Revoke session
@@ -311,15 +284,10 @@ export default function SessionMonitor() {
         revokedByName: currentUser.name,
       });
 
-      await updateDoc(sessionRef, {
-        revokedAt: serverTimestamp(),
-      });
-
-      console.log("Session revoked:", row.id);
       setRevoking(null);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error revoking session:", err);
-      alert(err.message || "Failed to revoke session.");
+      alert((err as Error)?.message || "Failed to revoke session.");
       setRevoking(null);
     }
   };
@@ -328,42 +296,11 @@ export default function SessionMonitor() {
     <div className="it-admin-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">IT Admin</p>
-            </div>
-          </div>
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div className="nav-group" key={group.title}>
-                <p className="nav-group-title">{group.title}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => {
-                    const IconComponent = item.icon;
-                    return (
-                      <li key={item.label}>
-                        <button
-                          type="button"
-                          className={`nav-item${item.active ? " active" : ""}`}
-                          onClick={() => navigate(item.path)}
-                        >
-                          <IconComponent size={16} className="nav-icon-svg" />
-                          <span>{item.label}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>IT Admin</>} />
 
         {/* MAIN */}
         <main className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>Session Monitor</h1>
@@ -376,38 +313,6 @@ export default function SessionMonitor() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={menuRef}>
-              <img
-                src={avatarImg}
-                alt="Account menu"
-                className="avatar-img"
-                onClick={() => setMenuOpen((open) => !open)}
-              />
-              {menuOpen && (
-                <div className="profile-dropdown" role="menu">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">{ROLE_LABELS[currentUser.role]}</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="dropdown-item"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    <img src={keyIcon} alt="" className="dropdown-icon" />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <div className="session-content">
@@ -433,7 +338,7 @@ export default function SessionMonitor() {
                   <RefreshCw size={20} className="spin" />
                   <p>Loading active sessions...</p>
                 </div>
-              ) : sessions.length === 0 ? (
+              ) : activeSessions.length === 0 ? (
                 <div className="table-empty">
                   <p>No active sessions.</p>
                 </div>
@@ -446,11 +351,12 @@ export default function SessionMonitor() {
                       <th>Device</th>
                       <th>IP address</th>
                       <th>Login time</th>
+                      <th>Last active</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sessions.map((row) => (
+                    {activeSessions.map((row) => (
                       <tr key={row.id}>
                         <td className="cell-user">{row.userName}</td>
                         <td>
@@ -465,6 +371,7 @@ export default function SessionMonitor() {
                         <td className="cell-device">{row.device}</td>
                         <td className="cell-ip">{row.ipAddress}</td>
                         <td className="cell-time">{row.loginTime}</td>
+                        <td className="cell-time">{row.lastActive}</td>
                         <td>
                           <button
                             type="button"

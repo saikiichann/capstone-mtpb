@@ -1,13 +1,10 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
 import {
-  KeyRound,
   Search,
   ChevronDown,
   ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+  ChevronRight } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
@@ -20,9 +17,6 @@ import {
 import { auth, db } from "../../firebase";
 import "./ImpoundingLog.css";
 
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
 
 import overviewIcon from "../../assets/overview.png";
 import sectorAnalyticsIcon from "../../assets/sectoranalytics.png";
@@ -37,10 +31,10 @@ import revenueIcon from "../../assets/revenue.png";
 import releaseRequestIcon from "../../assets/releaserequest.png";
 import queueIcon from "../../assets/queue.png";
 import releaseLogIcon from "../../assets/releaselog.png";
-import clampingTeamsIcon from "../../assets/clampingteams.png";
-import towTruckIcon from "../../assets/tow-truck.png";
 import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -57,7 +51,11 @@ type RoleSlug =
 
 type CurrentUser = { name: string; role: RoleSlug };
 
-type LogStatus = "Impounded" | "Released";
+type LogStatus =
+  | "Subject to Impound"
+  | "Scheduled for Impounding"
+  | "Impounded"
+  | "Released";
 
 type ImpoundLogRow = {
   id: string;
@@ -170,16 +168,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Operations",
     items: [
       {
-        label: "Active Clamping Teams",
-        icon: clampingTeamsIcon,
-        path: "/dashboard/clamping-teams",
-      },
-      {
-        label: "Active Impounding",
-        icon: towTruckIcon,
-        path: "/dashboard/active-impounding",
-      },
-      {
         label: "Field Updates",
         icon: fieldUpdateIcon,
         path: "/dashboard/field-updates",
@@ -229,21 +217,33 @@ const millis = (ts: Timestamp | null): number => {
 const deriveLogStatus = (releaseStatus: unknown): LogStatus =>
   releaseStatus === "Released" ? "Released" : "Impounded";
 
-const getStatusClass = (status: LogStatus): string =>
-  status === "Released" ? "status-released" : "status-impounded";
+/** Status from impoundRecords.status or violations.impoundStatus. */
+const normalizeImpoundStatus = (value: unknown): LogStatus => {
+  const v = String(value ?? "").toLowerCase().trim();
+  if (v === "released") return "Released";
+  if (v === "impounded") return "Impounded";
+  if (v === "scheduled for impounding") return "Scheduled for Impounding";
+  return "Subject to Impound";
+};
+
+const STATUS_CLASS: Record<LogStatus, string> = {
+  "Subject to Impound": "status-subject",
+  "Scheduled for Impounding": "status-scheduled",
+  Impounded: "status-impounded",
+  Released: "status-released",
+};
+
+const getStatusClass = (status: LogStatus): string => STATUS_CLASS[status];
 
 /* ------------------------------------------------------------------
    COMPONENT
 ------------------------------------------------------------------ */
 export default function ImpoundingLog() {
-  const navigate = useNavigate();
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "oic",
   });
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const [rows, setRows] = useState<ImpoundLogRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -276,80 +276,123 @@ export default function ImpoundingLog() {
   }, []);
 
   /**
-   * Impounding actions only (enforcementType == "impounded") — clamping has
-   * its own log page. No orderBy() on purpose: Firestore silently drops
-   * documents that lack the ordered field, so a record without recordedAt
-   * would vanish instead of showing up out of order. Sorting happens
-   * client-side.
+   * Two sources, merged into one log:
+   *
+   *   A. violations with enforcementType == "impounded" — vehicles towed
+   *      directly by the enforcer.
+   *   B. impoundRecords — the impounding side's own records: clamped
+   *      vehicles flagged from the Clamping Log (doc id = violation id) and
+   *      paper tickets encoded by Impounding Staff. Its status (Subject to
+   *      Impound → Scheduled → Impounded → Released) is kept up to date by
+   *      Impounding Staff, so it wins over the violation's impoundStatus.
+   *   (Clamped vehicles are no longer flagged for impound: an overdue
+   *   clamp stays clamped and is charged ₱2,000 — see lib/clampFee.ts.)
+   *
+   * No orderBy() on purpose: Firestore silently drops documents that lack
+   * the ordered field, so a record without recordedAt would vanish instead
+   * of showing up out of order. Sorting happens client-side.
    */
   useEffect(() => {
-    const q = query(
-      collection(db, "violations"),
-      where("enforcementType", "==", "impounded")
-    );
+    let impoundedRows: ImpoundLogRow[] = [];
+    let recordRows: (ImpoundLogRow & { linkedViolationId: string })[] = [];
+    let pending = 2;
 
-    const unsubscribe = onSnapshot(
-      q,
+    const merge = () => {
+      const impoundedIds = new Set(impoundedRows.map((r) => r.id));
+
+      const merged: ImpoundLogRow[] = [
+        ...impoundedRows,
+        // A direct tow already has its own row from source A.
+        ...recordRows
+          .filter((r) => !impoundedIds.has(r.linkedViolationId))
+          .map((r) => {
+            const row: ImpoundLogRow & { linkedViolationId?: string } = { ...r };
+            delete row.linkedViolationId;
+            return row as ImpoundLogRow;
+          }),
+      ].sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
+
+      setRows(merged);
+      if (pending <= 0) setLoading(false);
+    };
+
+    const loaded = (() => {
+      const seen = new Set<string>();
+      return (source: string) => {
+        if (!seen.has(source)) {
+          seen.add(source);
+          pending -= 1;
+        }
+      };
+    })();
+
+    const onError = (source: string) => (err: { code: string }) => {
+      console.warn(`Impounding log (${source}) fetch failed:`, err.code);
+      loaded(source);
+      merge();
+    };
+
+    // A. Direct impounds
+    const unsubImpounded = onSnapshot(
+      query(collection(db, "violations"), where("enforcementType", "==", "impounded")),
       (snap) => {
-        const fetched: ImpoundLogRow[] = snap.docs
-          .map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              reference:
-                (data.referenceNumber as string) ??
-                (data.paymentReference as string) ??
-                null,
-              cin: data.cin ?? "—",
-              plateNo: data.plateNo ?? "—",
-              violation: data.violationType ?? "—",
-              location: data.location ?? "—",
-              officer: data.officer ?? "—",
-              recordedAt: (data.recordedAt as Timestamp) ?? null,
-              status: deriveLogStatus(data.releaseStatus),
-            };
-          })
-          .sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
-
-        setRows(fetched);
-        setLoading(false);
+        impoundedRows = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            reference:
+              (data.referenceNumber as string) ??
+              (data.paymentReference as string) ??
+              null,
+            cin: data.cin ?? "—",
+            plateNo: data.plateNo ?? "—",
+            violation: data.violationType ?? "—",
+            location: data.location ?? "—",
+            officer: data.officer ?? "—",
+            recordedAt: (data.recordedAt as Timestamp) ?? null,
+            status: deriveLogStatus(data.releaseStatus),
+          };
+        });
+        loaded("impounded");
+        merge();
       },
-      (err) => {
-        console.warn("Impounding log fetch failed:", err.code);
-        setLoading(false);
-      }
+      onError("impounded")
     );
-    return () => unsubscribe();
-  }, []);
 
-  /* Click outside */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    // B. Impound records
+    const unsubRecords = onSnapshot(
+      collection(db, "impoundRecords"),
+      (snap) => {
+        recordRows = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            linkedViolationId: (data.sourceViolationId as string) || d.id,
+            reference:
+              (data.referenceNumber as string) ??
+              (data.paymentReference as string) ??
+              null,
+            cin: data.cin ?? "—",
+            plateNo: data.plateNo ?? "—",
+            violation:
+              data.initialViolation ?? data.violationType ?? data.violation ?? "—",
+            location: data.location ?? "—",
+            officer: data.clampedBy ?? data.towedBy ?? data.impoundedBy ?? "—",
+            recordedAt: ((data.clampedAt ?? data.ticketDate ?? data.createdAt) as Timestamp) ?? null,
+            status: normalizeImpoundStatus(data.status),
+          };
+        });
+        loaded("records");
+        merge();
+      },
+      onError("records")
+    );
 
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    }
-  };
+    return () => {
+      unsubImpounded();
+      unsubRecords();
+    };
+  }, []);
 
   /** Supervisors see the same pages as the OIC, minus Payment/Finance. */
   const navGroups = useMemo(
@@ -391,6 +434,16 @@ export default function ImpoundingLog() {
     [rows]
   );
 
+  const subjectCount = useMemo(
+    () =>
+      rows.filter(
+        (r) =>
+          r.status === "Subject to Impound" ||
+          r.status === "Scheduled for Impounding"
+      ).length,
+    [rows]
+  );
+
   /* Pagination */
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
   // Clamped here, during render, instead of a useEffect that "corrects"
@@ -399,52 +452,23 @@ export default function ImpoundingLog() {
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
   const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  useEffect(() => {
+  // Back to page 1 when these change (during render, not in an effect)
+  const pageResetKey = JSON.stringify([searchQuery, violationFilter]);
+  const [prevPageResetKey, setPrevPageResetKey] = useState(pageResetKey);
+  if (pageResetKey !== prevPageResetKey) {
+    setPrevPageResetKey(pageResetKey);
     setCurrentPage(1);
-  }, [searchQuery, violationFilter]);
+  }
 
   return (
     <div className="oic-page impound-log-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">
-                {ROLE_LABELS[currentUser.role]}
-              </p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        <span>{item.label}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>{ROLE_LABELS[currentUser.role]}</>} />
 
         {/* MAIN */}
         <div className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>Impounding Log</h1>
@@ -457,35 +481,6 @@ export default function ImpoundingLog() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={avatarImg}
-                alt="Account menu"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button className="dropdown-item">
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content impounding-body">
@@ -524,7 +519,7 @@ export default function ImpoundingLog() {
               <div className="log-header">
                 <p className="card-eyebrow">Sector 3</p>
                 <div className="log-header-meta">
-                  Impounded vehicles: {impoundedCount} total
+                  Subject to impound: {subjectCount} · Impounded: {impoundedCount}
                 </div>
               </div>
               <h2 className="card-title" style={{ marginBottom: 16 }}>
@@ -542,7 +537,7 @@ export default function ImpoundingLog() {
                     : "No records match your search or filter."}
                 </div>
               ) : (
-                <div className="impounding-table-wrap">
+                <div className="impounding-table-wrap" tabIndex={0} role="region" aria-label="Impounding log table" data-scroll-region>
                   <table className="data-table">
                     <thead>
                       <tr>

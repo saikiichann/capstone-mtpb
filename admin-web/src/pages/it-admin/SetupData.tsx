@@ -17,7 +17,6 @@ export default function SetupData() {
 
   const log = (msg: string) => {
     setStatus((prev) => [...prev, msg]);
-    console.log(msg);
   };
 
   const handleSetup = async () => {
@@ -103,9 +102,9 @@ export default function SetupData() {
 
       log("🎉 Setup complete!");
       setDone(true);
-    } catch (error: any) {
+    } catch (error) {
       console.error("Setup error:", error);
-      log(`❌ Error: ${error.message}`);
+      log(`❌ Error: ${(error as Error)?.message}`);
     } finally {
       setRunning(false);
     }

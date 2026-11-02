@@ -1,106 +1,67 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { KeyRound, X, ChevronLeft, ChevronRight } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+/* ------------------------------------------------------------------
+   IMPOUNDING STAFF — Active Impounding (/impounding-staff/active)
+
+   BAGONG IMPOUND PROCESS:
+     - Hiwalay sa clamp. Walang "Subject to Impound".
+     - Status: "Impounded" / "Released" lang.
+     - Source: impoundRecords kung saan status = "Impounded".
+     - View only (Nov 2026): walang Update Status. Kapag bayad na ang
+       impound fee (cash sa desk o GCash sa violator app), kusang
+       nagiging "Released" ang record at nawawala dito.
+   Styles: ./ActiveImpounding.css
+------------------------------------------------------------------ */
+import { useState, useEffect, useMemo } from "react";
+import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import {
-  addDoc,
   collection,
-  doc,
-  getDoc,
   onSnapshot,
-  serverTimestamp,
-  updateDoc,
   Timestamp,
 } from "firebase/firestore";
-import { auth, db } from "../../firebase";
+import { db } from "../../firebase";
 import "./ActiveImpounding.css";
 
 // Assets
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
 import impoundingLogIcon from "../../assets/impounding.png";
 import activeImpoundingIcon from "../../assets/tow-truck.png";
-import fieldUpdatesIcon from "../../assets/fieldupdate.png";
-import logoutIcon from "../../assets/logout.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
 ------------------------------------------------------------------ */
-type RoleSlug =
-  | "oic"
-  | "it-admin"
-  | "supervisor"
-  | "record-officer"
-  | "release-officer"
-  | "finance"
-  | "clamping-staff"
-  | "impounding-staff";
 
-type CurrentUser = {
-  name: string;
-  role: RoleSlug;
-};
 
-type ImpoundStatus =
-  | "Scheduled for Impounding"
-  | "Subject to Impound"
-  | "Impounded"
-  | "Released"
-  | "On Patrol";
+type ImpoundStatus = "Impounded" | "Released";
 
 type ImpoundRow = {
   id: string;
+  uovrNo: string;
   cin: string;
   plateNo: string;
   location: string;
-  clampedBy: string;
-  clampedAt: Timestamp | null;
-  hoursOverdue: number;
+  officer: string;
+  impoundedAt: Timestamp | null;
+  hoursSinceImpound: number;
+  impoundFee: number;
   status: ImpoundStatus;
 };
 
 type Metrics = {
-  subjectToImpound: number;
-  scheduled: number;
-  avgHoursOverdue: number;
+  totalImpounded: number;
+  avgHours: number;
+  totalFees: number;
 };
 
-type NavItem = {
-  label: string;
-  icon: string;
-  path: string;
-  active?: boolean;
-};
-
-type NavGroup = {
-  label: string;
-  items: NavItem[];
-};
+type NavItem = { label: string; icon: string; path: string; active?: boolean };
+type NavGroup = { label: string; items: NavItem[] };
 
 /* ------------------------------------------------------------------
    CONSTANTS
 ------------------------------------------------------------------ */
 const ITEMS_PER_PAGE = 10;
 
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer in Charge",
-  "it-admin": "IT Admin",
-  supervisor: "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  finance: "Finance",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
-const STATUS_OPTIONS: ImpoundStatus[] = [
-  "On Patrol",
-  "Scheduled for Impounding",
-  "Subject to Impound",
-  "Impounded",
-  "Released",
-];
 
 const navGroups: NavGroup[] = [
   {
@@ -113,7 +74,7 @@ const navGroups: NavGroup[] = [
     label: "Enforcement",
     items: [
       {
-        label: "Impounding Log",
+        label: "Impound Records",
         icon: impoundingLogIcon,
         path: "/impounding-staff/log",
       },
@@ -123,15 +84,10 @@ const navGroups: NavGroup[] = [
     label: "Operations",
     items: [
       {
-        label: "Active Impounding",
+        label: "Vehicles in Yard",
         icon: activeImpoundingIcon,
         path: "/impounding-staff/active",
         active: true,
-      },
-      {
-        label: "Field Updates",
-        icon: fieldUpdatesIcon,
-        path: "/impounding-staff/field-updates",
       },
     ],
   },
@@ -162,7 +118,7 @@ const millis = (ts: Timestamp | null): number => {
   }
 };
 
-const computeHoursOverdue = (ts: Timestamp | null): number => {
+const computeHoursSince = (ts: Timestamp | null): number => {
   if (!ts) return 0;
   try {
     const date = ts.toDate();
@@ -173,53 +129,36 @@ const computeHoursOverdue = (ts: Timestamp | null): number => {
   }
 };
 
-const getStatusClass = (status: ImpoundStatus): string => {
-  const map: Record<ImpoundStatus, string> = {
-    "Scheduled for Impounding": "status-scheduled",
-    "Subject to Impound": "status-subject",
-    Impounded: "status-impounded",
-    Released: "status-released",
-    "On Patrol": "status-patrol",
-  };
-  return map[status] ?? "";
-};
+const formatCurrency = (n: number): string =>
+  `₱${n.toLocaleString("en-PH", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`;
+
+const getStatusClass = (status: ImpoundStatus): string =>
+  status === "Released" ? "status-released" : "status-impounded";
 
 /* ------------------------------------------------------------------
-   UPDATE MODAL
+   DETAILS MODAL (view only)
+   No status change here: a vehicle is released automatically once its
+   impound fee is paid, in cash at the desk or by GCash on the violator
+   app. Then it leaves this list on its own.
 ------------------------------------------------------------------ */
-type UpdateModalProps = {
+type DetailsModalProps = {
   row: ImpoundRow;
   onClose: () => void;
-  onSave: (newStatus: ImpoundStatus) => Promise<void>;
 };
 
-function UpdateModal({ row, onClose, onSave }: UpdateModalProps) {
-  const [newStatus, setNewStatus] = useState<ImpoundStatus>(row.status);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSave = async () => {
-    setError("");
-    setSaving(true);
-    try {
-      await onSave(newStatus);
-    } catch (err: any) {
-      console.error("Update error:", err);
-      setError(err.message || "Failed to update status.");
-      setSaving(false);
-    }
-  };
-
+function DetailsModal({ row, onClose }: DetailsModalProps) {
   return (
-    <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="impound-details-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2 className="modal-title">{row.cin}</h2>
+          <h2 className="modal-title" id="impound-details-title">{row.cin}</h2>
           <button
             type="button"
             className="modal-close"
             onClick={onClose}
-            disabled={saving}
             aria-label="Close"
           >
             <X size={20} />
@@ -229,64 +168,46 @@ function UpdateModal({ row, onClose, onSave }: UpdateModalProps) {
         <div className="modal-body">
           <div className="info-box">
             <div className="info-row">
-              <span className="info-label">Plate:</span>
-              <span className="info-value">{row.plateNo}</span>
+              <span className="info-label">UOVR No.:</span>
+              <span className="info-value">{row.uovrNo}</span>
             </div>
             <div className="info-row">
-              <span className="info-label">Officer:</span>
-              <span className="info-value">{row.clampedBy}</span>
+              <span className="info-label">Plate:</span>
+              <span className="info-value">{row.plateNo}</span>
             </div>
             <div className="info-row">
               <span className="info-label">Location:</span>
               <span className="info-value">{row.location}</span>
             </div>
             <div className="info-row">
-              <span className="info-label">Clamped:</span>
+              <span className="info-label">Impounded by:</span>
+              <span className="info-value">{row.officer}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Impounded at:</span>
               <span className="info-value">
-                {formatDateTime(row.clampedAt)}
+                {formatDateTime(row.impoundedAt)}
               </span>
             </div>
             <div className="info-row">
-              <span className="info-label">Hours past redemption window:</span>
-              <span className="info-value">{row.hoursOverdue} hrs</span>
+              <span className="info-label">Hours since impound:</span>
+              <span className="info-value">{row.hoursSinceImpound} hrs</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Impound Fee:</span>
+              <span className="info-value">{formatCurrency(row.impoundFee)}</span>
             </div>
           </div>
 
-          <div className="form-field">
-            <label htmlFor="update-status">Update Status</label>
-            <select
-              id="update-status"
-              value={newStatus}
-              onChange={(e) => setNewStatus(e.target.value as ImpoundStatus)}
-              disabled={saving}
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {error && <p className="modal-error">{error}</p>}
+          <p className="yard-note">
+            Not paid yet. Once the impound fee is paid (cash at the desk or GCash), the vehicle is
+            released automatically and leaves this list.
+          </p>
         </div>
 
         <div className="modal-footer">
-          <button
-            type="button"
-            className="btn-cancel"
-            onClick={onClose}
-            disabled={saving}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn-save"
-            onClick={handleSave}
-            disabled={saving || newStatus === row.status}
-          >
-            {saving ? "Saving..." : "Save"}
+          <button type="button" className="btn-cancel" onClick={onClose}>
+            Close
           </button>
         </div>
       </div>
@@ -298,55 +219,18 @@ function UpdateModal({ row, onClose, onSave }: UpdateModalProps) {
    MAIN COMPONENT
 ------------------------------------------------------------------ */
 export default function ActiveImpounding() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
-    name: "Loading...",
-    role: "impounding-staff",
-  });
 
   const [rows, setRows] = useState<ImpoundRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRow, setSelectedRow] = useState<ImpoundRow | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
-  /* Fetch current user */
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
-      if (!loggedUser) {
-        setCurrentUser({ name: "Guest", role: "impounding-staff" });
-        return;
-      }
-      try {
-        const userDocRef = doc(db, "users", loggedUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const data = userDocSnap.data();
-          setCurrentUser({
-            name: data.name ?? "Unknown",
-            role: (data.role ?? "impounding-staff") as RoleSlug,
-          });
-        } else {
-          setCurrentUser({
-            name: loggedUser.email?.split("@")[0] ?? "Unknown",
-            role: "impounding-staff",
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching current user:", err);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
 
   /**
-   * Fetch impound records — active ones only (not Released).
-   *
-   * No orderBy() on purpose: Firestore silently drops documents that lack
-   * the ordered field, so a record without clampedAt would never show up.
-   * Newest-first sorting happens client-side instead.
+   * Fetch impoundRecords — active ones lang (status = "Impounded").
+   * Walang orderBy(): client-side sorting para hindi madrop ang records
+   * na walang clampedAt.
    */
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -355,25 +239,28 @@ export default function ActiveImpounding() {
         const activeRows: ImpoundRow[] = snap.docs
           .map((d) => {
             const data = d.data();
-            const clampedAt: Timestamp | null = data.clampedAt ?? null;
-            const hoursOverdue: number =
-              typeof data.hoursOverdue === "number"
-                ? data.hoursOverdue
-                : computeHoursOverdue(clampedAt);
+            const impoundedAt: Timestamp | null =
+              ((data.clampedAt ?? data.ticketDate ?? data.createdAt) as Timestamp) ?? null;
 
             return {
               id: d.id,
+              uovrNo: data.uovrNo ?? "—",
               cin: data.cin ?? "—",
               plateNo: data.plateNo ?? "—",
               location: data.location ?? "—",
-              clampedBy: data.clampedBy ?? "—",
-              clampedAt,
-              hoursOverdue,
-              status: (data.status ?? "Subject to Impound") as ImpoundStatus,
+              officer:
+                data.clampedBy ??
+                data.towedBy ??
+                data.impoundedBy ??
+                "—",
+              impoundedAt,
+              hoursSinceImpound: computeHoursSince(impoundedAt),
+              impoundFee: Number(data.impoundFee ?? 0),
+              status: (data.status ?? "Impounded") as ImpoundStatus,
             };
           })
-          .filter((r) => r.status !== "Released")
-          .sort((a, b) => millis(b.clampedAt) - millis(a.clampedAt));
+          .filter((r) => r.status === "Impounded")
+          .sort((a, b) => millis(b.impoundedAt) - millis(a.impoundedAt));
 
         setRows(activeRows);
         setLoading(false);
@@ -384,20 +271,6 @@ export default function ActiveImpounding() {
       }
     );
     return () => unsubscribe();
-  }, []);
-
-  /* Click outside dropdown */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   /* Escape key for modal */
@@ -411,98 +284,43 @@ export default function ActiveImpounding() {
     return () => document.removeEventListener("keydown", handleEscape);
   }, [selectedRow]);
 
-  /* Metrics are derived from all active rows, not just the visible page */
+  /* Metrics */
   const metrics: Metrics = useMemo(() => {
-    let subject = 0;
-    let scheduled = 0;
-    let totalHours = 0;
-
-    rows.forEach((row) => {
-      if (row.status === "Subject to Impound") subject++;
-      if (row.status === "Scheduled for Impounding") scheduled++;
-      totalHours += row.hoursOverdue;
-    });
-
+    const totalHours = rows.reduce((sum, r) => sum + r.hoursSinceImpound, 0);
+    const totalFees = rows.reduce((sum, r) => sum + r.impoundFee, 0);
     return {
-      subjectToImpound: subject,
-      scheduled,
-      avgHoursOverdue: rows.length > 0 ? Math.round(totalHours / rows.length) : 0,
+      totalImpounded: rows.length,
+      avgHours: rows.length > 0 ? Math.round(totalHours / rows.length) : 0,
+      totalFees,
     };
   }, [rows]);
 
   /* Pagination */
   const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
   const paginatedRows = rows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+  // Keep the page valid if the list shrinks (during render)
+  if (currentPage > totalPages) setCurrentPage(totalPages);
 
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/");
-    }
-  };
+  /* Update status: Impounded → Released */
 
-  const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
-    setIsMenuOpen(false);
-  };
-
-  /* Update status in Firestore */
-  const handleUpdateStatus = async (newStatus: ImpoundStatus) => {
-    if (!selectedRow) return;
-
-    const previousStatus = selectedRow.status;
-    const rowRef = doc(db, "impoundRecords", selectedRow.id);
-
-    await updateDoc(rowRef, {
-      status: newStatus,
-      updatedAt: serverTimestamp(),
-      updatedBy: currentUser.name,
-    });
-
-    await addDoc(collection(db, "auditLogs"), {
-      userName: currentUser.name,
-      action: `updated active impound ${selectedRow.cin} (${previousStatus} → ${newStatus})`,
-      record: selectedRow.cin,
-      type: "active-impound",
-      metadata: {
-        cin: selectedRow.cin,
-        oldStatus: previousStatus,
-        newStatus,
-      },
-      timestamp: serverTimestamp(),
-    });
-
-    console.log(`Updated ${selectedRow.cin}: ${previousStatus} → ${newStatus}`);
-    setSelectedRow(null);
-  };
 
   const metricCards = [
     {
-      title: "Subject to impound",
-      value: String(metrics.subjectToImpound),
-      subtitle: "24-hr redemption window expired, unpaid",
+      title: "Currently Impounded",
+      value: String(metrics.totalImpounded),
+      subtitle: "Active vehicles in the impound yard",
     },
     {
-      title: "Scheduled",
-      value: String(metrics.scheduled),
-      subtitle: "Queued for manual impounding",
+      title: "Avg. hours since impound",
+      value: `${metrics.avgHours}h`,
+      subtitle: "",
     },
     {
-      title: "Avg. hours overdue",
-      value: `${metrics.avgHoursOverdue}h`,
+      title: "Total impound fees",
+      value: formatCurrency(metrics.totalFees),
       subtitle: "",
     },
   ];
@@ -511,45 +329,14 @@ export default function ActiveImpounding() {
     <div className="impounding-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Impounding Staff</p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>Impounding Staff</>} />
 
         {/* MAIN CONTENT */}
         <div className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
-              <h1>Active Impounding</h1>
+              <h1>Vehicles in Yard</h1>
               <p>
                 {new Date().toLocaleDateString("en-US", {
                   month: "long",
@@ -559,43 +346,10 @@ export default function ActiveImpounding() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={officerAvatar}
-                alt="Staff Profile"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button
-                    className="dropdown-item"
-                    onClick={handleChangePassword}
-                  >
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
-            {/* METRIC CARDS (3 columns) */}
+            {/* METRIC CARDS */}
             <div className="metric-grid-three">
               {metricCards.map((card) => (
                 <div key={card.title} className="card metric-card">
@@ -608,11 +362,14 @@ export default function ActiveImpounding() {
               ))}
             </div>
 
-            {/* ACTIVE IMPOUNDING OPERATIONS TABLE */}
+            {/* ACTIVE IMPOUNDING TABLE */}
             <div className="card active-card">
               <div className="active-header">
-                <p className="card-eyebrow">Auto-flagged reminder</p>
-                <h2 className="card-title">Active Impounding Operations</h2>
+                <p className="card-eyebrow">Currently in the yard</p>
+                <h2 className="card-title">Vehicles in Yard</h2>
+                <p className="yard-list-note">
+                  Unpaid impounds. A vehicle leaves this list automatically once its fee is paid (cash or GCash).
+                </p>
               </div>
 
               {loading ? (
@@ -625,16 +382,18 @@ export default function ActiveImpounding() {
                 </div>
               ) : (
                 <>
-                  <div className="impound-table-wrapper">
+                  <div className="impound-table-wrapper" tabIndex={0} role="region" aria-label="Impound records table" data-scroll-region>
                     <table className="impound-table">
                       <thead>
                         <tr>
+                          <th>UOVR No.</th>
                           <th>CIN</th>
                           <th>Plate No.</th>
                           <th>Location</th>
-                          <th>Clamped by</th>
-                          <th>Clamped</th>
-                          <th>Hours Overdue</th>
+                          <th>Impounded by</th>
+                          <th>Impounded</th>
+                          <th>Hours</th>
+                          <th>Fee</th>
                           <th>Status</th>
                         </tr>
                       </thead>
@@ -645,19 +404,21 @@ export default function ActiveImpounding() {
                             onClick={() => setSelectedRow(row)}
                             className="impound-row-clickable"
                           >
+                            <td className="cell-reference">{row.uovrNo}</td>
                             <td>
                               <span className="cin-pill">{row.cin}</span>
                             </td>
                             <td className="cell-plate">{row.plateNo}</td>
                             <td className="cell-location">{row.location}</td>
-                            <td className="cell-clamped-by">
-                              {row.clampedBy}
-                            </td>
+                            <td className="cell-clamped-by">{row.officer}</td>
                             <td className="cell-time">
-                              {formatDateTime(row.clampedAt)}
+                              {formatDateTime(row.impoundedAt)}
                             </td>
                             <td className="cell-overdue">
-                              {row.hoursOverdue}h
+                              {row.hoursSinceImpound}h
+                            </td>
+                            <td className="cell-fee">
+                              {formatCurrency(row.impoundFee)}
                             </td>
                             <td>
                               <span
@@ -680,14 +441,14 @@ export default function ActiveImpounding() {
                       type="button"
                       className="pagination-btn"
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
+                      disabled={safePage === 1}
                     >
                       <ChevronLeft size={16} />
                       Previous
                     </button>
 
                     <div className="pagination-info">
-                      <span className="pagination-page">{currentPage}</span>
+                      <span className="pagination-page">{safePage}</span>
                       <span className="pagination-sep">
                         of {totalPages} pages
                       </span>
@@ -699,7 +460,7 @@ export default function ActiveImpounding() {
                       onClick={() =>
                         setCurrentPage((p) => Math.min(totalPages, p + 1))
                       }
-                      disabled={currentPage === totalPages}
+                      disabled={safePage === totalPages}
                     >
                       Next
                       <ChevronRight size={16} />
@@ -714,11 +475,7 @@ export default function ActiveImpounding() {
 
       {/* UPDATE MODAL */}
       {selectedRow && (
-        <UpdateModal
-          row={selectedRow}
-          onClose={() => setSelectedRow(null)}
-          onSave={handleUpdateStatus}
-        />
+        <DetailsModal row={selectedRow} onClose={() => setSelectedRow(null)} />
       )}
     </div>
   );

@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { KeyRound, MoreHorizontal, X } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { useState, useEffect } from "react";
+import { MoreHorizontal, X } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
@@ -14,8 +13,6 @@ import { auth, db } from "../../firebase";
 import "./ReleaseOrders.css";
 
 // Asset imports
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
 import queueMonitorIcon from "../../assets/queue.png";
 import allViolationsIcon from "../../assets/allviolations.png";
@@ -27,7 +24,8 @@ import releaseOrdersIcon from "../../assets/releaseorder.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
-import logoutIcon from "../../assets/logout.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -74,20 +72,10 @@ type NavGroup = {
   items: NavItem[];
 };
 
+
 // ---------------------------------------------------------------------------
 // CONSTANTS
 // ---------------------------------------------------------------------------
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer in Charge",
-  "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  "finance": "Finance Staff",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
-
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
@@ -137,11 +125,8 @@ const getStatusClass = (status: OrderStatus): string => {
 // COMPONENT
 // ---------------------------------------------------------------------------
 export default function ReleaseOrders() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
+  const [, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "record-officer",
   });
@@ -249,38 +234,10 @@ export default function ReleaseOrders() {
   // -----------------------------------------------------------------------
   // EFFECT: Click-outside for dropdown
   // -----------------------------------------------------------------------
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   // -----------------------------------------------------------------------
   // HANDLERS
   // -----------------------------------------------------------------------
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/");
-    }
-  };
-
-  const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
-    setIsMenuOpen(false);
-  };
 
   const handleOpenModal = (row: ReleaseOrderRow) => {
     setSelectedRow(row);
@@ -305,7 +262,6 @@ export default function ReleaseOrders() {
   };
 
   const handleGeneratePdf = () => {
-    console.log("Generating PDF for Order:", selectedRow?.orderId, formData);
     // TODO: Implement PDF generation logic here
     handleCloseModal();
   };
@@ -317,40 +273,11 @@ export default function ReleaseOrders() {
     <div className="record-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Record Officer</p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${item.active ? "nav-item-active" : ""}`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={NAV_GROUPS} role={<>Record Officer</>} />
 
         {/* MAIN CONTENT */}
         <div className="main">
+          <AppTopbar groups={NAV_GROUPS} />
           <header className="main-header">
             <div>
               <h1>Release Orders</h1>
@@ -363,33 +290,6 @@ export default function ReleaseOrders() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={officerAvatar}
-                alt="Officer Profile"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button className="dropdown-item" onClick={handleChangePassword}>
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button className="dropdown-item logout" onClick={handleLogout}>
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
@@ -406,7 +306,7 @@ export default function ReleaseOrders() {
                   <p>No release orders found.</p>
                 </div>
               ) : (
-                <div className="table-wrapper">
+                <div className="table-wrapper" tabIndex={0} role="region" aria-label="Data table" data-scroll-region>
                   <table className="data-table">
                     <thead>
                       <tr>
@@ -461,7 +361,7 @@ export default function ReleaseOrders() {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">{selectedRow.orderId}</h3>
-              <button className="modal-close-btn" onClick={handleCloseModal}>
+              <button aria-label="Close" className="modal-close-btn" onClick={handleCloseModal}>
                 <X size={20} />
               </button>
             </div>

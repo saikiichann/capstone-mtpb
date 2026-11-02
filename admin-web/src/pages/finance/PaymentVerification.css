@@ -1,18 +1,4 @@
 /* ==================================================================
-   PaymentVerification.css (Finance)
-   Sidebar, header at avatar — galing pa rin sa Finance Homepage.css
-   (.finance-page). Ang CONTENT styles dito ay kopya ng OIC
-   PaymentVerification.css para pareho ang itsura ng dalawang page.
-
-   Wrapper: <div className="finance-page finance-verification-page">
-   Hindi ".payment-verification-page" — yun ang prefix ng OIC CSS, at
-   kung gagamitin din dito, tatamaan ng OIC sidebar styles ang Finance.
-
-   Kapag may binago sa OIC content CSS, gawin din dito (palitan lang
-   ang prefix ng ".finance-page.finance-verification-page").
-================================================================== */
-
-/* ==================================================================
    MAIN CONTENT + CARD
 ================================================================== */
 .finance-page.finance-verification-page .main-content {

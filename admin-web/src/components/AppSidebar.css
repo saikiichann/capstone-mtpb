@@ -1,0 +1,363 @@
+/* AppSidebar — concept look. `aside.sidebar.mt-sidebar` outranks the old
+   per-page `.sidebar` rules that are still in each page's CSS file. */
+
+aside.sidebar.mt-sidebar {
+  width: 248px;
+  min-width: 248px;
+  flex: 0 0 248px;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #010A16;
+  color: #C7CEDA;
+  padding: 20px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  z-index: 20;
+}
+
+.mt-sidebar .mt-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
+}
+
+.mt-sidebar .mt-brand-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #FFFFFF;
+  flex: none;
+}
+
+.mt-sidebar .mt-brand-text { min-width: 0; }
+
+.mt-sidebar .mt-brand-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #FFFFFF;
+  line-height: 1.25;
+}
+
+.mt-sidebar .mt-brand-role {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #8A94A6;
+  line-height: 1.3;
+}
+
+.mt-sidebar .mt-brand-role * { color: inherit; }
+
+.mt-sidebar .mt-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mt-sidebar .mt-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mt-sidebar .mt-nav-group-head {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6B7689;
+  border-radius: 8px;
+}
+
+button.mt-nav-group-head { cursor: pointer; }
+button.mt-nav-group-head:hover { color: #C7CEDA; }
+button.mt-nav-group-head:focus-visible { outline: 2px solid #60A5FA; outline-offset: 1px; }
+
+.mt-sidebar .mt-nav-group-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0;
+}
+
+.mt-sidebar .mt-nav-list[hidden] { display: none; }
+
+.mt-sidebar .mt-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mt-sidebar .mt-nav-item {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #C7CEDA;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mt-sidebar .mt-nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #FFFFFF;
+}
+
+.mt-sidebar .mt-nav-item:focus-visible {
+  outline: 2px solid #60A5FA;
+  outline-offset: -2px;
+}
+
+.mt-sidebar .mt-nav-item.is-active {
+  background: #1D4ED8;
+  color: #FFFFFF;
+  font-weight: 600;
+  box-shadow: 0 6px 16px -8px rgba(29, 78, 216, 0.9);
+}
+
+.mt-sidebar .mt-nav-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: #8A94A6;
+}
+
+.mt-sidebar .mt-nav-item:hover .mt-nav-icon,
+.mt-sidebar .mt-nav-item.is-active .mt-nav-icon { color: #FFFFFF; }
+
+.mt-sidebar .mt-nav-icon-img {
+  object-fit: contain;
+  filter: brightness(0) invert(0.75);
+}
+
+.mt-sidebar .mt-nav-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mt-sidebar .mt-badge {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #DC2626;
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.mt-sidebar .mt-user {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mt-sidebar .mt-user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #1D4ED8;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex: none;
+}
+
+.mt-sidebar .mt-user-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mt-sidebar .mt-user-name,
+.mt-sidebar .mt-user-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mt-sidebar .mt-user-name { font-size: 13.5px; font-weight: 600; color: #FFFFFF; }
+.mt-sidebar .mt-user-sub { font-size: 12px; color: #8A94A6; }
+
+.mt-sidebar .mt-user { position: relative; }
+
+.mt-sidebar .mt-user-main {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px 2px 2px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.mt-sidebar .mt-user-main:hover .mt-user-name { text-decoration: underline; text-underline-offset: 3px; }
+.mt-sidebar .mt-user-main:focus-visible { outline: 2px solid #60A5FA; outline-offset: 2px; }
+
+.mt-sidebar .mt-user-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border-radius: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.45);
+  color: #111827;
+}
+
+.mt-sidebar .mt-user-menu-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #F0F1F3;
+}
+
+.mt-sidebar .mt-user-menu-name { font-size: 13.5px; font-weight: 700; }
+.mt-sidebar .mt-user-menu-role { font-size: 12px; color: #6B7280; }
+
+.mt-sidebar .mt-user-menu-item {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+  cursor: pointer;
+}
+
+.mt-sidebar .mt-user-menu-item:hover { background: #F3F4F6; }
+.mt-sidebar .mt-user-menu-item:focus-visible { outline: 2px solid #1D4ED8; outline-offset: -2px; }
+.mt-sidebar .mt-user-menu-item.is-danger { color: #B91C1C; }
+.mt-sidebar .mt-user-menu-item.is-danger:hover { background: #FEF2F2; }
+
+.mt-sidebar .mt-user-logout {
+  all: unset;
+  box-sizing: border-box;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #C7CEDA;
+  cursor: pointer;
+  flex: none;
+}
+
+.mt-sidebar .mt-user-logout:hover { background: rgba(255, 255, 255, 0.08); color: #FFFFFF; }
+.mt-sidebar .mt-user-logout:focus-visible { outline: 2px solid #60A5FA; }
+
+/* ---- Phones and small tablets: sidebar becomes a top bar ---- */
+@media (max-width: 768px) {
+  .dashboard > aside.sidebar.mt-sidebar {
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: none !important;
+    height: auto !important;
+    max-height: none !important;
+    position: sticky !important;
+    top: 0;
+    padding: 10px 10px 8px !important;
+    gap: 8px;
+    overflow: visible !important;
+    flex-direction: column;
+  }
+
+  .mt-sidebar .mt-brand { padding: 2px 4px; }
+  .mt-sidebar .mt-brand-logo { width: 32px; height: 32px; }
+
+  .mt-sidebar .mt-nav {
+    flex-direction: row;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mt-sidebar .mt-nav::-webkit-scrollbar { display: none; }
+  .mt-sidebar .mt-nav-group,
+  .mt-sidebar .mt-nav-list { display: contents; }
+  .mt-sidebar .mt-nav-group-head { display: none; }
+  .mt-sidebar .mt-nav-list[hidden] { display: contents; }
+  .mt-sidebar .mt-nav-item { width: auto; white-space: nowrap; min-height: 36px; padding: 7px 12px; }
+  .mt-sidebar .mt-nav-label { overflow: visible; }
+
+  /* Brand row: the avatar on the right opens the account menu
+     (Change password, Log out). */
+  .mt-sidebar .mt-user {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+  }
+  .mt-sidebar .mt-user-main { padding: 2px; }
+  .mt-sidebar .mt-user-avatar { width: 34px; height: 34px; font-size: 12px; }
+  .mt-sidebar .mt-user-text,
+  .mt-sidebar .mt-user-logout { display: none; }
+
+  .mt-sidebar .mt-user-menu {
+    top: calc(100% + 8px);
+    bottom: auto;
+    left: auto;
+    right: 0;
+    width: 230px;
+  }
+}

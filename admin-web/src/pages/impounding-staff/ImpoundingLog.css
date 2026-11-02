@@ -1,18 +1,20 @@
 /* ==================================================================
    ImpoundingLog.css
-   Extends Homepage.css — Impounding Log page styles.
+   Extends Homepage.css — Impounding Log page styles (Impounding Staff).
 
-   Relies on Homepage.css for the shared layout (sidebar, header,
-   .card) and for the status pills (.status-clamped, .status-impounded,
-   .status-released), so keep the updated Homepage.css in place.
+   BAGONG IMPOUND PROCESS:
+     - Hiwalay sa clamp. Walang "Subject to Impound".
+     - Status: "Impounded" / "Released" lang.
+     - Source: impoundRecords.
+     - Table columns: UOVR No. | CIN | Plate No. | Violation | Location |
+       Impounded by | Time | Fee | Status | Action
 
    Adds:
      - Search + filter toolbar
-     - Add Record button
-     - Per-row Encode button
-     - CIN pill
-     - Status pill overrides (solid colors, no borders)
-     - Encode Impound modal (ticket form)
+     - Add Record button (header)
+     - View Record button (per row)
+     - CIN pill, fee cell, status pills
+     - Add Impound modal (UOVR form)
 ================================================================== */
 
 /* ==================================================================
@@ -104,7 +106,6 @@
 
 /* ==================================================================
    LOG CARD
-   Tall enough that pagination sits at the bottom, like the design.
 ================================================================== */
 .impounding-page .log-card {
   display: flex;
@@ -145,9 +146,9 @@
 }
 
 /* ==================================================================
-   ADD RECORD BUTTON
+   ADD RECORD BUTTON (header)
 ================================================================== */
-.impounding-page .btn-add-record {
+.impounding-page .btn-add-impound {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -164,8 +165,35 @@
   white-space: nowrap;
 }
 
-.impounding-page .btn-add-record:hover {
+.impounding-page .btn-add-impound:hover {
   background: #1E40AF;
+}
+
+/* ==================================================================
+   VIEW RECORD BUTTON (per row)
+================================================================== */
+.impounding-page .btn-view-record {
+  padding: 6px 12px;
+  background: #FFFFFF;
+  color: #1D4ED8;
+  border: 1px solid #1D4ED8;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.impounding-page .btn-view-record:hover:not(:disabled) {
+  background: #1D4ED8;
+  color: #FFFFFF;
+}
+
+.impounding-page .btn-view-record:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* ==================================================================
@@ -212,8 +240,9 @@
 
 .impounding-page .log-table .cell-reference {
   color: #111827;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .impounding-page .log-table .cell-plate {
@@ -222,16 +251,12 @@
   white-space: nowrap;
 }
 
-.impounding-page .log-table .cell-violation {
-  color: #374151;
-}
-
+.impounding-page .log-table .cell-violation,
 .impounding-page .log-table .cell-location {
   color: #374151;
 }
 
-.impounding-page .log-table .cell-officer,
-.impounding-page .log-table .cell-towed-by {
+.impounding-page .log-table .cell-officer {
   color: #374151;
   font-weight: 500;
   white-space: nowrap;
@@ -243,42 +268,13 @@
   font-size: 13px;
 }
 
-.impounding-page .log-table .cell-fine {
-  font-weight: 600;
+/* BAGONG FEE CELL — tabular numbers para pantay ang alignment */
+.impounding-page .log-table .cell-fee {
+  font-weight: 700;
   color: #111827;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-}
-
-/* ==================================================================
-   PER-ROW ENCODE BUTTON
-================================================================== */
-.impounding-page .cell-action {
   text-align: right;
-  width: 110px;
-  white-space: nowrap;
-}
-
-.impounding-page .btn-encode {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  background: #FEF3C7;
-  color: #78350F;
-  border: 1px solid #FCD34D;
-  border-radius: 6px;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-  white-space: nowrap;
-}
-
-.impounding-page .btn-encode:hover {
-  background: #FDE68A;
-  border-color: #F59E0B;
 }
 
 /* ==================================================================
@@ -298,6 +294,8 @@
 /* ==================================================================
    STATUS PILLS — solid colors, no borders
    Overrides any border/box-shadow from Homepage.css
+
+   BAGONG IMPOUND PROCESS: dalawa lang — "Impounded" at "Released".
 ================================================================== */
 .impounding-page .status-pill {
   display: inline-block;
@@ -310,27 +308,15 @@
   box-shadow: none !important;
 }
 
-.impounding-page .status-released {
-  background: #DCFCE7 !important;
-  color: #166534 !important;
-  border: none !important;
-}
-
 .impounding-page .status-impounded {
   background: #FEE2E2 !important;
   color: #991B1B !important;
   border: none !important;
 }
 
-.impounding-page .status-subject {
-  background: #FEF9C3 !important;
-  color: #854D0E !important;
-  border: none !important;
-}
-
-.impounding-page .status-for-release {
-  background: #DBEAFE !important;
-  color: #1E40AF !important;
+.impounding-page .status-released {
+  background: #DCFCE7 !important;
+  color: #166534 !important;
   border: none !important;
 }
 
@@ -413,7 +399,9 @@
 }
 
 /* ==================================================================
-   ENCODE IMPOUND MODAL
+   ADD IMPOUND MODAL (UOVR form)
+   Styles live in ./AddImpoundModal.css — this section keeps only the
+   shared modal chrome para gumana pa rin kahit walang kargang ibang CSS.
 ================================================================== */
 .impounding-page .modal-overlay {
   position: fixed;
@@ -440,7 +428,7 @@
 }
 
 .impounding-page .modal-content-wide {
-  max-width: 760px;
+  max-width: 860px;
 }
 
 @keyframes modalFadeIn {
@@ -572,7 +560,7 @@
   padding-right: 40px;
 }
 
-/* Checkbox grid for impound violations */
+/* Checkbox grid */
 .impounding-page .checkbox-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -601,6 +589,25 @@
 }
 
 .impounding-page .checkbox-item span {
+  line-height: 1.4;
+}
+
+/* Read-only field (system-set values like CIN, Weight Class) */
+.impounding-page .read-only-field {
+  padding: 10px 14px;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  background: #F9FAFB;
+  color: #374151;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+/* Form hint */
+.impounding-page .form-hint {
+  font-size: 11px;
+  color: #6B7280;
+  margin-top: 2px;
   line-height: 1.4;
 }
 
@@ -665,6 +672,46 @@
 .impounding-page .btn-secondary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* ==================================================================
+   FEE BREAKDOWN (Add Impound Modal)
+================================================================== */
+.impounding-page .fee-breakdown {
+  background: #F8FAFC;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.impounding-page .fee-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #374151;
+}
+
+.impounding-page .fee-row strong {
+  font-weight: 700;
+  color: #111827;
+  font-variant-numeric: tabular-nums;
+}
+
+.impounding-page .fee-row-total {
+  padding-top: 8px;
+  border-top: 1px solid #E5E7EB;
+  font-size: 14px;
+  color: #111827;
+}
+
+.impounding-page .fee-row-total strong {
+  font-size: 16px;
+  color: #1D4ED8;
 }
 
 /* ==================================================================

@@ -1,0 +1,219 @@
+/* Field Updates — live activity feed (components/FieldActivityFeed.tsx) */
+
+.fa-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fa-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.fa-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #6B7280;
+}
+
+.fa-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #16A34A;
+}
+
+.fa-title {
+  margin: 2px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.fa-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+/* Range toggle */
+.fa-range {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 8px;
+  background: #F3F4F6;
+}
+
+.fa-range-btn {
+  border: 0;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #4B5563;
+  cursor: pointer;
+}
+
+.fa-range-btn.is-active {
+  background: #FFFFFF;
+  color: #111827;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Type filter */
+.fa-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fa-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid #E5E7EB;
+  border-radius: 999px;
+  background: #FFFFFF;
+  font: inherit;
+  font-size: 12.5px;
+  color: #374151;
+  cursor: pointer;
+}
+
+.fa-chip:hover {
+  border-color: #D1D5DB;
+}
+
+.fa-chip.is-active {
+  border-color: #111827;
+  background: #111827;
+  color: #FFFFFF;
+}
+
+.fa-chip-count {
+  font-size: 11.5px;
+  color: #9CA3AF;
+}
+
+.fa-chip.is-active .fa-chip-count {
+  color: #D1D5DB;
+}
+
+/* List */
+.fa-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fa-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.fa-item:last-child {
+  border-bottom: none;
+}
+
+.fa-when {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 78px;
+  flex-shrink: 0;
+}
+
+.fa-time {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #F1F5F9;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.fa-day {
+  padding-left: 2px;
+  font-size: 11px;
+  color: #94A3B8;
+}
+
+.fa-body {
+  min-width: 0;
+}
+
+.fa-item-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #0F172A;
+}
+
+.fa-item-detail {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: #64748B;
+  overflow-wrap: anywhere;
+}
+
+.fa-tag {
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.fa-tag-clamp { background: #FEF3C7; color: #92400E; }
+.fa-tag-impound { background: #E0E7FF; color: #3730A3; }
+.fa-tag-payment { background: #DCFCE7; color: #166534; }
+.fa-tag-release { background: #E0F2FE; color: #075985; }
+.fa-tag-operation { background: #F3F4F6; color: #374151; }
+
+.fa-empty {
+  padding: 36px 0;
+  text-align: center;
+  font-size: 13px;
+  color: #94A3B8;
+}
+
+.fa-more {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #94A3B8;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .fa-item {
+    gap: 10px;
+  }
+
+  .fa-when {
+    width: 64px;
+  }
+}

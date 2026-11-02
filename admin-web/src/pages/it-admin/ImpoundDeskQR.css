@@ -1,0 +1,71 @@
+/* Impound desk QR card (QR Code Management). */
+.it-admin-page .desk-qr {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 20px;
+  background: #ffffff;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+}
+
+.it-admin-page .desk-qr-code {
+  padding: 8px;
+  background: #ffffff;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  line-height: 0;
+}
+
+.it-admin-page .desk-qr-body h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0B1220;
+}
+
+.it-admin-page .desk-qr-body p {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #475467;
+}
+
+.it-admin-page .desk-qr-body .desk-qr-url {
+  margin-top: 6px;
+  font-family: "Courier New", monospace;
+  font-size: 12.5px;
+  color: #1D4ED8;
+  overflow-wrap: anywhere;
+}
+
+.it-admin-page .desk-qr-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.it-admin-page .desk-qr-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .it-admin-page .desk-qr {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .it-admin-page .desk-qr-actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}

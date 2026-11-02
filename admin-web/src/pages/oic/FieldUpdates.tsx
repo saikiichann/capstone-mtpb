@@ -1,23 +1,12 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { KeyRound } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { useState, useEffect, useMemo } from "react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
-  collection,
   doc,
   getDoc,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./FieldUpdates.css";
 
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
 
 import overviewIcon from "../../assets/overview.png";
 import sectorAnalyticsIcon from "../../assets/sectoranalytics.png";
@@ -32,10 +21,11 @@ import revenueIcon from "../../assets/revenue.png";
 import releaseRequestIcon from "../../assets/releaserequest.png";
 import queueIcon from "../../assets/queue.png";
 import releaseLogIcon from "../../assets/releaselog.png";
-import clampingTeamsIcon from "../../assets/clampingteams.png";
-import towTruckIcon from "../../assets/tow-truck.png";
 import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
+import FieldActivityFeed from "../../components/FieldActivityFeed";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -52,25 +42,12 @@ type RoleSlug =
 
 type CurrentUser = { name: string; role: RoleSlug };
 
-type FieldUpdateRow = {
-  id: string;
-  officer: string;
-  sector: string;
-  location: string;
-  cin: string | null;
-  violationType: string | null;
-  note: string | null;
-  photoCount: number;
-  createdAt: Timestamp | null;
-};
-
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
 /* ------------------------------------------------------------------
    CONSTANTS
 ------------------------------------------------------------------ */
-const FEED_LIMIT = 50;
 
 const ROLE_LABELS: Record<RoleSlug, string> = {
   oic: "Officer in Charge",
@@ -161,16 +138,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Operations",
     items: [
       {
-        label: "Active Clamping Teams",
-        icon: clampingTeamsIcon,
-        path: "/dashboard/clamping-teams",
-      },
-      {
-        label: "Active Impounding",
-        icon: towTruckIcon,
-        path: "/dashboard/active-impounding",
-      },
-      {
         label: "Field Updates",
         icon: fieldUpdateIcon,
         path: "/dashboard/field-updates",
@@ -188,44 +155,17 @@ const NAV_GROUPS: NavGroup[] = [
 /* ------------------------------------------------------------------
    HELPERS
 ------------------------------------------------------------------ */
-const formatTime = (ts: Timestamp | null): string => {
-  if (!ts) return "—";
-  try {
-    return ts.toDate().toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return "—";
-  }
-};
-
-/** "CIN-20480 encoded · No parking · 2 photos" — the note clause is
- *  optional, matching the design (one sample row has it, one doesn't). */
-const buildDetailLine = (row: FieldUpdateRow): string => {
-  const parts: string[] = [];
-  if (row.cin) parts.push(`${row.cin} encoded`);
-  if (row.violationType) parts.push(row.violationType);
-  if (row.note) parts.push(row.note);
-  parts.push(`${row.photoCount} photo${row.photoCount === 1 ? "" : "s"}`);
-  return parts.join(" · ");
-};
 
 /* ------------------------------------------------------------------
    COMPONENT
 ------------------------------------------------------------------ */
 export default function FieldUpdates() {
-  const navigate = useNavigate();
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "oic",
   });
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const [updates, setUpdates] = useState<FieldUpdateRow[]>([]);
-  const [loading, setLoading] = useState(true);
 
   /* Current user */
   useEffect(() => {
@@ -250,92 +190,6 @@ export default function FieldUpdates() {
     return () => unsubscribe();
   }, []);
 
-  /**
-   * Live feed from the existing `fieldSubmissions` collection (already
-   * defined in firestore.rules — create-only, immutable). Nothing writes
-   * to it yet from the enforcer app, so this will show empty until that
-   * side is built; the listener and query are correct and ready for when
-   * it does.
-   *
-   * orderBy + limit here, not client-side sorting — unlike most other
-   * pages in this module, every document in an append-only submission log
-   * is written with its timestamp at creation, so there's no realistic
-   * case of a doc missing createdAt that orderBy would silently drop.
-   * Capping server-side also avoids pulling the entire collection just to
-   * show the most recent 50.
-   *
-   * Field names (officer, sector, cin, violationType, note, photoCount)
-   * are my best guess based on this project's naming conventions — I
-   * don't have visibility into whatever the enforcer app actually writes.
-   * Confirm against the real write path once it exists.
-   */
-  useEffect(() => {
-    const q = query(
-      collection(db, "fieldSubmissions"),
-      orderBy("createdAt", "desc"),
-      limit(FEED_LIMIT)
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snap) => {
-        const fetched: FieldUpdateRow[] = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            officer: data.officer ?? data.officerName ?? "—",
-            sector: data.sector ?? data.sectorName ?? data.sectorId ?? "—",
-            location: data.location ?? "—",
-            cin: data.cin ?? null,
-            violationType: data.violationType ?? null,
-            note: data.note ?? data.remarks ?? null,
-            photoCount: Number(
-              data.photoCount ??
-                (Array.isArray(data.photos) ? data.photos.length : 0)
-            ),
-            createdAt: (data.createdAt as Timestamp) ?? null,
-          };
-        });
-
-        setUpdates(fetched);
-        setLoading(false);
-      },
-      (err) => {
-        console.warn("Field updates fetch failed:", err.code);
-        setLoading(false);
-      }
-    );
-    return () => unsubscribe();
-  }, []);
-
-  /* Click outside */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    }
-  };
 
   /** Supervisors see the same pages as the OIC, minus Payment/Finance. */
   const navGroups = useMemo(
@@ -351,44 +205,11 @@ export default function FieldUpdates() {
     <div className="oic-page field-updates-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">
-                {ROLE_LABELS[currentUser.role]}
-              </p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        <span>{item.label}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>{ROLE_LABELS[currentUser.role]}</>} />
 
         {/* MAIN */}
         <div className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>Field Updates</h1>
@@ -401,71 +222,11 @@ export default function FieldUpdates() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={avatarImg}
-                alt="Account menu"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button className="dropdown-item">
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
             <div className="card">
-              <p className="card-eyebrow">Live feed</p>
-              <h2 className="card-title" style={{ marginBottom: 16 }}>
-                Recent Field Submissions
-              </h2>
-
-              {loading ? (
-                <div className="table-loading">
-                  <p>Loading field submissions...</p>
-                </div>
-              ) : updates.length === 0 ? (
-                <div className="field-updates-empty">
-                  No field submissions yet.
-                </div>
-              ) : (
-                <div className="field-updates-list">
-                  {updates.map((u) => (
-                    <div key={u.id} className="field-update-item">
-                      <span className="field-update-time">
-                        {formatTime(u.createdAt)}
-                      </span>
-                      <div>
-                        <div className="field-update-title">
-                          {u.officer} · {u.sector} — {u.location}
-                        </div>
-                        <div className="field-update-detail">
-                          {buildDetailLine(u)}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <FieldActivityFeed />
             </div>
           </main>
         </div>

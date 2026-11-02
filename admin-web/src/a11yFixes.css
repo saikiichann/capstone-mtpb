@@ -1,0 +1,90 @@
+/* ------------------------------------------------------------------
+   ACCESSIBILITY FIXES (WCAG 2.2 AA) — loaded last (allStyles.ts)
+
+   Found by an axe-core scan of every page (2026-10-29). Same selectors as
+   the original rules, so these win only because they come later. Only
+   colours and sizes change; layouts stay the same.
+------------------------------------------------------------------ */
+
+/* 1.4.3 Contrast — white text on #16A34A was 3.29:1. #15803D is 5.02:1;
+   hover goes one step darker so it still shows a change. */
+.payment-verification-page .btn-approve,
+.oic-page .btn-approve,
+.finance-page.finance-verification-page .btn-approve,
+.pending-payments-page .btn-cash-payment,
+.finance-page.finance-pending-page .btn-cash-payment {
+  background: #15803D;
+}
+
+.payment-verification-page .btn-approve:hover:not(:disabled),
+.oic-page .btn-approve:hover:not(:disabled),
+.finance-page .btn-approve:hover:not(:disabled),
+.finance-page.finance-verification-page .btn-approve:hover:not(:disabled),
+.pending-payments-page .btn-cash-payment:hover,
+.finance-page.finance-pending-page .btn-cash-payment:hover {
+  background: #166534;
+}
+
+/* 1.4.3 Contrast — small grey text on white was 2.5:1. */
+.activity-time,
+.it-admin-page .activity-time,
+.it-admin-page .table-empty .empty-sub {
+  color: #6B7280; /* 4.83:1 */
+}
+
+.finance-page .card-subtitle,
+.record-page .card-subtitle,
+.finance-page .export-select.placeholder,
+.record-page .export-select.placeholder,
+.finance-page .recent-time,
+.record-page .recent-time {
+  color: #64748B; /* 4.76:1 */
+}
+
+/* 1.4.3 Contrast — IT Admin system status badges. */
+.it-admin-page .latency-badge {
+  color: #4B5563; /* 6.9:1 on #F3F4F6 */
+}
+
+.it-admin-page .status-pill.scheduled {
+  color: #854D0E; /* 6.5:1 on #FEF9C3 */
+}
+
+/* 2.5.8 Target size — show/hide password button was 20×20 px. */
+.icon-right {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+/* 2.4.7 Focus visible — tables that scroll sideways can now be focused
+   with the keyboard (tabIndex in the pages); show where focus is. */
+[data-scroll-region]:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+}
+
+.finance-page .recent-empty,
+.record-page .recent-empty {
+  color: #64748B; /* 4.76:1 */
+}
+
+/* Green status text on white was 3.29:1. */
+.it-admin-page .status-footer-live,
+.it-admin-page .usage-note {
+  color: #15803D; /* 5.02:1 */
+}
+
+/* Cash Payment: hint text on the light blue box was 4.37:1. */
+.finance-page.finance-pending-page .cash-ref-preview-hint,
+.pending-payments-page .cash-ref-preview-hint {
+  color: #475569; /* 6.9:1 on #EFF6FF */
+}
+
+/* Cash Payment summary labels on light grey were 4.39:1. */
+.finance-page.finance-pending-page .cash-summary-row,
+.pending-payments-page .cash-summary-row {
+  color: #4B5563; /* 6.9:1 on #F3F4F6 */
+}
+
+/* Change amount: green on light grey was 2.99:1. Fixed in the pages'
+   own CSS (their rule uses !important): #16A34A → #166534, 6.5:1. */

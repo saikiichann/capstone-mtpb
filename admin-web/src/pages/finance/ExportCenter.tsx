@@ -1,16 +1,12 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
 import {
-  KeyRound,
   ChevronDown,
   Calendar,
   ArrowRight,
   Upload,
   Download,
   FileSpreadsheet,
-  FileText,
-} from "lucide-react";
-import { signOut as firebaseSignOut } from "firebase/auth";
+  FileText } from "lucide-react";
 import {
   addDoc,
   collection,
@@ -24,11 +20,13 @@ import {
   getDocs,
   where,
   Timestamp,
+  type DocumentData
 } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { auth, db } from "../../firebase";
+import { db } from "../../firebase";
+import { useRegisteredOwnerLookup } from "../../lib/registeredOwners";
 import { useStaffProfile } from "../../lib/useStaffProfile";
 import {
   derivePaymentLocation,
@@ -38,8 +36,6 @@ import {
 } from "../../lib/paymentLocation";
 import "./ExportCenter.css";
 
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
 import pendingPaymentsIcon from "../../assets/pendingpayments.png";
 import paymentVerificationIcon from "../../assets/paymentverification.png";
@@ -47,7 +43,9 @@ import transactionIcon from "../../assets/transaction.png";
 import revenueIcon from "../../assets/revenue.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
-import logoutIcon from "../../assets/logout.png";
+import { csvCell } from "../../lib/csvSafe";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -62,14 +60,13 @@ type RoleSlug =
   | "clamping-staff"
   | "impounding-staff";
 
-// ⚠️ WALANG "Both" — dalawa lang
 type AssignedLocation = "City Hall" | "Central";
 
 type CurrentUser = {
   name: string;
   role: RoleSlug;
-  assignedLocation: AssignedLocation | null;  // "City Hall" | "Central" — para sa filter
-  assignedLocationName: string | null;        // buong pangalan — para sa display
+  assignedLocation: AssignedLocation | null;  
+  assignedLocationName: string | null;        
 };
 
 type DataType = "Transactions" | "Revenue" | "Release Log";
@@ -100,16 +97,6 @@ type NavGroup = {
 // ---------------------------------------------------------------------------
 const DATA_TYPE_OPTIONS: DataType[] = ["Transactions", "Revenue", "Release Log"];
 
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer in Charge",
-  "it-admin": "IT Admin",
-  supervisor: "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  finance: "Finance Staff",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -221,9 +208,9 @@ const formatDateForFilename = (dateStr: string): string => {
   }
 };
 
-const sanitizeData = (data: any[]): Record<string, any>[] => {
+const sanitizeData = (data: DocumentData[]): DocumentData[] => {
   return data.map((item) => {
-    const out: Record<string, any> = {};
+    const out: DocumentData = {};
     Object.keys(item).forEach((key) => {
       const value = item[key];
       if (value instanceof Timestamp) {
@@ -246,12 +233,12 @@ const sanitizeData = (data: any[]): Record<string, any>[] => {
   });
 };
 
-/** GCash → "Online"; cash → City Hall / Central (tingnan ang lib/paymentLocation) */
-const deriveLocation = (data: any): PaymentLocation =>
+/** GCash → "Online"; cash → City Hall / Central */
+const deriveLocation = (data: DocumentData): PaymentLocation =>
   derivePaymentLocation(data.method, data.paymentLocation ?? data.location);
 
-/** Pareho ng Transaction History / Revenue Reports. */
-const isVerifiedPayment = (data: any): boolean =>
+
+const isVerifiedPayment = (data: DocumentData): boolean =>
   ["verified", "succeeded", "approved"].includes(
     String(data.verificationStatus ?? data.status ?? "").toLowerCase()
   );
@@ -273,10 +260,10 @@ const DATA_TYPE_CONFIG: Record<
 // ---------------------------------------------------------------------------
 const downloadCsv = (
   filename: string,
-  rows: Record<string, any>[]
+  rows: DocumentData[]
 ): void => {
   if (rows.length === 0) {
-    alert("Walang data na ma-export para sa napiling date range.");
+    alert("No data available for the selected date range.");
     return;
   }
 
@@ -286,13 +273,8 @@ const downloadCsv = (
     ...rows.map((row) =>
       headers
         .map((h) => {
-          const value = row[h];
-          if (value === null || value === undefined) return "";
-          const str = String(value);
-          if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-            return `"${str.replace(/"/g, '""')}"`;
-          }
-          return str;
+          // csvCell: quotes, and stops text from running as a formula.
+          return csvCell(row[h]);
         })
         .join(",")
     ),
@@ -314,12 +296,12 @@ const downloadCsv = (
 // ---------------------------------------------------------------------------
 const downloadExcel = (
   filename: string,
-  rows: Record<string, any>[],
+  rows: DocumentData[],
   title: string,
   metadata: { exportedBy: string; dateRange: string }
 ): void => {
   if (rows.length === 0) {
-    alert("Walang data na ma-export para sa napiling date range.");
+    alert("No data available for the selected date range.");
     return;
   }
 
@@ -391,12 +373,12 @@ const downloadExcel = (
 // ---------------------------------------------------------------------------
 const downloadPdf = (
   filename: string,
-  rows: Record<string, any>[],
+  rows: DocumentData[],
   title: string,
   metadata: { exportedBy: string; dateRange: string }
 ): void => {
   if (rows.length === 0) {
-    alert("Walang data na ma-export para sa napiling date range.");
+    alert("No data available for the selected date range.");
     return;
   }
 
@@ -529,7 +511,7 @@ const downloadPdf = (
   const tableMargin = 40;
   const availableWidth = pageWidth - tableMargin * 2;
 
-  const getCellValue = (row: Record<string, any>, key: string): string => {
+  const getCellValue = (row: DocumentData, key: string): string => {
     if (key === "amount") {
       const raw = row.amount ?? row.totalAmount ?? row.fineAmount ?? "";
       const num = Number(raw);
@@ -667,13 +649,9 @@ const downloadPdf = (
 // COMPONENT
 // ---------------------------------------------------------------------------
 export default function ExportCenter() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
-
-  /* Profile ng naka-login na staff — naka-cache sa lahat ng Finance pages,
-     kaya hindi na nagfi-flash ang data ng ibang location paglipat ng tab. */
   const { profile, ready: userReady } = useStaffProfile();
+  const registeredOwnerOf = useRegisteredOwnerLookup();
+
   const currentUser: CurrentUser = useMemo(
     () => ({
       name: profile?.name ?? "Loading...",
@@ -723,39 +701,6 @@ export default function ExportCenter() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/");
-    }
-  };
-
-  const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
-    setIsMenuOpen(false);
-  };
-
   const handleExport = async (format: ExportFormat) => {
     setError("");
 
@@ -784,17 +729,17 @@ export default function ExportCenter() {
     try {
       const config = DATA_TYPE_CONFIG[dataType];
       const sourceSnap = await getDocs(collection(db, config.collection));
-      let data: any[] = sourceSnap.docs.map((d) => ({
+      let data: DocumentData[] = sourceSnap.docs.map((d) => ({
         id: d.id,
         ...d.data(),
       }));
 
-      // Revenue = verified payments lang (hindi kasama ang pending/rejected)
+      // Revenue = verified payments 
       if (dataType === "Revenue") {
         data = data.filter((item) => isVerifiedPayment(item));
       }
 
-      // Location-based filtering para sa Finance (City Hall / Central)
+      // Location-based filtering for Finance (City Hall / Central)
       if (
         currentUser.role === "finance" &&
         (dataType === "Transactions" || dataType === "Revenue")
@@ -901,6 +846,19 @@ export default function ExportCenter() {
             violatorName: item.violatorName ?? linked.violatorName,
           };
         });
+
+        // Registered plate on violator app → "Registered", not "Guest"
+        data = data.map((item) => {
+          if (item.violatorUid) return item;
+          const owner = registeredOwnerOf(item.plateNo ?? item.plateNumber);
+          if (!owner) return item;
+          return {
+            ...item,
+            violatorUid: owner.uid,
+            violatorName: owner.name ?? item.violatorName ?? null,
+            guestId: null,
+          };
+        });
       }
 
       // "Paid At" — City Hall / Central (MTPB) / Online (GCash)
@@ -935,8 +893,6 @@ export default function ExportCenter() {
       });
 
       const cleaned = sanitizeData(data);
-
-      // Walang data → huwag mag-download at huwag mag-log sa Recent Exports
       if (cleaned.length === 0) {
         setError(
           currentUser.role === "finance" && currentUser.assignedLocation
@@ -981,13 +937,12 @@ export default function ExportCenter() {
         timestamp: serverTimestamp(),
       });
 
-      console.log(`Export ready: ${fileName} (${cleaned.length} records)`);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Export error:", err);
-      if (err.code === "permission-denied") {
+      if ((err as { code?: string })?.code === "permission-denied") {
         setError("Permission denied. Please check your Firestore rules.");
       } else {
-        setError(err.message || "Failed to export data.");
+        setError((err as Error)?.message || "Failed to export data.");
       }
     } finally {
       setExporting(null);
@@ -997,90 +952,23 @@ export default function ExportCenter() {
   return (
     <div className="finance-page">
       <div className="dashboard">
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">
-                Finance Staff
-                {/* ⚠️ BAGO: Location indicator */}
+        <AppSidebar groups={NAV_GROUPS} role={<>Finance Staff
+                {/* New location */}
                 {currentUser.assignedLocationName && (
                   <span className="sidebar-brand-location">
                     {" · "}
                     {currentUser.assignedLocationName}
                   </span>
-                )}
-              </p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+                )}</>} />
 
         <div className="main">
+          <AppTopbar groups={NAV_GROUPS} />
           <header className="main-header">
             <div className="export-hero-text">
               <h1>Export Center</h1>
               <p>Download reports and data in multiple formats</p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={officerAvatar}
-                alt="Staff Profile"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                      {currentUser.assignedLocationName && ` · ${currentUser.assignedLocationName}`}
-                    </p>
-                  </div>
-                  <button
-                    className="dropdown-item"
-                    onClick={handleChangePassword}
-                  >
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
@@ -1131,6 +1019,7 @@ export default function ExportCenter() {
                     <div className="date-input-wrapper">
                       <input
                         type="date"
+                        aria-label="Start date"
                         className="date-input"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
@@ -1146,6 +1035,7 @@ export default function ExportCenter() {
                     <div className="date-input-wrapper">
                       <input
                         type="date"
+                        aria-label="End date"
                         className="date-input"
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
@@ -1240,4 +1130,4 @@ export default function ExportCenter() {
       </div>
     </div>
   );
-}
+}

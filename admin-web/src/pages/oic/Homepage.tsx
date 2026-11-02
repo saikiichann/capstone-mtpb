@@ -1,6 +1,4 @@
-import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { KeyRound } from "lucide-react";
+import { useState, useEffect } from "react";
 import {
   LineChart,
   Line,
@@ -12,7 +10,7 @@ import {
   Bar,
   CartesianGrid,
 } from "recharts";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
@@ -24,11 +22,10 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { useOverviewMetrics } from "../../lib/overviewMetrics";
 import "./Homepage.css";
 
 // Asset imports
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 
 import overviewIcon from "../../assets/overview.png";
 import sectorAnalyticsIcon from "../../assets/sectoranalytics.png";
@@ -43,11 +40,10 @@ import transactionIcon from "../../assets/transaction.png";
 import revenueIcon from "../../assets/revenue.png";
 import releaseRequestIcon from "../../assets/releaserequest.png";
 import releaseLogIcon from "../../assets/releaselog.png";
-import clampingTeamsIcon from "../../assets/clampingteams.png";
-import towTruckIcon from "../../assets/tow-truck.png";
 import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
-import logoutIcon from "../../assets/logout.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -111,16 +107,6 @@ const SECTOR_ID = "sector-3";
 /* ------------------------------------------------------------------
    ROLE LABELS
 ------------------------------------------------------------------ */
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer in Charge",
-  "it-admin": "IT Admin",
-  supervisor: "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  finance: "Finance",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
 /* ------------------------------------------------------------------
    EMPTY STATE DATA
@@ -237,16 +223,6 @@ const navGroups: NavGroup[] = [
     label: "Operations",
     items: [
       {
-        label: "Active Clamping Teams",
-        icon: clampingTeamsIcon,
-        path: "/dashboard/clamping-teams",
-      },
-      {
-        label: "Active Impounding",
-        icon: towTruckIcon,
-        path: "/dashboard/active-impounding",
-      },
-      {
         label: "Field Updates",
         icon: fieldUpdateIcon,
         path: "/dashboard/field-updates",
@@ -306,21 +282,21 @@ const formatCurrency = (amount: number): string => {
    COMPONENT
 ------------------------------------------------------------------ */
 function Homepage() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
+  const [, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "oic",
   });
 
-  const [activeClamps, setActiveClamps] = useState("0");
   const [violationsToday, setViolationsToday] = useState("0");
-  const [impounded, setImpounded] = useState("0");
-  const [pendingRelease, setPendingRelease] = useState("0");
-  const [pendingPayments, setPendingPayments] = useState("0");
-  const [revenueToday, setRevenueToday] = useState("₱0");
+  /* Active clamps, impounded, pending release / payments, revenue today
+     (lib/overviewMetrics.ts) */
+  const overview = useOverviewMetrics();
+  const activeClamps = String(overview.activeClamps);
+  const impounded = String(overview.impounded);
+  const pendingRelease = String(overview.pendingRelease);
+  const pendingPayments = String(overview.pendingPayments);
+  const revenueToday = overview.revenueToday > 0 ? formatCurrency(overview.revenueToday) : "₱0";
 
   const [weekData, setWeekData] = useState<WeekDataPoint[]>(EMPTY_WEEK_DATA);
   const [topViolations, setTopViolations] =
@@ -356,24 +332,6 @@ function Homepage() {
         console.error("Error fetching current user:", err);
       }
     });
-    return () => unsubscribe();
-  }, []);
-
-  /* ================================================================
-     2. Active Clamps
-  ================================================================ */
-  useEffect(() => {
-    const ref = collection(db, "clampingRecords");
-    const q = query(ref, where("status", "==", "active"));
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snap) => setActiveClamps(String(snap.size)),
-      (err) => {
-        console.warn("Clamping records fetch failed:", err.code);
-        setActiveClamps("0");
-      }
-    );
     return () => unsubscribe();
   }, []);
 
@@ -459,80 +417,6 @@ function Homepage() {
   }, []);
 
   /* ================================================================
-     4. Impounded
-  ================================================================ */
-  useEffect(() => {
-    const ref = collection(db, "impoundRecords");
-    const q = query(ref, where("status", "==", "impounded"));
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snap) => setImpounded(String(snap.size)),
-      (err) => {
-        console.warn("Impound records fetch failed:", err.code);
-        setImpounded("0");
-      }
-    );
-    return () => unsubscribe();
-  }, []);
-
-  /* ================================================================
-     5. Pending Release
-  ================================================================ */
-  useEffect(() => {
-    const ref = collection(db, "releaseRequests");
-    const q = query(ref, where("status", "==", "pending"));
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snap) => setPendingRelease(String(snap.size)),
-      (err) => {
-        console.warn("Release requests fetch failed:", err.code);
-        setPendingRelease("0");
-      }
-    );
-    return () => unsubscribe();
-  }, []);
-
-  /* ================================================================
-     6. Payments
-  ================================================================ */
-  useEffect(() => {
-    const ref = collection(db, "payments");
-    const unsubscribe = onSnapshot(
-      ref,
-      (snap) => {
-        let pendingCount = 0;
-        let revenueTodaySum = 0;
-
-        snap.docs.forEach((doc) => {
-          const data = doc.data();
-          if (data.status === "pending") pendingCount++;
-
-          if (
-            data.status === "completed" &&
-            isToday(data.timestamp) &&
-            typeof data.amount === "number"
-          ) {
-            revenueTodaySum += data.amount;
-          }
-        });
-
-        setPendingPayments(String(pendingCount));
-        setRevenueToday(
-          revenueTodaySum > 0 ? formatCurrency(revenueTodaySum) : "₱0"
-        );
-      },
-      (err) => {
-        console.warn("Payments fetch failed:", err.code);
-        setPendingPayments("0");
-        setRevenueToday("₱0");
-      }
-    );
-    return () => unsubscribe();
-  }, []);
-
-  /* ================================================================
      7. Recent Activity
   ================================================================ */
   useEffect(() => {
@@ -565,42 +449,10 @@ function Homepage() {
   /* ================================================================
      Click-outside
   ================================================================ */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () =>
-      document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   /* ================================================================
      Logout
   ================================================================ */
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    }
-  };
-
-  const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
-    setIsMenuOpen(false);
-  };
 
   /* ================================================================
      Metric Cards
@@ -626,42 +478,11 @@ function Homepage() {
     <div className="oic-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Officer in Charge</p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>Officer in Charge</>} />
 
         {/* MAIN CONTENT */}
         <div className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>Overview</h1>
@@ -674,43 +495,6 @@ function Homepage() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={officerAvatar}
-                alt="Officer Profile"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button
-                    className="dropdown-item"
-                    onClick={handleChangePassword}
-                  >
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img
-                      src={logoutIcon}
-                      alt=""
-                      className="dropdown-icon"
-                    />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
@@ -851,4 +635,4 @@ function Homepage() {
   );
 }
 
-export default Homepage;
+export default Homepage;

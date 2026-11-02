@@ -1,28 +1,34 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+/* ------------------------------------------------------------------
+   RECORD OFFICER — Impounding Log (/record-officer/impounding)
+
+   BAGONG IMPOUND PROCESS:
+     - Hiwalay sa clamp. Walang "Subject to Impound".
+     - Base sa UOVR (Blue Ticket).
+     - Status: "Impounded" / "Released" lang.
+     - Isang data source: impoundRecords.
+
+   Record Officer = MONITORING VIEW lang. Walang "Add Record" o "Edit"
+   buttons. "View Record" lang para sa detail (read-only).
+   Styles: ./ImpoundingLog.css
+------------------------------------------------------------------ */
+import { useState, useEffect, useMemo } from "react";
 import {
-  KeyRound,
   Search,
   ChevronDown,
   ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+  ChevronRight } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
   getDoc,
   onSnapshot,
-  query,
-  where,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { useWithDirectImpounds, violationAsImpoundRecord } from "../../lib/directImpounds";
 import "./ImpoundingLog.css";
 
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
 
 import overviewIcon from "../../assets/overview.png";
 import allViolationsIcon from "../../assets/allviolations.png";
@@ -31,6 +37,8 @@ import impoundingIcon from "../../assets/impounding.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -51,6 +59,8 @@ type LogStatus = "Impounded" | "Released";
 
 type ImpoundLogRow = {
   id: string;
+  recordId: string;
+  uovrNo: string;
   reference: string | null;
   cin: string;
   plateNo: string;
@@ -58,7 +68,10 @@ type ImpoundLogRow = {
   location: string;
   officer: string;
   recordedAt: Timestamp | null;
+  impoundFee: number;
   status: LogStatus;
+  /** Enforcer-issued impound (violations), no impound record */
+  fromViolation?: boolean;
 };
 
 type NavItem = { label: string; icon: string; path: string; active?: boolean };
@@ -71,12 +84,12 @@ const ITEMS_PER_PAGE = 10;
 const ALL_VIOLATIONS = "All Violations";
 
 const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer in Charge",
+  "oic": "Officer in Charge",
   "it-admin": "IT Admin",
-  supervisor: "Supervisor",
+  "supervisor": "Supervisor",
   "record-officer": "Record Officer",
   "release-officer": "Release Officer",
-  finance: "Finance",
+  "finance": "Finance Staff",
   "clamping-staff": "Clamping Staff",
   "impounding-staff": "Impounding Staff",
 };
@@ -153,14 +166,16 @@ const millis = (ts: Timestamp | null): number => {
   }
 };
 
-/**
- * Same rule as OIC/ImpoundingLog.tsx — "Released" once the release flow
- * has actually released it (releaseStatus === "Released", written by
- * markViolationAsReleased in lib/release.ts). "Impounded" for everything
- * before that.
- */
-const deriveLogStatus = (releaseStatus: unknown): LogStatus =>
-  releaseStatus === "Released" ? "Released" : "Impounded";
+const formatCurrency = (n: number): string =>
+  `₱${n.toLocaleString("en-PH", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`;
+
+const normalizeStatus = (raw: unknown): LogStatus => {
+  const v = String(raw ?? "").toLowerCase().trim();
+  return v === "released" ? "Released" : "Impounded";
+};
 
 const getStatusClass = (status: LogStatus): string =>
   status === "Released" ? "status-released" : "status-impounded";
@@ -169,23 +184,23 @@ const getStatusClass = (status: LogStatus): string =>
    COMPONENT
 ------------------------------------------------------------------ */
 export default function RecordOfficerImpoundingLog() {
-  const navigate = useNavigate();
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "record-officer",
   });
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const [rows, setRows] = useState<ImpoundLogRow[]>([]);
+  const [recordLogs, setLogs] = useState<ImpoundLogRow[]>([]);
+  /** + impounds issued by the enforcer app (lib/directImpounds.ts) */
+  const logs: ImpoundLogRow[] = useWithDirectImpounds(recordLogs);
   const [loading, setLoading] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [violationFilter, setViolationFilter] = useState(ALL_VIOLATIONS);
   const [currentPage, setCurrentPage] = useState(1);
 
-  /* Current user */
+  /* Fetch current user */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
       if (!loggedUser) {
@@ -208,165 +223,118 @@ export default function RecordOfficerImpoundingLog() {
     return () => unsubscribe();
   }, []);
 
-  /**
-   * Impounding actions only (enforcementType == "impounded") — clamping
-   * has its own log page. Reads the SAME `violations` collection as
-   * OIC/ImpoundingLog.tsx so both roles see identical rows. No orderBy()
-   * on purpose: Firestore silently drops documents that lack the ordered
-   * field, so a record without recordedAt would vanish instead of
-   * appearing out of order. Sorting happens client-side.
-   */
+  /* Fetch impoundRecords */
   useEffect(() => {
-    const q = query(
-      collection(db, "violations"),
-      where("enforcementType", "==", "impounded")
-    );
-
     const unsubscribe = onSnapshot(
-      q,
+      collection(db, "impoundRecords"),
       (snap) => {
-        const fetched: ImpoundLogRow[] = snap.docs
+        const rows: ImpoundLogRow[] = snap.docs
           .map((d) => {
             const data = d.data();
             return {
               id: d.id,
+              recordId: d.id,
+              uovrNo: data.uovrNo ?? "—",
               reference:
                 (data.referenceNumber as string) ??
                 (data.paymentReference as string) ??
                 null,
               cin: data.cin ?? "—",
               plateNo: data.plateNo ?? "—",
-              violation: data.violationType ?? "—",
+              violation:
+                data.initialViolation ??
+                data.violationType ??
+                data.violation ??
+                "—",
               location: data.location ?? "—",
-              officer: data.officer ?? "—",
-              recordedAt: (data.recordedAt as Timestamp) ?? null,
-              status: deriveLogStatus(data.releaseStatus),
+              officer:
+                data.clampedBy ??
+                data.towedBy ??
+                data.impoundedBy ??
+                "—",
+              recordedAt: ((data.clampedAt ?? data.ticketDate ?? data.createdAt) as Timestamp) ?? null,
+              impoundFee: Number(data.impoundFee ?? 0),
+              status: normalizeStatus(data.status),
             };
           })
           .sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
 
-        setRows(fetched);
+        setLogs(rows);
         setLoading(false);
       },
       (err) => {
-        console.warn("Impounding log fetch failed:", err.code);
+        console.warn("impoundRecords fetch failed:", err.code);
         setLoading(false);
       }
     );
     return () => unsubscribe();
   }, []);
 
-  /* Click outside */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    }
-  };
-
-  /* Violation filter options come from the data itself */
+  /* Violation filter options */
   const violationOptions = useMemo(() => {
     const unique = new Set<string>();
-    rows.forEach((row) => {
+    logs.forEach((row) => {
       if (row.violation && row.violation !== "—") unique.add(row.violation);
     });
     return [ALL_VIOLATIONS, ...Array.from(unique).sort()];
-  }, [rows]);
+  }, [logs]);
 
   /* Search + filter */
-  const filteredRows = useMemo(() => {
+  const filteredLogs = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return rows.filter((row) => {
+    return logs.filter((row) => {
       const matchesSearch =
         !q ||
         row.cin.toLowerCase().includes(q) ||
         row.plateNo.toLowerCase().includes(q) ||
         row.location.toLowerCase().includes(q) ||
-        row.violation.toLowerCase().includes(q);
+        row.violation.toLowerCase().includes(q) ||
+        row.uovrNo.toLowerCase().includes(q);
       const matchesViolation =
         violationFilter === ALL_VIOLATIONS || row.violation === violationFilter;
       return matchesSearch && matchesViolation;
     });
-  }, [rows, searchQuery, violationFilter]);
+  }, [logs, searchQuery, violationFilter]);
 
+  /* Counts */
   const impoundedCount = useMemo(
-    () => rows.filter((r) => r.status === "Impounded").length,
-    [rows]
+    () => logs.filter((r) => r.status === "Impounded").length,
+    [logs]
+  );
+  const releasedCount = useMemo(
+    () => logs.filter((r) => r.status === "Released").length,
+    [logs]
   );
 
   /* Pagination */
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredLogs.length / ITEMS_PER_PAGE)
+  );
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
-  const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const paginatedLogs = filteredLogs.slice(
+    startIndex,
+    startIndex + ITEMS_PER_PAGE
+  );
 
-  useEffect(() => {
+  // Back to page 1 when these change (during render, not in an effect)
+  const pageResetKey = JSON.stringify([searchQuery, violationFilter]);
+  const [prevPageResetKey, setPrevPageResetKey] = useState(pageResetKey);
+  if (pageResetKey !== prevPageResetKey) {
+    setPrevPageResetKey(pageResetKey);
     setCurrentPage(1);
-  }, [searchQuery, violationFilter]);
+  }
 
   return (
     <div className="record-page impound-log-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">
-                {ROLE_LABELS[currentUser.role]}
-              </p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        <span>{item.label}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={NAV_GROUPS} role={<>{ROLE_LABELS[currentUser.role]}</>} />
 
         {/* MAIN */}
         <div className="main">
+          <AppTopbar groups={NAV_GROUPS} />
           <header className="main-header">
             <div>
               <h1>Impounding Log</h1>
@@ -379,35 +347,6 @@ export default function RecordOfficerImpoundingLog() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={avatarImg}
-                alt="Account menu"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button className="dropdown-item">
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content impounding-body">
@@ -418,7 +357,7 @@ export default function RecordOfficerImpoundingLog() {
                 <input
                   type="text"
                   className="search-bar-input"
-                  placeholder="Search CIN, Plate No..."
+                  placeholder="Search UOVR, CIN, Plate No..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -446,7 +385,8 @@ export default function RecordOfficerImpoundingLog() {
               <div className="log-header">
                 <p className="card-eyebrow">Sector 3</p>
                 <div className="log-header-meta">
-                  Impounded vehicles: {impoundedCount} total
+                  Impounded: <strong>{impoundedCount}</strong> · Released:{" "}
+                  <strong>{releasedCount}</strong>
                 </div>
               </div>
               <h2 className="card-title" style={{ marginBottom: 16 }}>
@@ -457,33 +397,33 @@ export default function RecordOfficerImpoundingLog() {
                 <div className="table-loading">
                   <p>Loading impounding log...</p>
                 </div>
-              ) : paginatedRows.length === 0 ? (
+              ) : paginatedLogs.length === 0 ? (
                 <div className="impounding-empty">
-                  {rows.length === 0
+                  {logs.length === 0
                     ? "No impounding records found."
                     : "No records match your search or filter."}
                 </div>
               ) : (
-                <div className="impounding-table-wrap">
+                <div className="impounding-table-wrap" tabIndex={0} role="region" aria-label="Impounding log table" data-scroll-region>
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th>Reference</th>
+                        <th>UOVR No.</th>
                         <th>CIN</th>
                         <th>Plate No.</th>
                         <th>Violation</th>
                         <th>Location</th>
                         <th>Impounded by</th>
                         <th>Time</th>
+                        <th>Fee</th>
                         <th>Status</th>
+                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {paginatedRows.map((row) => (
+                      {paginatedLogs.map((row) => (
                         <tr key={row.id}>
-                          <td className="cell-reference">
-                            {row.reference ?? "—"}
-                          </td>
+                          <td className="cell-reference">{row.uovrNo}</td>
                           <td>
                             <span className="cin-pill">{row.cin}</span>
                           </td>
@@ -494,6 +434,9 @@ export default function RecordOfficerImpoundingLog() {
                           <td className="cell-time">
                             {formatDateTime(row.recordedAt)}
                           </td>
+                          <td className="cell-fee">
+                            {formatCurrency(row.impoundFee)}
+                          </td>
                           <td>
                             <span
                               className={`status-pill ${getStatusClass(
@@ -503,6 +446,15 @@ export default function RecordOfficerImpoundingLog() {
                               {row.status}
                             </span>
                           </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="btn-view-record"
+                              onClick={() => setViewingId(row.recordId)}
+                            >
+                              View Record
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -511,7 +463,7 @@ export default function RecordOfficerImpoundingLog() {
               )}
 
               {/* PAGINATION */}
-              {!loading && paginatedRows.length > 0 && (
+              {!loading && paginatedLogs.length > 0 && (
                 <div className="pagination">
                   <button
                     type="button"
@@ -525,7 +477,9 @@ export default function RecordOfficerImpoundingLog() {
 
                   <div className="pagination-info">
                     <span className="pagination-page">{safePage}</span>
-                    <span className="pagination-sep">of {totalPages} pages</span>
+                    <span className="pagination-sep">
+                      of {totalPages} pages
+                    </span>
                   </div>
 
                   <button
@@ -543,6 +497,239 @@ export default function RecordOfficerImpoundingLog() {
               )}
             </div>
           </main>
+        </div>
+      </div>
+
+      {/* VIEW RECORD MODAL (read-only) */}
+      {viewingId && (
+        <ViewImpoundModal
+          recordId={viewingId}
+          onClose={() => setViewingId(null)}
+        />
+      )}
+
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------
+   VIEW IMPOUND MODAL (read-only, simple)
+------------------------------------------------------------------ */
+type ViewImpoundModalProps = {
+  recordId: string;
+  onClose: () => void;
+};
+
+function ViewImpoundModal({ recordId, onClose }: ViewImpoundModalProps) {
+  const [data, setData] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "impoundRecords", recordId));
+        if (snap.exists()) {
+          setData(snap.data());
+        } else {
+          // Enforcer-issued impound: no impound record, show the violation.
+          const v = await getDoc(doc(db, "violations", recordId));
+          if (v.exists()) setData(violationAsImpoundRecord(v.data()));
+        }
+      } catch (err) {
+        console.error("Failed to load record:", err);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [recordId]);
+
+  const pick = (v: unknown): string => {
+    const s = String(v ?? "").trim();
+    return s && s !== "null" && s !== "undefined" ? s : "—";
+  };
+
+  const fee = Number(data?.impoundFee ?? 0);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="modal-content modal-content-wide"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <h3 className="modal-title">Impound Record</h3>
+          <button aria-label="Close" className="modal-close-btn" onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="modal-body">
+            <p>Loading...</p>
+          </div>
+        ) : !data ? (
+          <div className="modal-body">
+            <p>Record not found.</p>
+          </div>
+        ) : (
+          <div className="modal-body">
+            <h4 className="form-section-title">UOVR / Ticket</h4>
+            <div className="modal-grid">
+              <div className="form-group">
+                <label>UOVR No.</label>
+                <div className="read-only-field">{pick(data.uovrNo)}</div>
+              </div>
+              <div className="form-group">
+                <label>CIN</label>
+                <div className="read-only-field">{pick(data.cin)}</div>
+              </div>
+              <div className="form-group">
+                <label>AOR No.</label>
+                <div className="read-only-field">{pick(data.aorNo)}</div>
+              </div>
+              <div className="form-group">
+                <label>Street</label>
+                <div className="read-only-field">{pick(data.street)}</div>
+              </div>
+              <div className="form-group">
+                <label>City / Mun.</label>
+                <div className="read-only-field">{pick(data.cityMun)}</div>
+              </div>
+            </div>
+
+            <h4 className="form-section-title">Driver</h4>
+            <div className="modal-grid">
+              <div className="form-group form-group-full">
+                <label>Name</label>
+                <div className="read-only-field">{pick(data.violatorName)}</div>
+              </div>
+              <div className="form-group form-group-full">
+                <label>Address</label>
+                <div className="read-only-field">{pick(data.address)}</div>
+              </div>
+              <div className="form-group">
+                <label>License No.</label>
+                <div className="read-only-field">{pick(data.licenseNo)}</div>
+              </div>
+              <div className="form-group">
+                <label>Date of Birth</label>
+                <div className="read-only-field">{pick(data.dateOfBirth)}</div>
+              </div>
+            </div>
+
+            <h4 className="form-section-title">Vehicle</h4>
+            <div className="modal-grid">
+              <div className="form-group">
+                <label>Plate No.</label>
+                <div className="read-only-field">{pick(data.plateNo)}</div>
+              </div>
+              <div className="form-group">
+                <label>Vehicle Type</label>
+                <div className="read-only-field">{pick(data.vehicleType)}</div>
+              </div>
+              <div className="form-group">
+                <label>Color</label>
+                <div className="read-only-field">{pick(data.color)}</div>
+              </div>
+              <div className="form-group">
+                <label>MV File</label>
+                <div className="read-only-field">{pick(data.mvFile)}</div>
+              </div>
+              <div className="form-group form-group-full">
+                <label>Owner</label>
+                <div className="read-only-field">{pick(data.vehicleOwner)}</div>
+              </div>
+              <div className="form-group form-group-full">
+                <label>Owner Address</label>
+                <div className="read-only-field">
+                  {pick(data.vehicleOwnerAddress)}
+                </div>
+              </div>
+            </div>
+
+            <h4 className="form-section-title">Violation</h4>
+            <div className="modal-grid">
+              <div className="form-group form-group-full">
+                <label>Initial Violation</label>
+                <div className="read-only-field">
+                  {pick(data.initialViolation)}
+                </div>
+              </div>
+              <div className="form-group form-group-full">
+                <label>Impound Violations</label>
+                <div className="read-only-field">
+                  {Array.isArray(data.impoundViolations) &&
+                  data.impoundViolations.length > 0
+                    ? (data.impoundViolations as string[]).join(", ")
+                    : "—"}
+                </div>
+              </div>
+            </div>
+
+            <h4 className="form-section-title">Apprehension</h4>
+            <div className="modal-grid">
+              <div className="form-group">
+                <label>Apprehending Officer</label>
+                <div className="read-only-field">
+                  {pick(data.apprehendingOfficer)}
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Deputation No.</label>
+                <div className="read-only-field">
+                  {pick(data.deputationNo)}
+                </div>
+              </div>
+            </div>
+
+            <h4 className="form-section-title">Location &amp; Fee</h4>
+            <div className="modal-grid">
+              <div className="form-group">
+                <label>Impound Location</label>
+                <div className="read-only-field">{pick(data.location)}</div>
+              </div>
+              <div className="form-group">
+                <label>Distance (km)</label>
+                <div className="read-only-field">{pick(data.distanceKm)}</div>
+              </div>
+              <div className="form-group">
+                <label>Weight Class</label>
+                <div className="read-only-field">{pick(data.weightClass)}</div>
+              </div>
+              <div className="form-group">
+                <label>Impound Fee</label>
+                <div className="read-only-field fee-value">
+                  ₱{fee.toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            <h4 className="form-section-title">Turn-over</h4>
+            <div className="modal-grid">
+              <div className="form-group">
+                <label>Received By</label>
+                <div className="read-only-field">{pick(data.receivedBy)}</div>
+              </div>
+            </div>
+
+            <h4 className="form-section-title">System</h4>
+            <div className="modal-grid">
+              <div className="form-group">
+                <label>Status</label>
+                <div className="read-only-field">{pick(data.status)}</div>
+              </div>
+              <div className="form-group">
+                <label>Created By</label>
+                <div className="read-only-field">{pick(data.createdBy)}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={onClose}>
+            Close
+          </button>
         </div>
       </div>
     </div>

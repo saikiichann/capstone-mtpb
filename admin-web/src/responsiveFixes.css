@@ -1,0 +1,167 @@
+/* ------------------------------------------------------------------
+   SMALL SCREENS (phones, ≤ 768 px) — loaded last (allStyles.ts)
+
+   Audit 2026-10-29: on a 375 px phone 48 of 58 pages kept the 240 px
+   sidebar beside the page, leaving the content about 135 px wide with
+   sideways scrolling. Every page uses the same layout
+   (.dashboard > aside.sidebar + .main), so one set of rules fixes them:
+   the sidebar becomes a top bar with the menu scrolling sideways, and
+   the page gets the full width. Tables keep scrolling inside their own
+   box. !important is used only here, because many pages style the
+   sidebar with longer selectors (e.g. .finance-page.finance-pending-page).
+   Nothing changes above 768 px.
+------------------------------------------------------------------ */
+@media (max-width: 768px) {
+  .dashboard {
+    flex-direction: column !important;
+    min-height: 100vh;
+  }
+
+  .dashboard > aside.sidebar {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    position: sticky !important;
+    top: 0;
+    z-index: 30;
+    padding-bottom: 0 !important;
+    overflow: visible !important;
+  }
+
+  .dashboard > aside.sidebar .sidebar-brand {
+    padding: 12px 16px !important;
+  }
+
+  .dashboard > aside.sidebar .sidebar-nav {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+    padding: 0 8px 10px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dashboard > aside.sidebar .sidebar-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dashboard > aside.sidebar .nav-group {
+    display: contents !important;
+  }
+
+  .dashboard > aside.sidebar .nav-group-label {
+    display: none !important;
+  }
+
+  .dashboard > aside.sidebar .nav-list {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 4px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .dashboard > aside.sidebar .nav-item {
+    width: auto !important;
+    white-space: nowrap !important;
+    border-left: 0 !important;
+    border-bottom: 2px solid transparent;
+    border-radius: 8px !important;
+    padding: 8px 12px !important;
+    min-height: 36px;
+  }
+
+  .dashboard > aside.sidebar .nav-item-active {
+    border-bottom-color: #3B82F6;
+  }
+
+  .dashboard > .main {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+  }
+
+  .dashboard > .main .main-header {
+    padding: 16px !important;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .dashboard > .main .main-header h1 {
+    font-size: 20px !important;
+  }
+
+  .dashboard > .main .main-content {
+    padding: 16px !important;
+    min-width: 0;
+  }
+
+  /* Summary cards: one or two per row instead of four squeezed ones. */
+  .dashboard > .main [class*="stats-grid"],
+  .dashboard > .main [class*="stat-grid"],
+  .dashboard > .main [class*="metric-grid"],
+  .dashboard > .main [class*="summary-grid"],
+  .dashboard > .main [class*="kpi-grid"],
+  .dashboard > .main [class*="cards-grid"] {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+  }
+
+  /* Tables scroll sideways inside their own box, never the whole page. */
+  .dashboard > .main [data-scroll-region] {
+    max-width: 100%;
+    overflow-x: auto !important;
+  }
+
+  /* Search + filters stack. */
+  .dashboard > .main .search-with-filter > * {
+    flex: 1 1 100%;
+  }
+}
+
+/* User Management: the table is 900 px wide on purpose and should scroll
+   inside its card. Another IT Admin stylesheet loaded later reset the
+   card's overflow to visible, so the whole page scrolled sideways at
+   1024 px and below. A longer selector keeps the card's own setting. */
+.it-admin-page .card.user-table-card {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.sector-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* The table's top margin used to merge with the heading's; inside the
+   scroll box it no longer does, so drop it to keep the same spacing. */
+.sector-table-scroll > .data-table {
+  margin-top: 0 !important;
+}
+
+@media (max-width: 768px) {
+  /* Grid items may shrink below their content's width (forms, cards). */
+  .dashboard > .main .main-content > * > * {
+    min-width: 0;
+  }
+
+  /* IT Admin pages name their menu headings differently. */
+  .dashboard > aside.sidebar .nav-group-title {
+    display: none !important;
+  }
+
+  /* Export Center: the two dates stack instead of sitting side by side. */
+  .finance-page .date-range-row,
+  .record-page .date-range-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .finance-page .date-range-arrow,
+  .record-page .date-range-arrow {
+    display: none !important;
+  }
+}

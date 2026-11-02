@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { KeyRound, ChevronLeft, ChevronRight, Search } from "lucide-react";
-import { signOut as firebaseSignOut } from "firebase/auth";
-import { collection, doc, getDoc, onSnapshot, Timestamp } from "firebase/firestore";
-import { auth, db } from "../../firebase";
+import { useState, useEffect, useMemo } from "react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { collection, doc, getDoc, onSnapshot, Timestamp, type DocumentData } from "firebase/firestore";
+import { db } from "../../firebase";
+import { useRegisteredOwners } from "../../lib/registeredOwners";
 import { useStaffProfile } from "../../lib/useStaffProfile";
 import {
   derivePaymentLocation,
@@ -15,8 +14,6 @@ import {
 import "./TransactionHistory.css";
 
 // Asset imports
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
 import pendingPaymentsIcon from "../../assets/pendingpayments.png";
 import paymentVerificationIcon from "../../assets/paymentverification.png";
@@ -24,7 +21,8 @@ import transactionIcon from "../../assets/transaction.png";
 import revenueIcon from "../../assets/revenue.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
-import logoutIcon from "../../assets/logout.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -75,16 +73,6 @@ type NavGroup = { label: string; items: NavItem[] };
 ------------------------------------------------------------------ */
 const ITEMS_PER_PAGE = 10;
 
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer in Charge",
-  "it-admin": "IT Admin",
-  supervisor: "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  finance: "Finance Staff",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
 /* Finance navigation — ito lang ang naiiba sa OIC version */
 const NAV_GROUPS: NavGroup[] = [
@@ -147,7 +135,7 @@ const millis = (ts: Timestamp | null): number => {
 };
 
 /** GCash → "Online"; cash → City Hall / Central (tingnan ang lib/paymentLocation) */
-const derivePaymentLocationFromDoc = (data: any): PaymentLocation =>
+const derivePaymentLocationFromDoc = (data: DocumentData): PaymentLocation =>
   derivePaymentLocation(data.method, data.paymentLocation ?? data.location);
 
 const getStatusClass = (status: TransactionStatus): string =>
@@ -157,9 +145,6 @@ const getStatusClass = (status: TransactionStatus): string =>
    COMPONENT
 ------------------------------------------------------------------ */
 export default function TransactionHistory() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
   /* Profile ng naka-login na staff — naka-cache sa lahat ng Finance pages,
      kaya hindi na nagfi-flash ang data ng ibang location paglipat ng tab. */
@@ -174,7 +159,9 @@ export default function TransactionHistory() {
     [profile]
   );
 
-  const [rows, setRows] = useState<TransactionRow[]>([]);
+  const [rawRows, setRows] = useState<TransactionRow[]>([]);
+  /** Guest → Registered kapag naka-register (active) ang plate sa violator app */
+  const rows = useRegisteredOwners(rawRows);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -307,39 +294,6 @@ export default function TransactionHistory() {
     return () => unsubscribe();
   }, []);
 
-  /* Click outside */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    }
-  };
-
-  const handleChangePassword = () => {
-    setIsMenuOpen(false);
-  };
-
   /* Location — Finance staff: sariling location lang (City Hall o Central).
      Ginagawa dito sa render (hindi sa listener) para hindi na kailangang
      mag-resubscribe sa Firestore kapag na-load ang user. */
@@ -371,56 +325,27 @@ export default function TransactionHistory() {
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
   const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  useEffect(() => {
+  // Back to page 1 when these change (during render, not in an effect)
+  const pageResetKey = JSON.stringify([searchQuery]);
+  const [prevPageResetKey, setPrevPageResetKey] = useState(pageResetKey);
+  if (pageResetKey !== prevPageResetKey) {
+    setPrevPageResetKey(pageResetKey);
     setCurrentPage(1);
-  }, [searchQuery]);
+  }
 
   return (
     <div className="finance-page finance-transactions-page">
       <div className="dashboard">
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">
-                Finance Staff
+        <AppSidebar groups={NAV_GROUPS} role={<>Finance Staff
                 {currentUser.assignedLocationName && (
                   <span className="sidebar-brand-location">
                     {" · "}
                     {currentUser.assignedLocationName}
                   </span>
-                )}
-              </p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        <span>{item.label}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+                )}</>} />
 
         <div className="main">
+          <AppTopbar groups={NAV_GROUPS} />
           <header className="main-header">
             <div>
               <h1>Transaction History</h1>
@@ -433,41 +358,6 @@ export default function TransactionHistory() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={officerAvatar}
-                alt="Staff Profile"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                      {currentUser.assignedLocationName &&
-                        ` · ${currentUser.assignedLocationName}`}
-                    </p>
-                  </div>
-                  <button
-                    className="dropdown-item"
-                    onClick={handleChangePassword}
-                  >
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
@@ -506,7 +396,7 @@ export default function TransactionHistory() {
                 </div>
               ) : (
                 <>
-                  <div className="table-wrapper">
+                  <div className="table-wrapper" tabIndex={0} role="region" aria-label="Data table" data-scroll-region>
                     <table className="data-table">
                       <thead>
                         <tr>

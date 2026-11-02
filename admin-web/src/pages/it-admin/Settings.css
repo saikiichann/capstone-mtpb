@@ -270,3 +270,35 @@
     text-align: left;
   }
 }
+
+/* ==================================================================
+   FEE RULE NOTE + SUB-LABEL (view-only computation)
+================================================================== */
+.it-admin-page .fine-table .cell-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: #6B7280;
+}
+
+.it-admin-page .fee-rule {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #F9FAFB;
+  border: 1px solid #F3F4F6;
+  font-size: 12.5px;
+  color: #4B5563;
+  line-height: 1.5;
+}
+
+.it-admin-page .fee-rule p {
+  margin: 0;
+}
+
+.it-admin-page .fee-rule .fee-rule-formula {
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 2px;
+}

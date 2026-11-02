@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Activity,
@@ -26,9 +25,10 @@ import {
   MapPin,
   UserCheck,
   MoreVertical,
+  Download,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
   collection,
@@ -45,13 +45,23 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import EngravePicker from "./EngravePicker";
+import ImpoundDeskQR from "./ImpoundDeskQR";
 import "./QRManagement.css";
+import {
+  TAG_SIZE_IN,
+  downloadBlob,
+  engravingReadme,
+  engravingSvg,
+  svgFileName,
+  zipFiles,
+} from "../../lib/engraveQr";
+import { CLAMP_GRACE_HOURS, amountDueFor, overdueFeeFor } from "../../lib/clampFee";
 
 // Asset imports
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
-import keyIcon from "../../assets/key.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
+import { clientIp } from "../../lib/staffSession";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -86,6 +96,7 @@ type CurrentUser = {
 type ClampState =
   | "available"
   | "unpaid"
+  | "overdue"
   | "verified"
   | "ready-for-release"
   | "released";
@@ -100,6 +111,8 @@ type ClampRow = {
   id: string;
   clampId: string;
   clampType: ClampType;
+  /** clampType as saved in Firestore, when it differs from the clamp ID's type. */
+  savedTypeWrong: boolean;
   scanToken: string | null;
   storedStatus: ClampState | null;
   state: ClampState;
@@ -135,6 +148,10 @@ type ViolationDetails = {
   color: string | null;
   violationType: string;
   fineAmount: number;
+  /** ₱2,000 once the clamp is past 24 hours unpaid — replaces the fine */
+  overdueFee: number;
+  /** What the owner pays now (lib/clampFee.ts) */
+  amountDue: number;
   convenienceFee: number | null;
   totalPaid: number | null;
   referenceNumber: string | null;
@@ -155,6 +172,7 @@ const STATUS_OPTIONS: Array<ClampState | "All Status"> = [
   "All Status",
   "available",
   "unpaid",
+  "overdue",
   "verified",
   "ready-for-release",
   "released",
@@ -163,6 +181,7 @@ const STATUS_OPTIONS: Array<ClampState | "All Status"> = [
 const STATUS_LABELS: Record<ClampState, string> = {
   available: "Available",
   unpaid: "Unpaid",
+  overdue: "Overdue (₱2,000)",
   verified: "Verified",
   "ready-for-release": "Ready for Release",
   released: "Released",
@@ -189,16 +208,6 @@ const TYPE_OPTIONS: Array<ClampType | "All Types"> = [
   "Motorcycle",
 ];
 
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer-in-Charge",
-  "it-admin": "IT Admin",
-  supervisor: "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  finance: "Finance",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
 const navGroups: NavGroup[] = [
   {
@@ -268,6 +277,7 @@ const getStatusClass = (status: ClampState): string => {
   const map: Record<ClampState, string> = {
     available: "status-waiting",
     unpaid: "status-pay",
+    overdue: "status-subject",
     verified: "status-paid",
     "ready-for-release": "status-ready",
     released: "status-released",
@@ -316,10 +326,25 @@ const deriveState = (data: {
   return "available";
 };
 
+/**
+ * Unpaid clamp past its 24 hours: the fee is now a fixed ₱2,000
+ * (lib/clampFee.ts). It stays clamped — clamps are not sent to impound.
+ */
+const withOverdueState = (state: ClampState, deployedAt: Timestamp | null): ClampState => {
+  if (state !== "unpaid" || !deployedAt) return state;
+  try {
+    const ends = deployedAt.toDate().getTime() + CLAMP_GRACE_HOURS * 3600000;
+    return Date.now() >= ends ? "overdue" : state;
+  } catch {
+    return state;
+  }
+};
+
+// Letters first (A-20, R-4, RA-05) = CAR clamp; numbers (20-04) = MOTORCYCLE clamp.
 const detectClampType = (clampId: string): ClampType | null => {
   const trimmed = clampId.trim().toUpperCase();
-  if (/^[A-Z]+-\d+$/.test(trimmed)) return "Motorcycle";
-  if (/^\d{2}-\d{2}$/.test(trimmed)) return "Car";
+  if (/^[A-Z]+-\d+$/.test(trimmed)) return "Car";
+  if (/^\d{2}-\d{2}$/.test(trimmed)) return "Motorcycle";
   return null;
 };
 
@@ -335,7 +360,7 @@ const validateClampId = (id: string): { valid: boolean; message?: string } => {
   if (!type) {
     return {
       valid: false,
-      message: "Format must be like A-20, R-4, RA-05 (Motorcycle) or 20-04 (Car).",
+      message: "Format must be like A-20, R-4, RA-05 (Car) or 20-04 (Motorcycle).",
     };
   }
 
@@ -391,9 +416,6 @@ const openPrintWindow = (clampId: string, token: string): void => {
 // COMPONENT
 // ---------------------------------------------------------------------------
 export default function QRManagement() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
@@ -471,13 +493,23 @@ export default function QRManagement() {
           };
 
           const storedStatus = (data.status as ClampState | undefined) ?? null;
-          const state = deriveState(timestamps);
-          const hasStateMismatch = storedStatus !== null && storedStatus !== state;
+          const baseState = deriveState(timestamps);
+          // Mismatch is checked on the lifecycle state only; "overdue" is
+          // derived from the time since the clamp was deployed.
+          const hasStateMismatch = storedStatus !== null && storedStatus !== baseState;
+          const state = withOverdueState(baseState, timestamps.deployedAt);
+
+          const clampId = String(data.clampId ?? data.qrId ?? "—");
+          const savedType = (data.clampType as ClampType | undefined) ?? null;
+          const typeFromId = detectClampType(clampId);
 
           return {
             id: d.id,
-            clampId: data.clampId ?? data.qrId ?? "—",
-            clampType: (data.clampType ?? "Car") as ClampType,
+            clampId,
+            // The clamp ID decides the type (clamps saved before the Car /
+            // Motorcycle fix may still have the old type saved).
+            clampType: typeFromId ?? savedType ?? "Car",
+            savedTypeWrong: typeFromId !== null && savedType !== typeFromId,
             scanToken: (data.scanToken as string) ?? null,
             storedStatus,
             state,
@@ -507,24 +539,6 @@ export default function QRManagement() {
       }
     );
     return () => unsubscribe();
-  }, []);
-
-  /* Click outside for avatar dropdown + row menus */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-      const target = event.target as HTMLElement;
-      if (!target.closest(".row-menu-wrapper")) {
-        setOpenMenuId(null);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   /* Stats */
@@ -582,25 +596,6 @@ export default function QRManagement() {
   }, [clampIdInput]);
 
   /* Handlers */
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    }
-  };
-
-  const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
-    setIsMenuOpen(false);
-  };
 
   const handleRepairStates = async () => {
     if (mismatchedClamps.length === 0) return;
@@ -620,12 +615,50 @@ export default function QRManagement() {
         batch.update(doc(db, "clamps", c.id), { status: c.state });
       });
       await batch.commit();
-      console.log(`Repaired ${mismatchedClamps.length} clamp state(s).`);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Repair failed:", err);
-      alert(err.message || "Failed to repair clamp states.");
+      alert((err as Error)?.message || "Failed to repair clamp states.");
     } finally {
       setIsRepairing(false);
+    }
+  };
+
+  const wrongTypeClamps = useMemo(() => clamps.filter((c) => c.savedTypeWrong), [clamps]);
+  const [isFixingTypes, setIsFixingTypes] = useState(false);
+
+  /** Saves the right Car / Motorcycle type (from the clamp ID) on old clamps. */
+  const handleFixTypes = async () => {
+    if (wrongTypeClamps.length === 0) return;
+    const list = wrongTypeClamps
+      .slice(0, 15)
+      .map((c) => `${c.clampId} → ${c.clampType}`)
+      .join("\n");
+    const more = wrongTypeClamps.length > 15 ? `\n...and ${wrongTypeClamps.length - 15} more` : "";
+    if (!confirm(`Fix the saved type of ${wrongTypeClamps.length} clamp(s)?\n\n${list}${more}`)) return;
+
+    setIsFixingTypes(true);
+    try {
+      for (let i = 0; i < wrongTypeClamps.length; i += 400) {
+        const batch = writeBatch(db);
+        wrongTypeClamps.slice(i, i + 400).forEach((c) => {
+          batch.update(doc(db, "clamps", c.id), { clampType: c.clampType });
+        });
+        await batch.commit();
+      }
+      await addDoc(collection(db, "auditLogs"), {
+        userName: currentUser.name,
+        action: `fixed the Car/Motorcycle type of ${wrongTypeClamps.length} clamp(s)`,
+        record: `${wrongTypeClamps.length} clamps`,
+        type: "qr-token",
+        metadata: { clampIds: wrongTypeClamps.map((c) => c.clampId).slice(0, 200) },
+        timestamp: serverTimestamp(),
+        ipAddress: clientIp(),
+      }).catch((err) => console.warn("Type fix not logged:", err));
+    } catch (err) {
+      console.error("Type fix failed:", err);
+      alert((err as Error)?.message || "Couldn't fix the clamp types. Please try again.");
+    } finally {
+      setIsFixingTypes(false);
     }
   };
 
@@ -692,6 +725,7 @@ export default function QRManagement() {
         id: docRef.id,
         clampId: trimmedId,
         clampType,
+        savedTypeWrong: false,
         scanToken,
         storedStatus: "available",
         state: "available",
@@ -719,10 +753,9 @@ export default function QRManagement() {
       };
 
       setGeneratedQrs([newQr]);
-      console.log(`Clamp registered: ${trimmedId} (${clampType})`);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error registering QR:", err);
-      setGenerateError(err.message || "Failed to register QR code.");
+      setGenerateError((err as Error)?.message || "Failed to register QR code.");
     } finally {
       setIsGenerating(false);
     }
@@ -749,13 +782,14 @@ export default function QRManagement() {
         type: "qr-token",
         metadata: { clampId: clamp.clampId, mode },
         timestamp: serverTimestamp(),
+        ipAddress: clientIp(),
       });
 
       await batch.commit();
       return token;
-    } catch (err: any) {
+    } catch (err) {
       console.error("Issuing token failed:", err);
-      alert(err.message || "Failed to issue a QR token.");
+      alert((err as Error)?.message || "Failed to issue a QR token.");
       return null;
     }
   };
@@ -805,6 +839,82 @@ export default function QRManagement() {
     openPrintWindow(qr.clampId, token);
   };
 
+  // ---- Laser engraving: SVG at the real tag size (lib/engraveQr.ts) ----
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleDownloadSvg = async (qr: ClampRow) => {
+    setOpenMenuId(null);
+    let token = qr.scanToken;
+    if (!token) {
+      const proceed = confirm(
+        `${qr.clampId} has no secure QR token yet.\n\n` + `Issue one now and download?`
+      );
+      if (!proceed) return;
+      token = await issueScanToken(qr, "issue");
+      if (!token) return;
+    }
+    const svg = engravingSvg(qr.clampId, buildScanUrl(token));
+    downloadBlob(new Blob([svg], { type: "image/svg+xml" }), svgFileName(qr.clampId));
+  };
+
+  /** "Download SVGs" opens the picker (EngravePicker) for the current list. */
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+
+  const handleDownloadAllSvg = () => {
+    if (filteredRows.length === 0) {
+      alert("No clamps in the list. Clear the filters and try again.");
+      return;
+    }
+    setIsPickerOpen(true);
+  };
+
+  /** The chosen clamps → one ZIP of SVGs (tokens issued for any without one). */
+  const exportSvgs = async (rows: Array<Pick<ClampRow, "id">>) => {
+    const wanted = new Set(rows.map((r) => r.id));
+    const chosen = clamps.filter((c) => wanted.has(c.id));
+    if (chosen.length === 0) return;
+
+    setIsExporting(true);
+    try {
+      const items: { clampId: string; token: string }[] = [];
+      for (const row of chosen) {
+        let token = row.scanToken;
+        if (!token) token = await issueScanToken(row, "issue");
+        if (token) items.push({ clampId: row.clampId, token });
+      }
+      if (items.length === 0) return;
+      items.sort((a, b) => a.clampId.localeCompare(b.clampId, undefined, { numeric: true }));
+
+      const files = items.map((it) => ({
+        name: svgFileName(it.clampId),
+        text: engravingSvg(it.clampId, buildScanUrl(it.token)),
+      }));
+      files.push({ name: "README-engraving.txt", text: engravingReadme(items.map((it) => it.clampId)) });
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadBlob(zipFiles(files), `MTPB-clamp-QR-engraving-${stamp}.zip`);
+      setIsPickerOpen(false);
+
+      try {
+        await addDoc(collection(db, "auditLogs"), {
+          userName: currentUser.name,
+          action: `downloaded ${items.length} clamp QR file(s) for laser engraving`,
+          record: `${items.length} clamps`,
+          type: "qr-export",
+          metadata: { count: items.length, clampIds: items.map((it) => it.clampId).slice(0, 200) },
+          timestamp: serverTimestamp(),
+          ipAddress: clientIp(),
+        });
+      } catch (err) {
+        console.warn("QR export not logged:", err);
+      }
+    } catch (err) {
+      console.error("QR export failed:", err);
+      alert((err as Error)?.message || "Couldn't make the QR files. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handleDelete = async (clamp: ClampRow) => {
     setOpenMenuId(null);
     if (clamp.state !== "available") {
@@ -815,10 +925,9 @@ export default function QRManagement() {
 
     try {
       await deleteDoc(doc(db, "clamps", clamp.id));
-      console.log("Deleted:", clamp.clampId);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Delete failed:", err);
-      alert(err.message || "Failed to delete.");
+      alert((err as Error)?.message || "Failed to delete.");
     }
   };
 
@@ -846,13 +955,14 @@ export default function QRManagement() {
         type: "clamp-damage",
         metadata: { clampId: clamp.clampId, reason: reason.trim() },
         timestamp: serverTimestamp(),
+        ipAddress: clientIp(),
       });
 
       await batch.commit();
       alert(`✅ ${clamp.clampId} marked as damaged.`);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Damage report failed:", err);
-      alert(err.message || "Failed to report damage.");
+      alert((err as Error)?.message || "Failed to report damage.");
     }
   };
 
@@ -880,13 +990,14 @@ export default function QRManagement() {
         type: "clamp-lost",
         metadata: { clampId: clamp.clampId, lastSeen: location.trim() },
         timestamp: serverTimestamp(),
+        ipAddress: clientIp(),
       });
 
       await batch.commit();
       alert(`⚠️ ${clamp.clampId} marked as lost.`);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Lost report failed:", err);
-      alert(err.message || "Failed to report lost clamp.");
+      alert((err as Error)?.message || "Failed to report lost clamp.");
     }
   };
 
@@ -914,13 +1025,14 @@ export default function QRManagement() {
         type: "clamp-assignment",
         metadata: { clampId: clamp.clampId, teamName: teamName.trim() },
         timestamp: serverTimestamp(),
+        ipAddress: clientIp(),
       });
 
       await batch.commit();
       alert(`✅ ${clamp.clampId} assigned to ${teamName.trim()}.`);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Assignment failed:", err);
-      alert(err.message || "Failed to assign clamp.");
+      alert((err as Error)?.message || "Failed to assign clamp.");
     }
   };
 
@@ -955,6 +1067,8 @@ export default function QRManagement() {
         color: data.color ?? null,
         violationType: data.violationType ?? "—",
         fineAmount: Number(data.fineAmount ?? 0),
+        overdueFee: overdueFeeFor(data),
+        amountDue: amountDueFor(data),
         convenienceFee: data.convenienceFee != null ? Number(data.convenienceFee) : null,
         totalPaid: data.totalPaid != null ? Number(data.totalPaid) : null,
         referenceNumber: data.referenceNumber ?? null,
@@ -970,9 +1084,9 @@ export default function QRManagement() {
       };
 
       setViewingViolation(details);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error fetching violation:", err);
-      alert(err.message || "Failed to fetch violation details.");
+      alert((err as Error)?.message || "Failed to fetch violation details.");
     } finally {
       setIsLoadingViolation(false);
     }
@@ -989,42 +1103,11 @@ export default function QRManagement() {
     <div className="it-admin-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">IT Admin</p>
-            </div>
-          </div>
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div className="nav-group" key={group.title}>
-                <p className="nav-group-title">{group.title}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => {
-                    const IconComponent = item.icon;
-                    return (
-                      <li key={item.label}>
-                        <button
-                          type="button"
-                          className={`nav-item${item.active ? " active" : ""}`}
-                          onClick={() => navigate(item.path)}
-                        >
-                          <IconComponent size={16} className="nav-icon-svg" />
-                          <span>{item.label}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>IT Admin</>} />
 
         {/* MAIN CONTENT */}
         <main className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>QR Code Management</h1>
@@ -1038,31 +1121,6 @@ export default function QRManagement() {
             </div>
 
             <div className="header-right">
-              <div className="avatar-container" ref={dropdownRef}>
-                <img
-                  src={avatarImg}
-                  alt="Account menu"
-                  className="avatar-img"
-                  onClick={() => setIsMenuOpen(!isMenuOpen)}
-                />
-
-                {isMenuOpen && (
-                  <div className="profile-dropdown" role="menu">
-                    <div className="dropdown-header">
-                      <p className="dropdown-name">{currentUser.name}</p>
-                      <p className="dropdown-role">{ROLE_LABELS[currentUser.role]}</p>
-                    </div>
-                    <button type="button" className="dropdown-item" onClick={handleChangePassword}>
-                      <img src={keyIcon} alt="" className="dropdown-icon" />
-                      <span>Change Password</span>
-                    </button>
-                    <button type="button" className="dropdown-item logout" onClick={handleLogout}>
-                      <img src={logoutIcon} alt="" className="dropdown-icon" />
-                      <span>Log Out</span>
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           </header>
 
@@ -1086,6 +1144,30 @@ export default function QRManagement() {
                   disabled={isRepairing}
                 >
                   {isRepairing ? "Syncing..." : "Sync states"}
+                </button>
+              </div>
+            )}
+
+            {/* WRONG CAR / MOTORCYCLE TYPE (saved before the fix) */}
+            {!loading && wrongTypeClamps.length > 0 && (
+              <div className="desync-banner">
+                <AlertTriangle size={18} className="desync-icon" />
+                <div className="desync-text">
+                  <p className="desync-title">
+                    {wrongTypeClamps.length} clamp(s) have the wrong Car / Motorcycle type saved
+                  </p>
+                  <p className="desync-sub">
+                    Letters (A-20) are Car clamps and numbers (20-04) are Motorcycle clamps. The list
+                    already shows the right type; fix the saved one so the enforcer app shows it too.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void handleFixTypes()}
+                  disabled={isFixingTypes}
+                >
+                  {isFixingTypes ? "Fixing..." : "Fix types"}
                 </button>
               </div>
             )}
@@ -1152,6 +1234,7 @@ export default function QRManagement() {
                 </div>
 
                 <select
+                  aria-label="Filter by status"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                   className="qr-filter-select"
@@ -1164,6 +1247,7 @@ export default function QRManagement() {
                 </select>
 
                 <select
+                  aria-label="Filter by clamp type"
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value)}
                   className="qr-filter-select"
@@ -1176,6 +1260,7 @@ export default function QRManagement() {
                 </select>
 
                 <select
+                  aria-label="Filter by condition"
                   value={conditionFilter}
                   onChange={(e) => setConditionFilter(e.target.value)}
                   className="qr-filter-select"
@@ -1190,6 +1275,18 @@ export default function QRManagement() {
                 </select>
               </div>
 
+              <div className="qr-toolbar-actions">
+              <ImpoundDeskQR userName={currentUser.name} />
+              <button
+                type="button"
+                className="btn-engrave"
+                onClick={handleDownloadAllSvg}
+                disabled={isExporting || loading}
+                title={`Choose clamps and download their SVGs (${TAG_SIZE_IN} in tag) for laser engraving`}
+              >
+                <Download size={18} />
+                <span>Download SVGs</span>
+              </button>
               <button
                 type="button"
                 className="btn-generate"
@@ -1198,6 +1295,7 @@ export default function QRManagement() {
                 <Plus size={18} />
                 <span>Register QR</span>
               </button>
+              </div>
             </div>
 
             {/* TABLE */}
@@ -1217,7 +1315,7 @@ export default function QRManagement() {
                   </p>
                 </div>
               ) : (
-                <div className="table-wrapper">
+                <div className="table-wrapper" tabIndex={0} role="region" aria-label="Data table" data-scroll-region>
                   <table className="data-table">
                     <thead>
                       <tr>
@@ -1363,6 +1461,15 @@ export default function QRManagement() {
                                     <span>Print QR</span>
                                   </button>
 
+                                  <button
+                                    type="button"
+                                    className="row-menu-item"
+                                    onClick={() => void handleDownloadSvg(row)}
+                                  >
+                                    <Download size={14} />
+                                    <span>Download SVG (engraving)</span>
+                                  </button>
+
                                   <div className="row-menu-divider" />
 
                                   <button
@@ -1389,6 +1496,16 @@ export default function QRManagement() {
         </main>
       </div>
 
+      {/* LASER ENGRAVING: choose clamps → ZIP of SVGs */}
+      {isPickerOpen && (
+        <EngravePicker
+          clamps={filteredRows}
+          busy={isExporting}
+          onCancel={() => setIsPickerOpen(false)}
+          onDownload={(picked) => void exportSvgs(picked)}
+        />
+      )}
+
       {/* REGISTER QR MODAL */}
       {isGenerateOpen && (
         <div className="modal-overlay" onClick={handleCloseGenerate}>
@@ -1397,7 +1514,7 @@ export default function QRManagement() {
               <h3 className="modal-title">
                 {generatedQrs.length > 0 ? "QR Code Registered" : "Register Clamp QR"}
               </h3>
-              <button className="modal-close-btn" onClick={handleCloseGenerate}>
+              <button aria-label="Close" className="modal-close-btn" onClick={handleCloseGenerate}>
                 <X size={20} />
               </button>
             </div>
@@ -1489,6 +1606,13 @@ export default function QRManagement() {
                     Close
                   </button>
                   <button
+                    className="btn-secondary"
+                    onClick={() => void handleDownloadSvg(generatedQrs[0])}
+                  >
+                    <Download size={16} />
+                    <span>Download SVG</span>
+                  </button>
+                  <button
                     className="btn-primary"
                     onClick={() => handlePrintSingle(generatedQrs[0])}
                   >
@@ -1510,7 +1634,7 @@ export default function QRManagement() {
               <h3 className="modal-title">
                 Violation Details — {viewingViolation.cin}
               </h3>
-              <button className="modal-close-btn" onClick={handleCloseViolationModal}>
+              <button aria-label="Close" className="modal-close-btn" onClick={handleCloseViolationModal}>
                 <X size={20} />
               </button>
             </div>
@@ -1589,9 +1713,17 @@ export default function QRManagement() {
                   <p>{viewingViolation.location}</p>
                 </div>
                 <div className="violation-item">
-                  <label>Fine Amount</label>
+                  <label>
+                    {viewingViolation.overdueFee > 0
+                      ? "Overdue Clamp Fee (past 24 hrs)"
+                      : "Fine Amount"}
+                  </label>
                   <p className="violation-amount">
-                    {formatCurrency(viewingViolation.fineAmount)}
+                    {formatCurrency(
+                      viewingViolation.overdueFee > 0
+                        ? viewingViolation.overdueFee
+                        : viewingViolation.fineAmount
+                    )}
                   </p>
                 </div>
                 {viewingViolation.convenienceFee !== null && (
@@ -1651,4 +1783,4 @@ export default function QRManagement() {
       )}
     </div>
   );
-}
+}

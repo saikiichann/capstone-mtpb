@@ -1,16 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import {
-  KeyRound,
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
   X,
   Building2,
   Landmark,
-  Smartphone,
-} from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+  Smartphone } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
   collection,
@@ -23,8 +20,12 @@ import {
   where,
   writeBatch,
   Timestamp,
+  type DocumentData
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { isImpoundViolation } from "../../lib/impoundFlag";
+import { releaseImpoundAfterVerification } from "../../lib/onsitePayment";
+import { useRegisteredOwners } from "../../lib/registeredOwners";
 import {
   PAYMENT_LOCATION_LABELS,
   PAYMENT_LOCATION_OPTIONS,
@@ -33,9 +34,6 @@ import {
 } from "../../lib/paymentLocation";
 import "./PaymentVerification.css";
 
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
 
 import overviewIcon from "../../assets/overview.png";
 import sectorAnalyticsIcon from "../../assets/sectoranalytics.png";
@@ -50,10 +48,11 @@ import revenueIcon from "../../assets/revenue.png";
 import releaseRequestIcon from "../../assets/releaserequest.png";
 import queueIcon from "../../assets/queue.png";
 import releaseLogIcon from "../../assets/releaselog.png";
-import clampingTeamsIcon from "../../assets/clampingteams.png";
-import towTruckIcon from "../../assets/tow-truck.png";
 import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
+import { clientIp } from "../../lib/staffSession";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -176,8 +175,6 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { label: "Active Clamping Teams", icon: clampingTeamsIcon, path: "/dashboard/clamping-teams" },
-      { label: "Active Impounding", icon: towTruckIcon, path: "/dashboard/active-impounding" },
       { label: "Field Updates", icon: fieldUpdateIcon, path: "/dashboard/field-updates" },
       { label: "Operation Scheduler", icon: operationSchedulerIcon, path: "/dashboard/operation-scheduler" },
     ],
@@ -232,7 +229,7 @@ const getWaitingClass = (band: WaitingBand): string => {
 };
 
 /** GCash → "Online"; cash → City Hall / Central (tingnan ang lib/paymentLocation) */
-const deriveLocation = (data: any): PaymentLocation =>
+const deriveLocation = (data: DocumentData): PaymentLocation =>
   derivePaymentLocation(data.method, data.paymentLocation ?? data.location);
 
 const getLocationClass = (location: PaymentLocation): string => {
@@ -268,16 +265,15 @@ const violatorLabel = (row: PaymentRow): string => {
    COMPONENT
 ------------------------------------------------------------------ */
 export default function PaymentVerification() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "oic",
   });
 
-  const [rows, setRows] = useState<PaymentRow[]>([]);
+  const [rawRows, setRows] = useState<PaymentRow[]>([]);
+  /** Guest → Registered kapag naka-register (active) ang plate sa violator app */
+  const rows = useRegisteredOwners(rawRows);
   const [metrics, setMetrics] = useState<Metrics>({
     pendingReview: 0,
     approvedToday: 0,
@@ -492,35 +488,6 @@ export default function PaymentVerification() {
     return () => unsubscribe();
   }, []);
 
-  /* Click outside */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    }
-  };
-
   const navGroups = useMemo(
     () =>
       NAV_GROUPS.filter(
@@ -543,7 +510,7 @@ export default function PaymentVerification() {
 
     try {
       let paymentId: string | null = null;
-      let paymentDoc: any = null;
+      let paymentDoc: DocumentData | null = null;
 
       const urlMatch = text.match(/\/r\/([A-Za-z0-9_-]+)/);
       if (urlMatch) {
@@ -647,9 +614,9 @@ export default function PaymentVerification() {
       setScannedPayment(row);
       setScanInput("");
       setScanLoading(false);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Scan lookup failed:", err);
-      setScanError(err.message || "Failed to look up payment.");
+      setScanError((err as Error)?.message || "Failed to look up payment.");
       setScanInput("");
       setScanLoading(false);
       scanInputRef.current?.focus();
@@ -750,6 +717,7 @@ export default function PaymentVerification() {
             paymentLocation: row.paymentLocation,
           },
           timestamp: serverTimestamp(),
+          ipAddress: clientIp(),
         });
       } catch (logErr) {
         console.warn("Failed to log segregation violation attempt:", logErr);
@@ -834,6 +802,15 @@ export default function PaymentVerification() {
         return;
       }
 
+      // Impound: verified = released right away (no Release Request / Queue).
+      let violationData: Record<string, unknown> = {};
+      try {
+        violationData = (await getDoc(violationRef)).data() ?? {};
+      } catch (err) {
+        console.warn("Violation not read:", err);
+      }
+      const releaseImpound = action === "Verified" && isImpoundViolation(violationData);
+
       let resolvedClampId: string | null = row.clampId;
 
       if (!resolvedClampId) {
@@ -886,7 +863,7 @@ export default function PaymentVerification() {
               totalPaid: row.amount,
               paidAt: row.paidAt ?? serverTimestamp(),
               paymentLocation: row.paymentLocation,
-              releaseStatus: "Awaiting OIC Approval",
+              ...(releaseImpound ? {} : { releaseStatus: "Awaiting OIC Approval" }),
             }
           : {}),
         ...(action === "Rejected"
@@ -944,16 +921,39 @@ export default function PaymentVerification() {
           ...(rejectionReason ? { rejectionReason } : {}),
         },
         timestamp: serverTimestamp(),
+        ipAddress: clientIp(),
       });
 
       await batch.commit();
 
+      if (releaseImpound) {
+        try {
+          await releaseImpoundAfterVerification({
+            violationId: violationRef.id,
+            cin: row.cin ?? String(violationData.cin ?? ""),
+            plateNo: row.plateNo ?? String(violationData.plateNo ?? ""),
+            uovrNo: (violationData.uovrNo as string) ?? null,
+            location: (violationData.location as string) ?? null,
+            totalPaid: row.amount,
+            referenceNumber: row.reference,
+            orNumber: row.orNumber,
+            officerName: currentUser.name,
+            role: "oic",
+          });
+        } catch (releaseErr) {
+          console.error("Impound release after verification failed:", releaseErr);
+          alert(
+            "The payment was verified, but the impounded vehicle couldn't be marked released. Please try again or check the Firestore rules."
+          );
+        }
+      }
+
       if (scannedPayment?.id === row.id) {
         clearScan();
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error updating payment:", err);
-      alert(err.message || "Failed to update payment.");
+      alert((err as Error)?.message || "Failed to update payment.");
     } finally {
       setActioning(null);
     }
@@ -965,9 +965,13 @@ export default function PaymentVerification() {
     return rows.filter((r) => r.paymentLocation === locationFilter);
   }, [rows, locationFilter]);
 
-  useEffect(() => {
+  // Back to page 1 when these change (during render, not in an effect)
+  const pageResetKey = JSON.stringify([locationFilter]);
+  const [prevPageResetKey, setPrevPageResetKey] = useState(pageResetKey);
+  if (pageResetKey !== prevPageResetKey) {
+    setPrevPageResetKey(pageResetKey);
     setCurrentPage(1);
-  }, [locationFilter]);
+  }
 
   const metricCards = [
     { title: "Pending Review", value: String(metrics.pendingReview) },
@@ -990,48 +994,18 @@ export default function PaymentVerification() {
     startIndex + ITEMS_PER_PAGE
   );
 
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+  // Keep the page valid if the list shrinks (during render)
+  if (currentPage > totalPages) setCurrentPage(totalPages);
 
   return (
     <div className="oic-page payment-verification-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">{ROLE_LABELS[currentUser.role]}</p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${item.active ? "nav-item-active" : ""}`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        <span>{item.label}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>{ROLE_LABELS[currentUser.role]}</>} />
 
         {/* MAIN CONTENT */}
         <div className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>Payment Verification</h1>
@@ -1044,31 +1018,6 @@ export default function PaymentVerification() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={avatarImg}
-                alt="Account menu"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">{ROLE_LABELS[currentUser.role]}</p>
-                  </div>
-                  <button className="dropdown-item">
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button className="dropdown-item logout" onClick={handleLogout}>
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
@@ -1240,6 +1189,7 @@ export default function PaymentVerification() {
                 </div>
 
                 <select
+                  aria-label="Filter by payment location"
                   value={locationFilter}
                   onChange={(e) =>
                     setLocationFilter(
@@ -1272,7 +1222,7 @@ export default function PaymentVerification() {
                 </div>
               ) : (
                 <>
-                  <div className="table-wrapper">
+                  <div className="table-wrapper" tabIndex={0} role="region" aria-label="Data table" data-scroll-region>
                     <table className="data-table">
                       <thead>
                         <tr>
@@ -1465,4 +1415,4 @@ export default function PaymentVerification() {
       </div>
     </div>
   );
-}
+}

@@ -1,0 +1,229 @@
+/* ==================================================================
+   GeospatialHeatmap.css
+   Page-specific styles, scoped to .geo-page.
+
+   The shared OIC layout (sidebar, header, avatar dropdown, .card,
+   .card-title) comes from the existing OIC stylesheets, the same way
+   ReleaseRequests.css does.
+================================================================== */
+
+/* ==================================================================
+   MAP
+   position + z-index creates a stacking context, so Leaflet's own
+   high z-index panes and controls cannot cover the profile dropdown.
+================================================================== */
+.geo-page .geo-map-wrapper {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  height: 300px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  background: #E5E7EB;
+}
+
+.geo-page .map-popup {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #111827;
+}
+
+.geo-page .map-popup-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.geo-page .map-popup-muted {
+  color: #6B7280;
+  font-size: 12px;
+}
+
+/* ==================================================================
+   TWO-CARD ROW
+================================================================== */
+.geo-page .geo-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  width: 100%;
+}
+
+.geo-page .geo-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+}
+
+.geo-page .geo-card .card-title {
+  margin: 0 0 20px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+}
+
+.geo-page .geo-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 12px;
+  color: #6B7280;
+  font-size: 14px;
+  text-align: center;
+}
+
+.geo-page .geo-empty p {
+  margin: 0;
+}
+
+.geo-page .geo-note {
+  margin: auto 0 0;
+  padding-top: 16px;
+  font-size: 12px;
+  color: #6B7280;
+}
+
+/* ==================================================================
+   DENSITY TILES
+================================================================== */
+.geo-page .density-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 114px);
+  justify-content: center;
+  gap: 16px 30px;
+  margin-bottom: 20px;
+}
+
+.geo-page .density-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 98px;
+  padding: 8px;
+  border-radius: 8px;
+  color: #FFFFFF;
+  text-align: center;
+}
+
+.geo-page .density-tile-name {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.geo-page .density-tile-value {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Same hues as densityColor() in the component: green → yellow → red */
+.geo-page .density-scale {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 14px;
+  color: #111827;
+}
+
+.geo-page .density-scale-bar {
+  width: 240px;
+  max-width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    hsl(120, 100%, 42%),
+    hsl(60, 100%, 42%),
+    hsl(0, 100%, 42%)
+  );
+}
+
+/* ==================================================================
+   HOTSPOT LIST
+================================================================== */
+.geo-page .hotspot-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.geo-page .hotspot-item {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 0;
+  border-top: 1px solid #D1D5DB;
+}
+
+.geo-page .hotspot-item:first-child {
+  border-top: 0;
+}
+
+.geo-page .hotspot-pill {
+  display: inline-block;
+  flex-shrink: 0;
+  min-width: 118px;
+  padding: 5px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.geo-page .hotspot-pill-red {
+  background: #FCA5A5;
+  border-color: #EF4444;
+  color: #7F1D1D;
+}
+
+.geo-page .hotspot-pill-yellow {
+  background: #FEF08A;
+  border-color: #EAB308;
+  color: #854D0E;
+}
+
+.geo-page .hotspot-pill-blue {
+  background: #BFDBFE;
+  border-color: #3B82F6;
+  color: #1E3A8A;
+}
+
+.geo-page .hotspot-location {
+  font-size: 15px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.geo-page .hotspot-type {
+  margin-top: 2px;
+  font-size: 12px;
+  font-style: italic;
+  color: #374151;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .geo-page .geo-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .geo-page .geo-map-wrapper {
+    height: 240px;
+  }
+
+  .geo-page .hotspot-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}

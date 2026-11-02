@@ -1,12 +1,10 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
 import {
-  KeyRound,
   Search,
   ChevronLeft,
   ChevronRight,
-} from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+  PanelRightOpen } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
@@ -17,11 +15,11 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { useRegisteredOwners } from "../../lib/registeredOwners";
+import { locationDetailsOf, type LocationDetails } from "../../lib/locationDetails";
+import ReleaseDetailsDrawer from "../../components/ReleaseDetailsDrawer";
 import "./ReleaseLog.css";
 
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
 
 import overviewIcon from "../../assets/overview.png";
 import sectorAnalyticsIcon from "../../assets/sectoranalytics.png";
@@ -36,10 +34,10 @@ import revenueIcon from "../../assets/revenue.png";
 import releaseRequestIcon from "../../assets/releaserequest.png";
 import queueIcon from "../../assets/queue.png";
 import releaseLogIcon from "../../assets/releaselog.png";
-import clampingTeamsIcon from "../../assets/clampingteams.png";
-import towTruckIcon from "../../assets/tow-truck.png";
 import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -62,6 +60,8 @@ type ReleaseLogRow = {
   plateNo: string;
   clearedBy: string;
   location: string;
+  /** District, barangay and exact spot (lib/locationDetails.ts) */
+  details: LocationDetails;
   releasedAt: Timestamp | null;
   finePaid: number | null;
   // ⚠️ ADDED: violator identity fields
@@ -168,16 +168,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Operations",
     items: [
       {
-        label: "Active Clamping Teams",
-        icon: clampingTeamsIcon,
-        path: "/dashboard/clamping-teams",
-      },
-      {
-        label: "Active Impounding",
-        icon: towTruckIcon,
-        path: "/dashboard/active-impounding",
-      },
-      {
         label: "Field Updates",
         icon: fieldUpdateIcon,
         path: "/dashboard/field-updates",
@@ -237,18 +227,20 @@ const isToday = (ts: Timestamp | null): boolean => {
    COMPONENT
 ------------------------------------------------------------------ */
 export default function ReleaseLog() {
-  const navigate = useNavigate();
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "oic",
   });
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const [rows, setRows] = useState<ReleaseLogRow[]>([]);
+  const [rawRows, setRows] = useState<ReleaseLogRow[]>([]);
+  /** Guest → Registered kapag naka-register (active) ang plate sa violator app */
+  const rows = useRegisteredOwners(rawRows);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [districtFilter, setDistrictFilter] = useState("All Districts");
+  /** The record open in the Release Details window (read-only) */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
   /* Current user */
@@ -310,6 +302,7 @@ export default function ReleaseLog() {
               plateNo: data.plateNo ?? "—",
               clearedBy: data.releasedBy ?? data.updatedBy ?? "—",
               location: data.location ?? "—",
+              details: locationDetailsOf(data),
               releasedAt: (data.releasedAt as Timestamp) ?? null,
               finePaid:
                 typeof data.totalPaid === "number"
@@ -336,35 +329,6 @@ export default function ReleaseLog() {
     return () => unsubscribe();
   }, []);
 
-  /* Click outside */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/", { replace: true });
-    }
-  };
-
   /** Supervisors see the same pages as the OIC, minus Payment/Finance. */
   const navGroups = useMemo(
     () =>
@@ -375,19 +339,33 @@ export default function ReleaseLog() {
     [currentUser.role]
   );
 
+  const districtOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(rows.map((r) => r.details.district).filter((d): d is string => !!d))
+      ).sort(),
+    [rows]
+  );
+
   const filteredRows = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return rows;
-    return rows.filter(
-      (row) =>
+    return rows.filter((row) => {
+      if (districtFilter !== "All Districts" && row.details.district !== districtFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
         row.orderId.toLowerCase().includes(q) ||
         row.plateNo.toLowerCase().includes(q) ||
         row.clearedBy.toLowerCase().includes(q) ||
         row.location.toLowerCase().includes(q) ||
+        row.details.exact.toLowerCase().includes(q) ||
+        (row.details.barangay ?? "").toLowerCase().includes(q) ||
         // ⚠️ ADDED: search by violator name
         (row.violatorName?.toLowerCase().includes(q) ?? false)
-    );
-  }, [rows, searchQuery]);
+      );
+    });
+  }, [rows, searchQuery, districtFilter]);
 
   /**
    * Actually filtered to today's date — the old mock just showed
@@ -404,52 +382,23 @@ export default function ReleaseLog() {
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
   const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  useEffect(() => {
+  // Back to page 1 when these change (during render, not in an effect)
+  const pageResetKey = JSON.stringify([searchQuery, districtFilter]);
+  const [prevPageResetKey, setPrevPageResetKey] = useState(pageResetKey);
+  if (pageResetKey !== prevPageResetKey) {
+    setPrevPageResetKey(pageResetKey);
     setCurrentPage(1);
-  }, [searchQuery]);
+  }
 
   return (
     <div className="oic-page release-log-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">
-                {ROLE_LABELS[currentUser.role]}
-              </p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        <span>{item.label}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>{ROLE_LABELS[currentUser.role]}</>} />
 
         {/* MAIN */}
         <div className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>Release Log</h1>
@@ -462,48 +411,34 @@ export default function ReleaseLog() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={avatarImg}
-                alt="Account menu"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button className="dropdown-item">
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
-            {/* SEARCH */}
-            <div className="search-bar-container">
-              <Search size={18} className="search-bar-icon" />
-              <input
-                type="text"
-                className="search-bar-input"
-                placeholder="Search Order ID, Plate No., Violator..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            {/* SEARCH + DISTRICT FILTER */}
+            <div className="search-with-filter">
+              <div className="search-bar-container">
+                <Search size={18} className="search-bar-icon" />
+                <input
+                  type="text"
+                  className="search-bar-input"
+                  placeholder="Search Order ID, Plate No., Violator, street..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <select
+                className="district-filter"
+                value={districtFilter}
+                onChange={(e) => setDistrictFilter(e.target.value)}
+                aria-label="Filter by district"
+              >
+                <option value="All Districts">All Districts</option>
+                {districtOptions.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* TABLE */}
@@ -526,7 +461,7 @@ export default function ReleaseLog() {
                 <div className="release-log-empty">
                   {rows.length === 0
                     ? "No released vehicles yet."
-                    : "No released vehicles match your search."}
+                    : "No released vehicles match your search or district."}
                 </div>
               ) : (
                 <div className="release-log-table-wrap">
@@ -537,14 +472,15 @@ export default function ReleaseLog() {
                         <th>Plate No.</th>
                         <th>Violator</th>{/* ⚠️ ADDED */}
                         <th>Cleared by</th>
-                        <th>Location</th>
+                        <th>District</th>
                         <th>Date &amp; Time</th>
                         <th>Total Fine Paid</th>
+                        <th>Details</th>
                       </tr>
                     </thead>
                     <tbody>
                       {paginatedRows.map((row) => (
-                        <tr key={row.id}>
+                        <tr key={row.id} className="rd-row" onClick={() => setSelectedId(row.id)}>
                           <td className="cell-order-id">{row.orderId}</td>
                           <td className="cell-plate">{row.plateNo}</td>
 
@@ -581,12 +517,34 @@ export default function ReleaseLog() {
                           {/* End */}
 
                           <td className="cell-cleared-by">{row.clearedBy}</td>
-                          <td className="cell-location">{row.location}</td>
+                          <td className="cell-district">
+                            {row.details.district ? (
+                              <span className="district-pill">{row.details.district}</span>
+                            ) : (
+                              "—"
+                            )}
+                            {row.details.barangay && (
+                              <span className="cell-barangay">{row.details.barangay}</span>
+                            )}
+                          </td>
                           <td className="cell-time">
                             {formatDateTime(row.releasedAt)}
                           </td>
                           <td className="cell-fine">
                             {formatCurrency(row.finePaid)}
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="rd-view-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedId(row.id);
+                              }}
+                            >
+                              <PanelRightOpen size={15} />
+                              View
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -630,6 +588,9 @@ export default function ReleaseLog() {
           </main>
         </div>
       </div>
+      {selectedId && (
+        <ReleaseDetailsDrawer violationId={selectedId} onClose={() => setSelectedId(null)} />
+      )}
     </div>
   );
-}
+}

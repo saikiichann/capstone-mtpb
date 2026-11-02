@@ -227,3 +227,206 @@
     gap: 8px;
   }
 }
+/* ==================================================================
+   HEAT ZONES LEGEND (bottom-left of the map)
+================================================================== */
+.geo-page .heat-legend {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 1000;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  font-size: 11px;
+  color: #111827;
+  pointer-events: none;
+}
+
+.geo-page .heat-legend-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.geo-page .heat-legend-row {
+  display: flex;
+  gap: 10px;
+}
+
+.geo-page .heat-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.geo-page .heat-legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  opacity: 0.85;
+}
+
+.geo-page .heat-legend-note {
+  margin-top: 4px;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+/* ==================================================================
+   CLICKABLE MAP (Oct 2026)
+   Density tiles and hotspot rows are buttons: clicking one flies the
+   map to that area, draws a blue ring, and opens its popup.
+================================================================== */
+.geo-page .geo-click-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 14px;
+  font-size: 12.5px;
+  color: #6B7280;
+}
+
+.geo-page .density-tile-btn {
+  position: relative;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.geo-page .density-tile-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px -6px rgba(16, 24, 40, 0.35);
+  filter: brightness(1.05);
+}
+
+.geo-page .density-tile-btn:focus-visible,
+.geo-page .hotspot-item-btn:focus-visible,
+.geo-page .map-popup-link:focus-visible {
+  outline: 3px solid #1D4ED8;
+  outline-offset: 2px;
+}
+
+.geo-page .density-tile-go {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0.85;
+}
+
+.geo-page .hotspot-item-btn {
+  width: 100%;
+  margin: 0;
+  padding: 14px 10px;
+  border: 0;
+  border-top: 1px solid #D1D5DB;
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.geo-page .hotspot-item-btn:first-child {
+  border-top: 0;
+}
+
+.geo-page .hotspot-item-btn:hover {
+  background: #F3F6FF;
+  border-radius: 10px;
+}
+
+.geo-page .hotspot-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.geo-page .hotspot-go {
+  flex: none;
+  color: #9CA3AF;
+}
+
+.geo-page .hotspot-item-btn:hover .hotspot-go {
+  color: #1D4ED8;
+}
+
+.geo-page .map-popup-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.geo-page .map-popup-hot {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #FEE2E2;
+  color: #B91C1C;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.geo-page .map-popup-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px solid #BFDBFE;
+  border-radius: 8px;
+  background: #EFF6FF;
+  color: #1D4ED8;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.geo-page .map-popup-link:hover {
+  background: #DBEAFE;
+}
+
+.geo-page .geo-tooltip-hint {
+  color: #6B7280;
+  font-size: 11px;
+}
+
+/* While a popup is open, hide the hover tooltip under it, and drop the
+   square focus box the browser draws around a clicked zone. */
+.geo-page .geo-map-wrapper:has(.leaflet-popup) .leaflet-tooltip {
+  display: none;
+}
+
+.geo-page path.leaflet-interactive:focus {
+  outline: none;
+}
+
+/* Heat zones open a popup on click. */
+.geo-page .leaflet-interactive {
+  cursor: pointer;
+}
+
+/* Blue ring that pulses where the map landed, then fades. */
+.geo-page .geo-focus-ring {
+  animation: geo-focus-pulse 1s ease-out 3;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes geo-focus-pulse {
+  0% { opacity: 1; stroke-width: 6px; }
+  100% { opacity: 0.15; stroke-width: 2px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geo-page .geo-focus-ring { animation: none; }
+  .geo-page .density-tile-btn,
+  .geo-page .density-tile-btn:hover { transition: none; transform: none; }
+}

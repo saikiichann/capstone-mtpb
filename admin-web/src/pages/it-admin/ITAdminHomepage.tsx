@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Activity,
@@ -14,26 +13,28 @@ import {
   WifiOff,
   QrCode,
 } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
+import { Link } from "react-router-dom";
 import {
   collection,
   doc,
   getDoc,
+  getCountFromServer,
   getDocs,
   onSnapshot,
   orderBy,
   query,
   limit,
+  where,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import { supabase, SUPABASE_BUCKET } from "../../supabase";
+import { recordChecks, runChecks, SERVICES } from "../../lib/systemMonitor";
 import "./ITAdminHomepage.css";
 
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
-import keyIcon from "../../assets/key.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -56,13 +57,6 @@ type ServiceStatus = {
   status: string;
   tone: "online" | "scheduled" | "offline";
   latency?: number;
-};
-
-type UsageBar = {
-  label: string;
-  value: string;
-  percent: number;
-  tone: "blue" | "green";
 };
 
 type RoleSlug =
@@ -104,16 +98,6 @@ const SUPABASE_FREE_TIER_BYTES = 1024 * 1024 * 1024;
 /* ------------------------------------------------------------------
    ROLE MAP
 ------------------------------------------------------------------ */
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer-in-Charge",
-  "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  "finance": "Finance",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
 /* ------------------------------------------------------------------
    NAVIGATION
@@ -162,19 +146,6 @@ const navGroups: NavGroup[] = [
 ];
 
 /* ------------------------------------------------------------------
-   STATIC DATA
------------------------------------------------------------------- */
-const ramUsage: UsageBar[] = [
-  { label: "In use (apps + system)", value: "9.4 GB", percent: 59, tone: "blue" },
-  { label: "Available", value: "6.4 GB", percent: 41, tone: "green" },
-];
-
-const diskUsage: UsageBar[] = [
-  { label: "Used", value: "94 GB", percent: 8, tone: "blue" },
-  { label: "Free", value: "~1.04 TB", percent: 92, tone: "green" },
-];
-
-/* ------------------------------------------------------------------
    HELPERS
 ------------------------------------------------------------------ */
 const formatRelativeTime = (ts: Timestamp | null): string => {
@@ -199,13 +170,6 @@ const isToday = (ts: Timestamp | null): boolean => {
   return date.toDateString() === now.toDateString();
 };
 
-const statusToTone = (status: string): "online" | "scheduled" | "offline" => {
-  const s = status.toLowerCase();
-  if (s === "online" || s === "active" || s === "up") return "online";
-  if (s === "scheduled" || s === "pending" || s === "maintenance") return "scheduled";
-  return "offline";
-};
-
 // Format bytes into a human-readable string (B, KB, MB, GB, TB)
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return "0 B";
@@ -218,82 +182,6 @@ const formatBytes = (bytes: number): string => {
 /* ------------------------------------------------------------------
    HEALTH CHECK FUNCTIONS
 ------------------------------------------------------------------ */
-
-// Verify Firestore availability by reading a single document.
-const pingFirestore = async (): Promise<{ ok: boolean; latency: number }> => {
-  const start = performance.now();
-  try {
-    await getDocs(query(collection(db, "users"), limit(1)));
-    const latency = Math.round(performance.now() - start);
-    console.log(`Firestore ping OK: ${latency}ms`);
-    return { ok: true, latency };
-  } catch (err: any) {
-    // Permission errors still indicate the service is reachable.
-    if (err.code === "permission-denied") {
-      console.log("Firestore ping OK (permission denied, service reachable)");
-      return { ok: true, latency: 0 };
-    }
-    console.error("Firestore ping failed:", err);
-    return { ok: false, latency: 0 };
-  }
-};
-
-// Verify Authentication availability by forcing an ID token refresh.
-// This performs an actual network call to the Firebase Auth server.
-const pingAuth = async (): Promise<{ ok: boolean; latency: number }> => {
-  const start = performance.now();
-  try {
-    const user = auth.currentUser;
-    if (!user) {
-      console.log("Auth check skipped: no active user session");
-      return { ok: false, latency: 0 };
-    }
-
-    // Force refresh triggers a real network request.
-    await user.getIdToken(true);
-
-    const latency = Math.round(performance.now() - start);
-    console.log(`Auth ping OK: ${latency}ms`);
-    return { ok: true, latency };
-  } catch (err) {
-    console.error("Auth ping failed:", err);
-    return { ok: false, latency: 0 };
-  }
-};
-
-// Verify Supabase Storage availability by listing files in the bucket.
-const pingStorage = async (): Promise<{ ok: boolean; latency: number }> => {
-  const start = performance.now();
-  try {
-    const { error } = await supabase.storage
-      .from(SUPABASE_BUCKET)
-      .list("", { limit: 1 });
-
-    const latency = Math.round(performance.now() - start);
-
-    if (error) {
-      const msg = error.message?.toLowerCase() ?? "";
-      // These errors indicate the service is reachable but access is restricted.
-      if (
-        msg.includes("not found") ||
-        msg.includes("permission") ||
-        msg.includes("unauthorized") ||
-        msg.includes("row-level security")
-      ) {
-        console.log(`Supabase Storage ping OK (${error.message})`);
-        return { ok: true, latency };
-      }
-      console.error("Supabase Storage ping failed:", error);
-      return { ok: false, latency: 0 };
-    }
-
-    console.log(`Supabase Storage ping OK: ${latency}ms`);
-    return { ok: true, latency };
-  } catch (err) {
-    console.error("Supabase Storage ping failed:", err);
-    return { ok: false, latency: 0 };
-  }
-};
 
 // Retrieve total storage usage by summing the size of all files in the bucket.
 const getStorageUsage = async (): Promise<{
@@ -318,15 +206,17 @@ const getStorageUsage = async (): Promise<{
       return { ok: false, bytes: 0, fileCount: 0, latency };
     }
 
-    const files = data ?? [];
+    // Profile photos (enforcer app) are in the "profiles" folder.
+    const { data: profileFiles } = await supabase.storage
+      .from(SUPABASE_BUCKET)
+      .list("profiles", { limit: 1000 });
+    const files = [...(data ?? []), ...(profileFiles ?? [])].filter(
+      (file) => (file.metadata as { size?: number } | null)?.size !== undefined
+    );
     const totalBytes = files.reduce((sum, file) => {
       const size = (file.metadata as { size?: number } | null)?.size ?? 0;
       return sum + size;
     }, 0);
-
-    console.log(
-      `Storage usage: ${files.length} files, ${formatBytes(totalBytes)}`
-    );
 
     return {
       ok: true,
@@ -345,23 +235,34 @@ const getStorageUsage = async (): Promise<{
 ------------------------------------------------------------------ */
 function getDefaultSystemStatus(): ServiceStatus[] {
   return [
-    { id: "firestore", name: "Firebase Firestore", status: "Online", tone: "online" },
-    { id: "auth", name: "Firebase Authentication", status: "Online", tone: "online" },
-    { id: "storage", name: "Supabase Storage", status: "Online", tone: "online" },
-    { id: "fcm", name: "FCM Notifications", status: "Online", tone: "online" },
-    { id: "backup", name: "Backup Service", status: "Scheduled", tone: "scheduled" },
+    ...SERVICES.map((s) => ({
+      id: s.id,
+      name: s.name,
+      status: "Checking…",
+      tone: "scheduled" as const,
+    })),
+    { id: "backup", name: "Backup Service", status: "Checking…", tone: "scheduled" },
   ];
 }
+
+/** Bars for the "Database records" card. */
+type RecordCount = { label: string; count: number };
+const RECORD_COLLECTIONS: { id: string; label: string }[] = [
+  { id: "violations", label: "Violations" },
+  { id: "payments", label: "Payments" },
+  { id: "impoundRecords", label: "Impound records" },
+  { id: "auditLogs", label: "Audit log entries" },
+  { id: "users", label: "Staff accounts" },
+];
+
+const isLocalhost = () => /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
 
 /* ------------------------------------------------------------------
    COMPONENT
 ------------------------------------------------------------------ */
 export default function ITAdminHomePage() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
+  const [, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "it-admin",
   });
@@ -383,7 +284,9 @@ export default function ITAdminHomePage() {
   const [isOnline, setIsOnline] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
-  const [uptime] = useState("84");
+  /** Uptime from the recorded health checks (healthChecks, last 30 days). */
+  const [uptime, setUptime] = useState({ value: "—", sub: "No checks recorded yet" });
+  const [records, setRecords] = useState<RecordCount[]>([]);
 
   // Storage usage state
   const [storageUsed, setStorageUsed] = useState("—");
@@ -452,28 +355,11 @@ export default function ITAdminHomePage() {
     let isMounted = true;
 
     const runHealthChecks = async () => {
-      console.log("Running health checks...");
-
-      const results = await Promise.allSettled([
-        pingFirestore(),
-        pingAuth(),
-        pingStorage(),
-      ]);
+      // Real checks (lib/systemMonitor.ts). Saved at most every 5 minutes.
+      const results = await runChecks();
+      void recordChecks(results);
 
       if (!isMounted) return;
-
-      const firestoreResult =
-        results[0].status === "fulfilled"
-          ? results[0].value
-          : { ok: false, latency: 0 };
-      const authResult =
-        results[1].status === "fulfilled"
-          ? results[1].value
-          : { ok: false, latency: 0 };
-      const storageResult =
-        results[2].status === "fulfilled"
-          ? results[2].value
-          : { ok: false, latency: 0 };
 
       // Fetch storage usage in parallel with status checks.
       const storageUsage = await getStorageUsage();
@@ -490,69 +376,43 @@ export default function ITAdminHomePage() {
         setStorageUsed(`${percent}%`);
       }
 
-      // Read optional FCM and backup status documents from Firestore.
-      let fcmStatus = "Online";
-      let backupStatus = "Scheduled";
+      // Backup: the latest entry in Backup History, if any.
+      let backupStatus = "Not set up";
       try {
-        const [fcmDoc, backupDoc] = await Promise.all([
-          getDoc(doc(db, "systemHealth", "fcm")),
-          getDoc(doc(db, "systemHealth", "backup")),
-        ]);
-        if (fcmDoc.exists()) fcmStatus = fcmDoc.data().status ?? "Online";
-        if (backupDoc.exists()) backupStatus = backupDoc.data().status ?? "Scheduled";
+        const recent = await getDocs(
+          query(collection(db, "backupHistory"), orderBy("timestamp", "desc"), limit(10))
+        );
+        const lastBackup = recent.docs.find((d) => d.data().type === "Manual backup");
+        const ts = lastBackup?.data().timestamp as Timestamp | undefined;
+        if (ts) backupStatus = `Last ${ts.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
       } catch {
-        // Ignore read errors; fallback values are used.
+        // can't read it: shown as not set up
       }
 
       if (!isMounted) return;
 
       const updatedStatuses: ServiceStatus[] = [
-        {
-          id: "firestore",
-          name: "Firebase Firestore",
-          status: firestoreResult.ok ? "Online" : "Offline",
-          tone: firestoreResult.ok ? "online" : "offline",
-          latency: firestoreResult.latency,
-        },
-        {
-          id: "auth",
-          name: "Firebase Authentication",
-          status: authResult.ok ? "Online" : "Offline",
-          tone: authResult.ok ? "online" : "offline",
-          latency: authResult.latency,
-        },
-        {
-          id: "storage",
-          name: "Supabase Storage",
-          status: storageResult.ok ? "Online" : "Offline",
-          tone: storageResult.ok ? "online" : "offline",
-          latency: storageResult.latency,
-        },
-        {
-          id: "fcm",
-          name: "FCM Notifications",
-          status: fcmStatus,
-          tone: statusToTone(fcmStatus),
-        },
+        ...results.map((r) => {
+          const localApi = r.id === "api" && isLocalhost();
+          return {
+            id: r.id,
+            name: r.name,
+            status: localApi ? "Live site only" : r.ok ? "Online" : "Offline",
+            tone: (localApi ? "scheduled" : r.ok ? "online" : "offline") as ServiceStatus["tone"],
+            latency: r.ms,
+          };
+        }),
         {
           id: "backup",
           name: "Backup Service",
           status: backupStatus,
-          tone: statusToTone(backupStatus),
+          tone: backupStatus.startsWith("Last") ? "online" : "scheduled",
         },
       ];
 
       setSystemStatus(updatedStatuses);
       setLastUpdate(new Date());
 
-      console.log("Health check complete:", {
-        firestore: firestoreResult.ok ? `${firestoreResult.latency}ms` : "OFFLINE",
-        auth: authResult.ok ? `${authResult.latency}ms` : "OFFLINE",
-        storage: storageResult.ok ? `${storageResult.latency}ms` : "OFFLINE",
-        storageUsage: storageUsage.ok
-          ? `${formatBytes(storageUsage.bytes)} (${storageUsage.fileCount} files)`
-          : "N/A",
-      });
     };
 
     runHealthChecks();
@@ -561,9 +421,92 @@ export default function ITAdminHomePage() {
     return () => {
       isMounted = false;
       clearInterval(intervalId);
-      console.log("Stopped health check interval");
     };
   }, [authReady]);
+
+  /* ================================================================
+     3b. UPTIME — share of recorded health checks that passed
+  ================================================================ */
+  useEffect(() => {
+    let isMounted = true;
+    const load = async () => {
+      const from = new Date(Date.now() - 29 * 86400000);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const fromKey = `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`;
+      try {
+        const snap = await getDocs(
+          query(collection(db, "healthChecks"), where("date", ">=", fromKey))
+        );
+        let checks = 0;
+        let ok = 0;
+        snap.docs.forEach((d) => {
+          checks += Number(d.data().checks ?? 0);
+          ok += Number(d.data().okChecks ?? 0);
+        });
+        if (!isMounted) return;
+        setUptime(
+          checks === 0
+            ? { value: "—", sub: "No checks recorded yet" }
+            : {
+                value: `${((ok / checks) * 100).toFixed(ok === checks ? 0 : 1)}%`,
+                sub: `Last 30 days · ${checks.toLocaleString("en-US")} checks`,
+              }
+        );
+      } catch (err) {
+        console.warn("Uptime not loaded:", err);
+      }
+    };
+    void load();
+    // Again shortly after opening, so this visit's own check is included.
+    const first = setTimeout(load, 15000);
+    const id = setInterval(load, 5 * 60 * 1000);
+    return () => {
+      isMounted = false;
+      clearTimeout(first);
+      clearInterval(id);
+    };
+  }, []);
+
+  /* ================================================================
+     3c. DATABASE RECORDS — real counts from Firestore
+  ================================================================ */
+  useEffect(() => {
+    let isMounted = true;
+    void Promise.all(
+      RECORD_COLLECTIONS.map(async (c) => {
+        try {
+          const snap = await getCountFromServer(collection(db, c.id));
+          return { label: c.label, count: snap.data().count };
+        } catch {
+          return { label: c.label, count: -1 };
+        }
+      })
+    ).then((rows) => {
+      if (isMounted) setRecords(rows);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  /* ================================================================
+     3d. ERROR EVENTS — errorLogs in the last 24 hours
+  ================================================================ */
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      query(collection(db, "errorLogs"), orderBy("timestamp", "desc"), limit(100)),
+      (snapshot) => {
+        const since = Date.now() - 86400000;
+        const count = snapshot.docs.filter((d) => {
+          const ts = d.data().timestamp as Timestamp | undefined;
+          return ts && ts.toMillis() >= since;
+        }).length;
+        setMetrics((prev) => ({ ...prev, errorEvents: count }));
+      },
+      (error) => console.warn("Error log count not loaded:", error)
+    );
+    return () => unsubscribe();
+  }, []);
 
   /* ================================================================
      4. USERS (real-time)
@@ -611,20 +554,10 @@ export default function ITAdminHomePage() {
         setAuditEvents(allEvents.slice(0, 4));
 
         const todayEvents = allEvents.filter((e) => isToday(e.timestamp));
-        const errorEvents = allEvents.filter(
-          (e) =>
-            e.action.toLowerCase().includes("error") ||
-            e.action.toLowerCase().includes("failed")
-        );
-        const failedLogins = allEvents.filter((e) =>
-          e.action.toLowerCase().includes("failed login")
-        );
 
         setMetrics((prev) => ({
           ...prev,
           auditEventsToday: todayEvents.length,
-          errorEvents: errorEvents.length,
-          failedLogins: failedLogins.length,
         }));
       },
       (error) => {
@@ -638,45 +571,9 @@ export default function ITAdminHomePage() {
   /* ================================================================
      6. CLICK-OUTSIDE AND ESCAPE HANDLERS
   ================================================================ */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
-    }
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setMenuOpen(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, []);
-
-  const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
-    setMenuOpen(false);
-  };
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setMenuOpen(false);
-      navigate("/");
-    }
-  };
 
   const metricCards = [
-    { label: "System Uptime", value: uptime, sub: "Last 30 days" },
+    { label: "System Uptime", value: uptime.value, sub: uptime.sub },
     {
       label: "Storage Used",
       value: storageUsed,
@@ -698,12 +595,14 @@ export default function ITAdminHomePage() {
     {
       label: "Error Events",
       value: String(metrics.errorEvents),
-      sub: "Last 24 hrs",
+      sub: "Last 24 hrs · System Health",
     },
     {
+      // A failed login has no signed-in user, so the browser can't save it.
+      // It needs the login server (same as Forgot password), not set up yet.
       label: "Failed Logins",
-      value: String(metrics.failedLogins),
-      sub: "Blocked automatically",
+      value: "—",
+      sub: "Not recorded yet",
     },
   ];
 
@@ -711,42 +610,11 @@ export default function ITAdminHomePage() {
     <div className="it-admin-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">IT Admin</p>
-            </div>
-          </div>
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div className="nav-group" key={group.title}>
-                <p className="nav-group-title">{group.title}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => {
-                    const IconComponent = item.icon;
-                    return (
-                      <li key={item.label}>
-                        <button
-                          type="button"
-                          className={`nav-item${item.active ? " active" : ""}`}
-                          onClick={() => navigate(item.path)}
-                        >
-                          <IconComponent size={16} className="nav-icon-svg" />
-                          <span>{item.label}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>IT Admin</>} />
 
         {/* MAIN */}
         <main className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>Overview</h1>
@@ -768,39 +636,6 @@ export default function ITAdminHomePage() {
                 <span>{isOnline ? "Live" : "Offline"}</span>
               </div>
 
-              <div className="avatar-container" ref={menuRef}>
-                <img
-                  src={avatarImg}
-                  alt="Account menu"
-                  className="avatar-img"
-                  onClick={() => setMenuOpen((open) => !open)}
-                />
-
-                {menuOpen && (
-                  <div className="profile-dropdown" role="menu">
-                    <div className="dropdown-header">
-                      <p className="dropdown-name">{currentUser.name}</p>
-                      <p className="dropdown-role">{ROLE_LABELS[currentUser.role]}</p>
-                    </div>
-                    <button
-                      type="button"
-                      className="dropdown-item"
-                      onClick={handleChangePassword}
-                    >
-                      <img src={keyIcon} alt="" className="dropdown-icon" />
-                      <span>Change Password</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="dropdown-item logout"
-                      onClick={handleLogout}
-                    >
-                      <img src={logoutIcon} alt="" className="dropdown-icon" />
-                      <span>Log Out</span>
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           </header>
 
@@ -825,9 +660,9 @@ export default function ITAdminHomePage() {
                     <span className="eyebrow live">Live</span>
                     <h2 className="card-title">System Status</h2>
                   </div>
-                  <a href="#status" className="card-link">
+                  <Link to="/it-admin/system-health" className="card-link">
                     Full Status
-                  </a>
+                  </Link>
                 </div>
 
                 <ul className="status-list">
@@ -875,9 +710,9 @@ export default function ITAdminHomePage() {
                     <span className="eyebrow">Recent</span>
                     <h2 className="card-title">Audit Events</h2>
                   </div>
-                  <a href="#audit-log" className="card-link">
+                  <Link to="/it-admin/audit-log" className="card-link">
                     Full Log
-                  </a>
+                  </Link>
                 </div>
 
                 <ul className="activity-list">
@@ -901,36 +736,60 @@ export default function ITAdminHomePage() {
               </article>
             </section>
 
-            {/* BOTTOM ROW */}
+            {/* BOTTOM ROW — real numbers. The system is serverless (Vercel +
+                Firebase + Supabase), so there is no server RAM or disk to
+                show; these are the resources it actually uses. */}
             <section className="bottom-row">
               <article className="card">
-                <h2 className="card-title">RAM Usage</h2>
+                <h2 className="card-title">Database records</h2>
                 <div className="usage-list">
-                  {ramUsage.map((bar) => (
-                    <div className="usage-row" key={bar.label}>
-                      <div className="usage-meta">
-                        <span className="usage-label">{bar.label}</span>
-                        <span className="usage-value">{bar.value}</span>
-                      </div>
-                      <div className="progress-track">
-                        <div
-                          className={`progress-fill ${bar.tone}`}
-                          style={{ width: `${bar.percent}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                  {records.length === 0 ? (
+                    <p className="usage-note">Counting records…</p>
+                  ) : (
+                    records.map((row) => {
+                      const max = Math.max(1, ...records.map((r) => r.count));
+                      return (
+                        <div className="usage-row" key={row.label}>
+                          <div className="usage-meta">
+                            <span className="usage-label">{row.label}</span>
+                            <span className="usage-value">
+                              {row.count < 0 ? "—" : row.count.toLocaleString("en-US")}
+                            </span>
+                          </div>
+                          <div className="progress-track">
+                            <div
+                              className="progress-fill blue"
+                              style={{ width: `${row.count < 0 ? 0 : Math.max(2, Math.round((row.count / max) * 100))}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
                 <div className="usage-footer">
-                  <span>Total usable: 15.8 GB</span>
-                  <span className="usage-note">No memory pressure detected</span>
+                  <span>Cloud Firestore</span>
+                  <span className="usage-note">Counted live from the database</span>
                 </div>
               </article>
 
               <article className="card">
-                <h2 className="card-title">Disk Usage — 1.13 TB drive</h2>
+                <h2 className="card-title">Photo storage — Supabase (1 GB free plan)</h2>
                 <div className="usage-list">
-                  {diskUsage.map((bar) => (
+                  {[
+                    {
+                      label: "Used",
+                      value: formatBytes(storageUsedBytes),
+                      percent: Math.min(100, (storageUsedBytes / SUPABASE_FREE_TIER_BYTES) * 100),
+                      tone: "blue",
+                    },
+                    {
+                      label: "Free",
+                      value: formatBytes(Math.max(0, SUPABASE_FREE_TIER_BYTES - storageUsedBytes)),
+                      percent: Math.max(0, 100 - (storageUsedBytes / SUPABASE_FREE_TIER_BYTES) * 100),
+                      tone: "green",
+                    },
+                  ].map((bar) => (
                     <div className="usage-row" key={bar.label}>
                       <div className="usage-meta">
                         <span className="usage-label">{bar.label}</span>
@@ -939,15 +798,15 @@ export default function ITAdminHomePage() {
                       <div className="progress-track">
                         <div
                           className={`progress-fill ${bar.tone}`}
-                          style={{ width: `${bar.percent}%` }}
+                          style={{ width: `${Math.max(bar.percent > 0 ? 1 : 0, Math.round(bar.percent))}%` }}
                         />
                       </div>
                     </div>
                   ))}
                 </div>
                 <div className="usage-footer">
-                  <span>Total: 1.13 TB</span>
-                  <span className="usage-note">Plenty of space available</span>
+                  <span>{storageFileCount.toLocaleString("en-US")} photos</span>
+                  <span className="usage-note">Evidence and profile photos</span>
                 </div>
               </article>
             </section>

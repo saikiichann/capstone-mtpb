@@ -2,6 +2,13 @@
    ActiveImpounding.css
    Extends Homepage.css — Active Impounding page styles.
 
+   BAGONG IMPOUND PROCESS:
+     - Hiwalay sa clamp. Walang "Subject to Impound".
+     - Status: "Impounded" / "Released" lang.
+     - Source: impoundRecords (filtered to status = "Impounded").
+     - Table columns: UOVR No. | CIN | Plate No. | Location |
+       Impounded by | Impounded | Hours | Fee | Status
+
    Relies on Homepage.css for the shared layout, the impound table,
    the status pills, and the update modal.
 ================================================================== */
@@ -57,6 +64,66 @@
 
 .impounding-page .active-header .card-title {
   margin: 0;
+}
+
+/* ==================================================================
+   ACTIVE IMPOUNDING TABLE CELLS
+================================================================== */
+.impounding-page .impound-table .cell-reference {
+  color: #111827;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.impounding-page .impound-table .cell-plate {
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.impounding-page .impound-table .cell-location {
+  color: #374151;
+}
+
+.impounding-page .impound-table .cell-clamped-by {
+  color: #374151;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.impounding-page .impound-table .cell-time {
+  color: #374151;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.impounding-page .impound-table .cell-overdue {
+  color: #374151;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* BAGONG FEE CELL — right-aligned, tabular numbers */
+.impounding-page .impound-table .cell-fee {
+  color: #111827;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* ==================================================================
+   CLICKABLE ROW
+================================================================== */
+.impounding-page .impound-row-clickable {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.impounding-page .impound-row-clickable:hover {
+  background: #FAFAFA;
 }
 
 /* ==================================================================
@@ -145,4 +212,21 @@
     flex-wrap: wrap;
     justify-content: center;
   }
+}
+
+/* View-only yard list: paid vehicles leave it on their own. */
+.impounding-page .yard-list-note {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.impounding-page .yard-note {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #FEF3C7;
+  color: #92400E;
+  font-size: 13px;
+  line-height: 1.45;
 }

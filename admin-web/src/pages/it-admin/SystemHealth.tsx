@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Activity,
@@ -11,10 +10,9 @@ import {
   Lock,
   Settings,
   RefreshCw,
-  MoreHorizontal,
   QrCode,
 } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
@@ -23,16 +21,17 @@ import {
   orderBy,
   query,
   limit,
+  serverTimestamp,
   Timestamp,
+  updateDoc,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import "./ITAdminHomepage.css";
 import "./SystemHealth.css";
+import { recordChecks, runChecks, SERVICES } from "../../lib/systemMonitor";
 
-import logo from "../../assets/mtpb-logo.png";
-import avatarImg from "../../assets/user.png";
-import logoutIcon from "../../assets/logout.png";
-import keyIcon from "../../assets/key.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -93,16 +92,6 @@ type ErrorLogRow = {
 /* ------------------------------------------------------------------
    ROLE MAP
 ------------------------------------------------------------------ */
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  "oic": "Officer-in-Charge",
-  "it-admin": "IT Admin",
-  "supervisor": "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  "finance": "Finance",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
 /* ------------------------------------------------------------------
    NAVIGATION
@@ -192,53 +181,21 @@ const formatTimestamp = (ts: Timestamp | null): string => {
   }
 };
 
-const FALLBACK_SERVICES: Omit<ServiceRow, "lastChecked">[] = [
-  {
-    id: "firestore",
-    service: "Cloud Firestore (database)",
-    status: "Online",
-    avgResponse: "12 ms",
-    order: 1,
-  },
-  {
-    id: "auth",
-    service: "Firebase Authentication",
-    status: "Online",
-    avgResponse: "8 ms",
-    order: 2,
-  },
-  {
-    id: "storage",
-    service: "Supabase Storage (files)",
-    status: "Online",
-    avgResponse: "24 ms",
-    order: 3,
-  },
-  {
-    id: "fcm",
-    service: "FCM Push Notifications",
-    status: "Online",
-    avgResponse: "—",
-    order: 4,
-  },
-  {
-    id: "backup",
-    service: "Backup service",
-    status: "Scheduled",
-    avgResponse: "—",
-    order: 5,
-  },
-];
+/** Shown until the first real check is saved (lib/systemMonitor.ts). */
+const FALLBACK_SERVICES: Omit<ServiceRow, "lastChecked">[] = SERVICES.map((svc) => ({
+  id: svc.id,
+  service: svc.name,
+  status: "Scheduled" as const,
+  avgResponse: "Not checked yet",
+  order: svc.order,
+}));
 
 /* ------------------------------------------------------------------
    COMPONENT
 ------------------------------------------------------------------ */
 export default function SystemHealth() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
+  const [, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
     role: "it-admin",
   });
@@ -406,95 +363,53 @@ export default function SystemHealth() {
     return () => unsubscribe();
   }, []);
 
-  /* Click-outside + Escape key handlers */
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
-    }
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setMenuOpen(false);
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, []);
-
-  const handleLogout = async () => {
+  /** Runs a real check now and saves it (updates every row). */
+  const handleRefresh = async (serviceId: string) => {
+    setRefreshing(serviceId);
     try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setMenuOpen(false);
-      navigate("/");
+      const results = await runChecks();
+      await recordChecks(results, true);
+      const now = formatTime(new Date());
+      setServices((prev) =>
+        prev.map((row) => {
+          const r = results.find((x) => x.id === row.id);
+          return r
+            ? {
+                ...row,
+                status: r.ok ? "Online" : "Offline",
+                avgResponse: r.ok ? `${r.ms} ms` : "—",
+                lastChecked: now,
+              }
+            : row;
+        })
+      );
+    } finally {
+      setRefreshing(null);
     }
   };
 
-  const handleRefresh = (serviceId: string) => {
-    setRefreshing(serviceId);
-    setTimeout(() => {
-      setServices((prev) =>
-        prev.map((s) =>
-          s.id === serviceId
-            ? { ...s, lastChecked: formatTime(new Date()) }
-            : s
-        )
-      );
-      setRefreshing(null);
-    }, 800);
+  /** IT Admin marks an error as fixed. */
+  const handleResolve = async (logId: string) => {
+    try {
+      await updateDoc(doc(db, "errorLogs", logId), {
+        status: "Resolved",
+        resolvedAt: serverTimestamp(),
+        resolvedBy: auth.currentUser?.uid ?? "",
+      });
+    } catch (err) {
+      console.warn("Could not mark the error resolved:", err);
+    }
   };
 
   return (
     <div className="it-admin-page">
       <div className="dashboard">
         {/* Sidebar */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={logo} alt="MTPB logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">IT Admin</p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div className="nav-group" key={group.title}>
-                <p className="nav-group-title">{group.title}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => {
-                    const IconComponent = item.icon;
-                    return (
-                      <li key={item.label}>
-                        <button
-                          type="button"
-                          className={`nav-item${item.active ? " active" : ""}`}
-                          onClick={() => navigate(item.path)}
-                        >
-                          <IconComponent size={16} className="nav-icon-svg" />
-                          <span>{item.label}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>IT Admin</>} />
 
         {/* Main content */}
         <main className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>System Health</h1>
@@ -507,51 +422,14 @@ export default function SystemHealth() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={menuRef}>
-              <img
-                src={avatarImg}
-                alt="Account menu"
-                className="avatar-img"
-                onClick={() => setMenuOpen((open) => !open)}
-              />
-
-              {menuOpen && (
-                <div className="profile-dropdown" role="menu">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="dropdown-item"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    <img src={keyIcon} alt="" className="dropdown-icon" />
-                    <span>Change Password</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <div className="system-health-content">
-            {/* Firebase Service Health */}
+            {/* Service Health */}
             <article className="card">
               <div className="card-header-static">
                 <span className="eyebrow live">Live</span>
-                <h2 className="card-title-static">Firebase Service Health</h2>
+                <h2 className="card-title-static">Service Health</h2>
               </div>
 
               {servicesLoading ? (
@@ -613,7 +491,7 @@ export default function SystemHealth() {
             {/* Performance Log */}
             <article className="card">
               <div className="card-header-static">
-                <span className="eyebrow">Today</span>
+                <span className="eyebrow">Slow or failed checks · page load times</span>
                 <h2 className="card-title-static">Performance Log</h2>
               </div>
 
@@ -665,7 +543,7 @@ export default function SystemHealth() {
             {/* Error & Crash Log */}
             <article className="card">
               <div className="card-header-static">
-                <span className="eyebrow">Last 24 hours</span>
+                <span className="eyebrow">Latest 20</span>
                 <h2 className="card-title-static">Error &amp; Crash Log</h2>
               </div>
 
@@ -723,13 +601,16 @@ export default function SystemHealth() {
                           </span>
                         </td>
                         <td className="cell-refresh">
-                          <button
-                            type="button"
-                            className="row-more-btn"
-                            aria-label="More options"
-                          >
-                            <MoreHorizontal size={16} />
-                          </button>
+                          {log.status !== "Resolved" && (
+                            <button
+                              type="button"
+                              className="resolve-btn"
+                              onClick={() => void handleResolve(log.id)}
+                              aria-label={`Mark error at ${log.time} as resolved`}
+                            >
+                              Mark resolved
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

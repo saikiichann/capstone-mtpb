@@ -62,7 +62,6 @@ export async function logPrivacyAccess({
       timestamp: serverTimestamp(),
     });
 
-    console.log(`[Privacy Log] ${action} — ${recordType} — ${recordId}`);
   } catch (err) {
     
     console.error("[Privacy Log] Failed to log privacy access:", err);

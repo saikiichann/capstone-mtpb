@@ -1,82 +1,49 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, X } from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { X } from "lucide-react";
 import {
-  addDoc,
   collection,
-  doc,
-  getDoc,
   onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
   Timestamp,
 } from "firebase/firestore";
-import { auth, db } from "../../firebase";
+import { db } from "../../firebase";
 import "./Homepage.css";
 
 // ---------------------------------------------------------------------------
 // ASSET IMPORTS
 // ---------------------------------------------------------------------------
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
 import impoundingLogIcon from "../../assets/impounding.png";
 import activeImpoundingIcon from "../../assets/tow-truck.png";
-import fieldUpdatesIcon from "../../assets/fieldupdate.png";
-import logoutIcon from "../../assets/logout.png";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
 
 // ---------------------------------------------------------------------------
 // TYPES
 // ---------------------------------------------------------------------------
-type RoleSlug =
-  | "oic"
-  | "it-admin"
-  | "supervisor"
-  | "record-officer"
-  | "release-officer"
-  | "finance"
-  | "clamping-staff"
-  | "impounding-staff";
 
-type CurrentUser = {
-  name: string;
-  role: RoleSlug;
-};
 
-type ImpoundStatus =
-  | "On Patrol"
-  | "Scheduled for Impounding"
-  | "Subject to Impound"
-  | "Impounded"
-  | "Released";
-
-/** The log card uses simpler labels than the operations card. */
-type LogStatus = "Clamped" | "Impounded" | "Removed";
+/** BAGONG IMPOUND PROCESS: dalawa lang. */
+type ImpoundStatus = "Impounded" | "Released";
 
 type ImpoundRow = {
   id: string;
-  reference: string | null;
+  uovrNo: string;
   cin: string;
   plateNo: string;
   violation: string;
   location: string;
-  clampedBy: string;
-  towedBy: string;
-  clampedAt: Timestamp | null;
-  /** Time shown in the Impounding Log card. */
-  loggedAt: Timestamp | null;
-  hoursOverdue: number;
+  officer: string;
+  impoundedAt: Timestamp | null;
+  hoursSinceImpound: number;
+  impoundFee: number;
   status: ImpoundStatus;
 };
 
 type Metrics = {
-  subjectToImpound: number;
-  scheduled: number;
   currentlyImpounded: number;
   released: number;
+  totalFees: number;
 };
 
 type NavItem = {
@@ -94,33 +61,14 @@ type NavGroup = {
 // ---------------------------------------------------------------------------
 // CONSTANTS
 // ---------------------------------------------------------------------------
-/** Both cards on this page are previews; "View All" opens the full page. */
 const PREVIEW_LIMIT = 3;
 
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer in Charge",
-  "it-admin": "IT Admin",
-  supervisor: "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  finance: "Finance",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
 
-const STATUS_OPTIONS: ImpoundStatus[] = [
-  "On Patrol",
-  "Scheduled for Impounding",
-  "Subject to Impound",
-  "Impounded",
-  "Released",
-];
 
 const INITIAL_METRICS: Metrics = {
-  subjectToImpound: 0,
-  scheduled: 0,
   currentlyImpounded: 0,
   released: 0,
+  totalFees: 0,
 };
 
 const navGroups: NavGroup[] = [
@@ -139,7 +87,7 @@ const navGroups: NavGroup[] = [
     label: "Enforcement",
     items: [
       {
-        label: "Impounding Log",
+        label: "Impound Records",
         icon: impoundingLogIcon,
         path: "/impounding-staff/log",
       },
@@ -149,21 +97,16 @@ const navGroups: NavGroup[] = [
     label: "Operations",
     items: [
       {
-        label: "Active Impounding",
+        label: "Vehicles in Yard",
         icon: activeImpoundingIcon,
         path: "/impounding-staff/active",
-      },
-      {
-        label: "Field Updates",
-        icon: fieldUpdatesIcon,
-        path: "/impounding-staff/field-updates",
       },
     ],
   },
 ];
 
 // ---------------------------------------------------------------------------
-// HELPER FUNCTIONS
+// HELPERS
 // ---------------------------------------------------------------------------
 const formatDateTime = (ts: Timestamp | null): string => {
   if (!ts) return "—";
@@ -179,7 +122,7 @@ const formatDateTime = (ts: Timestamp | null): string => {
   }
 };
 
-const computeHoursOverdue = (ts: Timestamp | null): number => {
+const computeHoursSince = (ts: Timestamp | null): number => {
   if (!ts) return 0;
   try {
     const date = ts.toDate();
@@ -190,73 +133,36 @@ const computeHoursOverdue = (ts: Timestamp | null): number => {
   }
 };
 
-const getStatusClass = (status: ImpoundStatus): string => {
-  const map: Record<ImpoundStatus, string> = {
-    "Scheduled for Impounding": "status-scheduled",
-    "Subject to Impound": "status-subject",
-    Impounded: "status-impounded",
-    Released: "status-released",
-    "On Patrol": "status-patrol",
-  };
-  return map[status] ?? "";
-};
+const formatCurrency = (n: number): string =>
+  `₱${n.toLocaleString("en-PH", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`;
 
-/**
- * Maps the operational status to the label used in the Impounding Log card.
- * Released = the clamp/vehicle was removed. Impounded stays as-is so an
- * impounded vehicle is never mislabeled as "Clamped".
- */
-const getLogStatus = (status: ImpoundStatus): LogStatus => {
-  if (status === "Released") return "Removed";
-  if (status === "Impounded") return "Impounded";
-  return "Clamped";
-};
+const getStatusClass = (status: ImpoundStatus): string =>
+  status === "Released" ? "status-released" : "status-impounded";
 
-const getLogStatusClass = (status: LogStatus): string => {
-  const map: Record<LogStatus, string> = {
-    Clamped: "status-clamped",
-    Impounded: "status-impounded",
-    Removed: "status-released",
-  };
-  return map[status];
-};
-
-// ---------------------------------------------------------------------------
-// UPDATE MODAL COMPONENT
-// ---------------------------------------------------------------------------
-type UpdateModalProps = {
+/* ------------------------------------------------------------------
+   DETAILS MODAL (view only)
+   No status change here: a vehicle is released automatically once its
+   impound fee is paid, in cash at the desk or by GCash on the violator
+   app. Then it leaves this list on its own.
+------------------------------------------------------------------ */
+type DetailsModalProps = {
   row: ImpoundRow;
   onClose: () => void;
-  onSave: (newStatus: ImpoundStatus) => Promise<void>;
 };
 
-function UpdateModal({ row, onClose, onSave }: UpdateModalProps) {
-  const [newStatus, setNewStatus] = useState<ImpoundStatus>(row.status);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSave = async () => {
-    setError("");
-    setSaving(true);
-    try {
-      await onSave(newStatus);
-    } catch (err: any) {
-      console.error("Update error:", err);
-      setError(err.message || "Failed to update status.");
-      setSaving(false);
-    }
-  };
-
+function DetailsModal({ row, onClose }: DetailsModalProps) {
   return (
-    <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="impound-details-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2 className="modal-title">{row.cin}</h2>
+          <h2 className="modal-title" id="impound-details-title">{row.cin}</h2>
           <button
             type="button"
             className="modal-close"
             onClick={onClose}
-            disabled={saving}
             aria-label="Close"
           >
             <X size={20} />
@@ -266,6 +172,10 @@ function UpdateModal({ row, onClose, onSave }: UpdateModalProps) {
         <div className="modal-body">
           <div className="info-box">
             <div className="info-row">
+              <span className="info-label">UOVR No.:</span>
+              <span className="info-value">{row.uovrNo}</span>
+            </div>
+            <div className="info-row">
               <span className="info-label">Plate:</span>
               <span className="info-value">{row.plateNo}</span>
             </div>
@@ -274,56 +184,34 @@ function UpdateModal({ row, onClose, onSave }: UpdateModalProps) {
               <span className="info-value">{row.location}</span>
             </div>
             <div className="info-row">
-              <span className="info-label">Officer:</span>
-              <span className="info-value">{row.clampedBy}</span>
+              <span className="info-label">Impounded by:</span>
+              <span className="info-value">{row.officer}</span>
             </div>
             <div className="info-row">
-              <span className="info-label">Clamped:</span>
+              <span className="info-label">Impounded at:</span>
               <span className="info-value">
-                {formatDateTime(row.clampedAt)}
+                {formatDateTime(row.impoundedAt)}
               </span>
             </div>
             <div className="info-row">
-              <span className="info-label">Hours past redemption window:</span>
-              <span className="info-value">{row.hoursOverdue} hrs</span>
+              <span className="info-label">Hours since impound:</span>
+              <span className="info-value">{row.hoursSinceImpound} hrs</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Impound Fee:</span>
+              <span className="info-value">{formatCurrency(row.impoundFee)}</span>
             </div>
           </div>
 
-          <div className="form-field">
-            <label htmlFor="update-status">Update Status</label>
-            <select
-              id="update-status"
-              value={newStatus}
-              onChange={(e) => setNewStatus(e.target.value as ImpoundStatus)}
-              disabled={saving}
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {error && <p className="modal-error">{error}</p>}
+          <p className="yard-note">
+            Not paid yet. Once the impound fee is paid (cash at the desk or GCash), the vehicle is
+            released automatically and leaves this list.
+          </p>
         </div>
 
         <div className="modal-footer">
-          <button
-            type="button"
-            className="btn-cancel"
-            onClick={onClose}
-            disabled={saving}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn-save"
-            onClick={handleSave}
-            disabled={saving || newStatus === row.status}
-          >
-            {saving ? "Saving..." : "Save"}
+          <button type="button" className="btn-cancel" onClick={onClose}>
+            Close
           </button>
         </div>
       </div>
@@ -335,105 +223,66 @@ function UpdateModal({ row, onClose, onSave }: UpdateModalProps) {
 // MAIN COMPONENT
 // ---------------------------------------------------------------------------
 export default function ImpoundingStaffHomepage() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser>({
-    name: "Loading...",
-    role: "impounding-staff",
-  });
 
   const [metrics, setMetrics] = useState<Metrics>(INITIAL_METRICS);
   const [impoundRows, setImpoundRows] = useState<ImpoundRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRow, setSelectedRow] = useState<ImpoundRow | null>(null);
 
-  // ---------------------------------------------------------------------
-  // EFFECT: Fetch current authenticated user profile
-  // ---------------------------------------------------------------------
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (loggedUser) => {
-      if (!loggedUser) {
-        setCurrentUser({ name: "Guest", role: "impounding-staff" });
-        return;
-      }
-
-      try {
-        const userDocRef = doc(db, "users", loggedUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-
-        if (userDocSnap.exists()) {
-          const data = userDocSnap.data();
-          setCurrentUser({
-            name: data.name ?? "Unknown",
-            role: (data.role ?? "impounding-staff") as RoleSlug,
-          });
-        } else {
-          setCurrentUser({
-            name: loggedUser.email?.split("@")[0] ?? "Unknown",
-            role: "impounding-staff",
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching current user:", err);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   // ---------------------------------------------------------------------
-  // EFFECT: One real-time listener feeds the metrics and both cards
+  // EFFECT: Real-time listener for impoundRecords
   // ---------------------------------------------------------------------
   useEffect(() => {
-    const ref = collection(db, "impoundRecords");
-    const q = query(ref, orderBy("clampedAt", "desc"));
+    // Walang orderBy(): tinatanggal ng Firestore ang record na walang
+    // clampedAt, kaya hindi lumalabas ang bagong impound. Client-side sort.
+    const q = collection(db, "impoundRecords");
 
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
         const rows: ImpoundRow[] = snap.docs.map((d) => {
           const data = d.data();
-          const clampedAt: Timestamp | null = data.clampedAt ?? null;
-          const hoursOverdue: number =
-            typeof data.hoursOverdue === "number"
-              ? data.hoursOverdue
-              : computeHoursOverdue(clampedAt);
+          const impoundedAt: Timestamp | null =
+            ((data.clampedAt ?? data.ticketDate ?? data.createdAt) as Timestamp) ?? null;
 
           return {
             id: d.id,
-            reference: data.referenceNumber ?? data.paymentReference ?? null,
+            uovrNo: data.uovrNo ?? "—",
             cin: data.cin ?? "—",
             plateNo: data.plateNo ?? "—",
-            violation: data.violationType ?? data.violation ?? "—",
+            violation:
+              data.initialViolation ?? data.violationType ?? data.violation ?? "—",
             location: data.location ?? "—",
-            clampedBy: data.clampedBy ?? "—",
-            towedBy: data.towedBy ?? data.impoundedBy ?? "—",
-            clampedAt,
-            loggedAt: data.impoundedAt ?? clampedAt,
-            hoursOverdue,
-            status: (data.status ?? "Subject to Impound") as ImpoundStatus,
+            officer:
+              data.clampedBy ?? data.towedBy ?? data.impoundedBy ?? "—",
+            impoundedAt,
+            hoursSinceImpound: computeHoursSince(impoundedAt),
+            impoundFee: Number(data.impoundFee ?? 0),
+            status: (data.status ?? "Impounded") as ImpoundStatus,
           };
         });
+
+        const millis = (t: Timestamp | null) => {
+          try {
+            return t ? t.toMillis() : 0;
+          } catch {
+            return 0;
+          }
+        };
+        rows.sort((a, b) => millis(b.impoundedAt) - millis(a.impoundedAt));
 
         setImpoundRows(rows);
 
         const newMetrics: Metrics = { ...INITIAL_METRICS };
         rows.forEach((row) => {
-          switch (row.status) {
-            case "Subject to Impound":
-              newMetrics.subjectToImpound++;
-              break;
-            case "Scheduled for Impounding":
-              newMetrics.scheduled++;
-              break;
-            case "Impounded":
-              newMetrics.currentlyImpounded++;
-              break;
-            case "Released":
-              newMetrics.released++;
-              break;
+          if (row.status === "Impounded") {
+            newMetrics.currentlyImpounded++;
+            newMetrics.totalFees += row.impoundFee;
+          } else if (row.status === "Released") {
+            newMetrics.released++;
           }
         });
 
@@ -452,18 +301,6 @@ export default function ImpoundingStaffHomepage() {
   // ---------------------------------------------------------------------
   // EFFECT: Close dropdown when clicking outside
   // ---------------------------------------------------------------------
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   // ---------------------------------------------------------------------
   // EFFECT: Close modal when pressing Escape
@@ -481,17 +318,17 @@ export default function ImpoundingStaffHomepage() {
   // ---------------------------------------------------------------------
   // DERIVED DATA
   // ---------------------------------------------------------------------
-  /** Latest entries of everything, newest first. */
+  /** Latest entries, newest first. */
   const logPreview = useMemo(
     () => impoundRows.slice(0, PREVIEW_LIMIT),
     [impoundRows]
   );
 
-  /** Only cases that are still in progress — released ones are done. */
+  /** Only cases that are still in progress (Impounded, not Released). */
   const activePreview = useMemo(
     () =>
       impoundRows
-        .filter((row) => row.status !== "Released")
+        .filter((row) => row.status === "Impounded")
         .slice(0, PREVIEW_LIMIT),
     [impoundRows]
   );
@@ -499,75 +336,24 @@ export default function ImpoundingStaffHomepage() {
   // ---------------------------------------------------------------------
   // HANDLERS
   // ---------------------------------------------------------------------
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/");
-    }
-  };
 
-  const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
-    setIsMenuOpen(false);
-  };
 
-  const handleUpdateStatus = async (newStatus: ImpoundStatus) => {
-    if (!selectedRow) return;
-
-    const previousStatus = selectedRow.status;
-    const rowRef = doc(db, "impoundRecords", selectedRow.id);
-
-    await updateDoc(rowRef, {
-      status: newStatus,
-      updatedAt: serverTimestamp(),
-      updatedBy: currentUser.name,
-    });
-
-    await addDoc(collection(db, "auditLogs"), {
-      userName: currentUser.name,
-      action: `updated impound record ${selectedRow.cin} (${previousStatus} → ${newStatus})`,
-      record: selectedRow.cin,
-      type: "impound-record",
-      metadata: {
-        cin: selectedRow.cin,
-        oldStatus: previousStatus,
-        newStatus,
-      },
-      timestamp: serverTimestamp(),
-    });
-
-    console.log(`Updated ${selectedRow.cin}: ${previousStatus} → ${newStatus}`);
-    setSelectedRow(null);
-  };
 
   const metricCards = [
     {
-      title: "Subject to Impound",
-      value: String(metrics.subjectToImpound),
-      subtitle: "Redemption window expired",
-    },
-    {
-      title: "Scheduled",
-      value: String(metrics.scheduled),
-      subtitle: "Queued for manual impounding",
-    },
-    {
       title: "Currently Impounded",
       value: String(metrics.currentlyImpounded),
-      subtitle: "",
+      subtitle: "Active vehicles in the yard",
     },
     {
       title: "Released",
       value: String(metrics.released),
-      subtitle: "",
+      subtitle: "Vehicles claimed",
+    },
+    {
+      title: "Total Impound Fees",
+      value: formatCurrency(metrics.totalFees),
+      subtitle: "For active impounds",
     },
   ];
 
@@ -578,42 +364,11 @@ export default function ImpoundingStaffHomepage() {
     <div className="impounding-page">
       <div className="dashboard">
         {/* SIDEBAR */}
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Impounding Staff</p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {navGroups.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={navGroups} role={<>Impounding Staff</>} />
 
         {/* MAIN CONTENT */}
         <div className="main">
+          <AppTopbar groups={navGroups} />
           <header className="main-header">
             <div>
               <h1>Overview</h1>
@@ -626,44 +381,11 @@ export default function ImpoundingStaffHomepage() {
               </p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={officerAvatar}
-                alt="Staff Profile"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button
-                    className="dropdown-item"
-                    onClick={handleChangePassword}
-                  >
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
             {/* METRIC CARDS */}
-            <div className="metric-grid-four">
+            <div className="metric-grid-three">
               {metricCards.map((card) => (
                 <div key={card.title} className="card metric-card">
                   <p className="metric-title">{card.title}</p>
@@ -680,7 +402,7 @@ export default function ImpoundingStaffHomepage() {
               <div className="card-header-row">
                 <div>
                   <p className="card-eyebrow">Sector 3</p>
-                  <h2 className="card-title">Impounding Log</h2>
+                  <h2 className="card-title">Impound Records</h2>
                 </div>
                 <button
                   type="button"
@@ -700,50 +422,49 @@ export default function ImpoundingStaffHomepage() {
                   <p>No impounding activity yet.</p>
                 </div>
               ) : (
-                <div className="impound-table-wrapper">
+                <div className="impound-table-wrapper" tabIndex={0} role="region" aria-label="Impound records table" data-scroll-region>
                   <table className="impound-table">
                     <thead>
                       <tr>
-                        <th>Reference</th>
+                        <th>UOVR No.</th>
                         <th>CIN</th>
                         <th>Plate No.</th>
                         <th>Violation</th>
                         <th>Location</th>
                         <th>Impounded by</th>
                         <th>Time</th>
+                        <th>Fee</th>
                         <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {logPreview.map((row) => {
-                        const logStatus = getLogStatus(row.status);
-                        return (
-                          <tr key={row.id}>
-                            <td className="cell-reference">
-                              {row.reference ?? "—"}
-                            </td>
-                            <td>
-                              <span className="cin-pill">{row.cin}</span>
-                            </td>
-                            <td className="cell-plate">{row.plateNo}</td>
-                            <td className="cell-violation">{row.violation}</td>
-                            <td className="cell-location">{row.location}</td>
-                            <td className="cell-towed-by">{row.towedBy}</td>
-                            <td className="cell-time">
-                              {formatDateTime(row.loggedAt)}
-                            </td>
-                            <td>
-                              <span
-                                className={`status-pill ${getLogStatusClass(
-                                  logStatus
-                                )}`}
-                              >
-                                {logStatus}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                      {logPreview.map((row) => (
+                        <tr key={row.id}>
+                          <td className="cell-reference">{row.uovrNo}</td>
+                          <td>
+                            <span className="cin-pill">{row.cin}</span>
+                          </td>
+                          <td className="cell-plate">{row.plateNo}</td>
+                          <td className="cell-violation">{row.violation}</td>
+                          <td className="cell-location">{row.location}</td>
+                          <td className="cell-officer">{row.officer}</td>
+                          <td className="cell-time">
+                            {formatDateTime(row.impoundedAt)}
+                          </td>
+                          <td className="cell-fee">
+                            {formatCurrency(row.impoundFee)}
+                          </td>
+                          <td>
+                            <span
+                              className={`status-pill ${getStatusClass(
+                                row.status
+                              )}`}
+                            >
+                              {row.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -754,8 +475,11 @@ export default function ImpoundingStaffHomepage() {
             <div className="card">
               <div className="card-header-row">
                 <div>
-                  <p className="card-eyebrow">Auto-flagged reminder</p>
-                  <h2 className="card-title">Active Impounding Operations</h2>
+                  <p className="card-eyebrow">Currently in the yard</p>
+                  <h2 className="card-title">Vehicles in Yard</h2>
+                  <p className="yard-list-note">
+                    Unpaid impounds. They leave this list automatically once paid (cash or GCash).
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -775,16 +499,18 @@ export default function ImpoundingStaffHomepage() {
                   <p>No active impounding operations.</p>
                 </div>
               ) : (
-                <div className="impound-table-wrapper">
+                <div className="impound-table-wrapper" tabIndex={0} role="region" aria-label="Impound records table" data-scroll-region>
                   <table className="impound-table">
                     <thead>
                       <tr>
+                        <th>UOVR No.</th>
                         <th>CIN</th>
                         <th>Plate No.</th>
                         <th>Location</th>
-                        <th>Clamped by</th>
-                        <th>Clamped</th>
-                        <th>Hours Overdue</th>
+                        <th>Impounded by</th>
+                        <th>Impounded</th>
+                        <th>Hours</th>
+                        <th>Fee</th>
                         <th>Status</th>
                       </tr>
                     </thead>
@@ -795,16 +521,22 @@ export default function ImpoundingStaffHomepage() {
                           onClick={() => setSelectedRow(row)}
                           className="impound-row-clickable"
                         >
+                          <td className="cell-reference">{row.uovrNo}</td>
                           <td>
                             <span className="cin-pill">{row.cin}</span>
                           </td>
                           <td className="cell-plate">{row.plateNo}</td>
                           <td className="cell-location">{row.location}</td>
-                          <td className="cell-clamped-by">{row.clampedBy}</td>
+                          <td className="cell-officer">{row.officer}</td>
                           <td className="cell-time">
-                            {formatDateTime(row.clampedAt)}
+                            {formatDateTime(row.impoundedAt)}
                           </td>
-                          <td className="cell-overdue">{row.hoursOverdue}h</td>
+                          <td className="cell-overdue">
+                            {row.hoursSinceImpound}h
+                          </td>
+                          <td className="cell-fee">
+                            {formatCurrency(row.impoundFee)}
+                          </td>
                           <td>
                             <span
                               className={`status-pill ${getStatusClass(
@@ -827,11 +559,7 @@ export default function ImpoundingStaffHomepage() {
 
       {/* UPDATE MODAL */}
       {selectedRow && (
-        <UpdateModal
-          row={selectedRow}
-          onClose={() => setSelectedRow(null)}
-          onSave={handleUpdateStatus}
-        />
+        <DetailsModal row={selectedRow} onClose={() => setSelectedRow(null)} />
       )}
     </div>
   );

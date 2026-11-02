@@ -437,3 +437,116 @@
     width: 100%;
   }
 }
+
+/* ==================================================================
+   ALL VEHICLES LIST + TIMELINE HEADER (Nov 2026)
+================================================================== */
+.vehicle-history-page .vehicle-list-head,
+.vehicle-history-page .vehicle-timeline-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.vehicle-history-page .vehicle-list-count {
+  margin: 0;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.vehicle-history-page .vehicle-table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+}
+
+.vehicle-history-page .vehicle-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.vehicle-history-page .vehicle-table th {
+  padding: 11px 14px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.vehicle-history-page .vehicle-table td {
+  padding: 13px 14px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.vehicle-history-page .vehicle-plate {
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #111827;
+}
+
+.vehicle-history-page .vehicle-unpaid {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #FEF3C7;
+  color: #92400E;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.vehicle-history-page .vehicle-clear {
+  color: #6B7280;
+  font-size: 13px;
+}
+
+.vehicle-history-page .vehicle-action {
+  text-align: right;
+}
+
+.vehicle-history-page .vehicle-view-btn,
+.vehicle-history-page .vehicle-back-btn,
+.vehicle-history-page .vehicle-more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid #BFDBFE;
+  border-radius: 10px;
+  background: #EFF6FF;
+  color: #1D4ED8;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.vehicle-history-page .vehicle-back-btn {
+  border-color: #D1D5DB;
+  background: #FFFFFF;
+  color: #111827;
+}
+
+.vehicle-history-page .vehicle-more-btn {
+  display: flex;
+  margin: 14px auto 0;
+}
+
+.vehicle-history-page .vehicle-view-btn:hover,
+.vehicle-history-page .vehicle-more-btn:hover {
+  background: #DBEAFE;
+}
+
+.vehicle-history-page .vehicle-back-btn:hover {
+  background: #F3F4F6;
+}
+
+.vehicle-history-page .vehicle-view-btn:focus-visible,
+.vehicle-history-page .vehicle-back-btn:focus-visible,
+.vehicle-history-page .vehicle-more-btn:focus-visible {
+  outline: 3px solid #1D4ED8;
+  outline-offset: 2px;
+}

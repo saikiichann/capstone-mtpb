@@ -1,16 +1,13 @@
-import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import {
-  KeyRound,
   ChevronDown,
   Calendar,
   ArrowRight,
   Upload,
   Download,
   FileSpreadsheet,
-  FileText,
-} from "lucide-react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+  FileText } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   doc,
   getDoc,
@@ -22,6 +19,7 @@ import {
   getDocs,
   serverTimestamp,
   Timestamp,
+  type DocumentData
 } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -34,8 +32,6 @@ import {
 import "./ExportCenter.css";
 
 // Asset imports
-import mtpbLogo from "../../assets/mtpb-logo.png";
-import officerAvatar from "../../assets/user.png";
 import overviewIcon from "../../assets/overview.png";
 import allViolationsIcon from "../../assets/allviolations.png";
 import clampingIcon from "../../assets/clamping.png";
@@ -43,7 +39,10 @@ import impoundingLogIcon from "../../assets/impounding.png";
 import releaseLogIcon from "../../assets/releaselog.png";
 import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
-import logoutIcon from "../../assets/logout.png";
+import { csvCell } from "../../lib/csvSafe";
+import AppTopbar from "../../components/AppTopbar";
+import AppSidebar from "../../components/AppSidebar";
+import { clientIp } from "../../lib/staffSession";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -73,20 +72,10 @@ type NavGroup = { label: string; items: NavItem[] };
 
 type ExportFormat = "CSV" | "Excel" | "PDF";
 
+
 // ---------------------------------------------------------------------------
 // CONSTANTS
 // ---------------------------------------------------------------------------
-const ROLE_LABELS: Record<RoleSlug, string> = {
-  oic: "Officer in Charge",
-  "it-admin": "IT Admin",
-  supervisor: "Supervisor",
-  "record-officer": "Record Officer",
-  "release-officer": "Release Officer",
-  finance: "Finance Staff",
-  "clamping-staff": "Clamping Staff",
-  "impounding-staff": "Impounding Staff",
-};
-
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
@@ -232,14 +221,14 @@ const paidAtLabel = (
 const PAID_STATUSES = ["pending verification", "verified"];
 
 /** Walang enforcementType ang ibang record → clamped (default ng enforcer app). */
-const getEnforcementType = (item: any): "clamped" | "impounded" =>
+const getEnforcementType = (item: DocumentData): "clamped" | "impounded" =>
   item.enforcementType === "impounded" || item.impoundStatus === "Impounded"
     ? "impounded"
     : "clamped";
 
-const sanitizeData = (data: any[]): Record<string, any>[] => {
+const sanitizeData = (data: DocumentData[]): DocumentData[] => {
   return data.map((item) => {
-    const out: Record<string, any> = {};
+    const out: DocumentData = {};
     Object.keys(item).forEach((key) => {
       const value = item[key];
       if (value instanceof Timestamp) {
@@ -263,11 +252,11 @@ const sanitizeData = (data: any[]): Record<string, any>[] => {
 };
 
 const filterByDateRange = (
-  data: any[],
+  data: DocumentData[],
   startDate: string,
   endDate: string,
   timestampField: string = "recordedAt"
-): any[] => {
+): DocumentData[] => {
   if (!startDate || !endDate) return data;
 
   const start = new Date(startDate);
@@ -293,7 +282,7 @@ const filterByDateRange = (
 // ---------------------------------------------------------------------------
 const downloadCsv = (
   filename: string,
-  rows: Record<string, any>[]
+  rows: DocumentData[]
 ): void => {
   if (rows.length === 0) {
     alert("Walang data na ma-export para sa napiling date range.");
@@ -306,13 +295,8 @@ const downloadCsv = (
     ...rows.map((row) =>
       headers
         .map((h) => {
-          const value = row[h];
-          if (value === null || value === undefined) return "";
-          const str = String(value);
-          if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-            return `"${str.replace(/"/g, '""')}"`;
-          }
-          return str;
+          // csvCell: quotes, and stops text from running as a formula.
+          return csvCell(row[h]);
         })
         .join(",")
     ),
@@ -331,7 +315,7 @@ const downloadCsv = (
 
 const downloadExcel = (
   filename: string,
-  rows: Record<string, any>[]
+  rows: DocumentData[]
 ): void => {
   if (rows.length === 0) {
     alert("Walang data na ma-export para sa napiling date range.");
@@ -356,7 +340,7 @@ const downloadExcel = (
 
 const downloadPdf = (
   filename: string,
-  rows: Record<string, any>[],
+  rows: DocumentData[],
   title: string,
   metadata: { exportedBy: string; dateRange: string },
   kind: ReportKind
@@ -598,9 +582,6 @@ const downloadPdf = (
 // COMPONENT
 // ---------------------------------------------------------------------------
 export default function ExportCenter() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     name: "Loading...",
@@ -683,39 +664,6 @@ export default function ExportCenter() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await firebaseSignOut(auth);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.clear();
-      setIsMenuOpen(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout error:", err);
-      setIsMenuOpen(false);
-      navigate("/");
-    }
-  };
-
-  const handleChangePassword = () => {
-    console.log("Navigating to Change Password...");
-    setIsMenuOpen(false);
-  };
-
   const handleExport = async (format: ExportFormat) => {
     setError("");
 
@@ -744,7 +692,7 @@ export default function ExportCenter() {
       }
 
       const sourceSnap = await getDocs(collection(db, config.collection));
-      let data: any[] = sourceSnap.docs.map((d) => ({
+      let data: DocumentData[] = sourceSnap.docs.map((d) => ({
         id: d.id,
         ...d.data(),
       }));
@@ -762,7 +710,7 @@ export default function ExportCenter() {
         const ids = Array.from(
           new Set(data.map((i) => i.violationId).filter(Boolean))
         ) as string[];
-        const linked = new Map<string, any>();
+        const linked = new Map<string, DocumentData>();
         await Promise.all(
           ids.map(async (vId) => {
             try {
@@ -850,17 +798,17 @@ export default function ExportCenter() {
           recordCount: cleaned.length,
         },
         timestamp: serverTimestamp(),
+        ipAddress: clientIp(),
       });
 
-      console.log(`Export ready: ${filename} (${cleaned.length} records)`);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Export error:", err);
-      if (err.code === "permission-denied") {
+      if ((err as { code?: string })?.code === "permission-denied") {
         setError(
           "Permission denied. Check your Firestore rules para sa source collection."
         );
       } else {
-        setError(err.message || "Failed to export data.");
+        setError((err as Error)?.message || "Failed to export data.");
       }
     } finally {
       setExporting(null);
@@ -870,80 +818,16 @@ export default function ExportCenter() {
   return (
     <div className="record-page">
       <div className="dashboard">
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <img src={mtpbLogo} alt="MTPB Logo" className="sidebar-logo-img" />
-            <div>
-              <p className="sidebar-brand-name">MTPB</p>
-              <p className="sidebar-brand-role">Record Officer</p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="nav-group">
-                <p className="nav-group-label">{group.label}</p>
-                <ul className="nav-list">
-                  {group.items.map((item) => (
-                    <li key={item.label}>
-                      <button
-                        type="button"
-                        className={`nav-item ${
-                          item.active ? "nav-item-active" : ""
-                        }`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <img src={item.icon} alt="" className="nav-icon" />
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppSidebar groups={NAV_GROUPS} role={<>Record Officer</>} />
 
         <div className="main">
+          <AppTopbar groups={NAV_GROUPS} />
           <header className="main-header">
             <div className="export-hero-text">
               <h1>Export Center</h1>
               <p>Download reports and data in multiple formats</p>
             </div>
 
-            <div className="avatar-container" ref={dropdownRef}>
-              <img
-                src={officerAvatar}
-                alt="Officer Profile"
-                className="avatar-img"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              />
-
-              {isMenuOpen && (
-                <div className="profile-dropdown">
-                  <div className="dropdown-header">
-                    <p className="dropdown-name">{currentUser.name}</p>
-                    <p className="dropdown-role">
-                      {ROLE_LABELS[currentUser.role]}
-                    </p>
-                  </div>
-                  <button
-                    className="dropdown-item"
-                    onClick={handleChangePassword}
-                  >
-                    <KeyRound size={18} />
-                    <span>Change Password</span>
-                  </button>
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    <img src={logoutIcon} alt="" className="dropdown-icon" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </header>
 
           <main className="main-content">
@@ -995,6 +879,7 @@ export default function ExportCenter() {
                     <div className="date-input-wrapper">
                       <input
                         type="date"
+                        aria-label="Start date"
                         className="date-input"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
@@ -1010,6 +895,7 @@ export default function ExportCenter() {
                     <div className="date-input-wrapper">
                       <input
                         type="date"
+                        aria-label="End date"
                         className="date-input"
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
@@ -1107,6 +993,7 @@ export default function ExportCenter() {
           </main>
         </div>
       </div>
+
     </div>
   );
 }

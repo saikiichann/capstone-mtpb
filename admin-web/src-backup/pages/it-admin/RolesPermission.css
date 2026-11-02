@@ -1,0 +1,195 @@
+/* ==================================================================
+   RolesPermission.css
+   Extends ITAdminHomePage.css — Role & Permission matrix
+================================================================== */
+
+.it-admin-page .roles-content {
+  flex: 1;
+  padding: 24px 32px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(100vh - 100px);
+}
+
+.it-admin-page .roles-content::-webkit-scrollbar {
+  width: 8px;
+}
+.it-admin-page .roles-content::-webkit-scrollbar-track {
+  background: #F3F4F6;
+}
+.it-admin-page .roles-content::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 4px;
+}
+.it-admin-page .roles-content::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* Horizontal scroll wrapper */
+.it-admin-page .matrix-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.it-admin-page .matrix-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.it-admin-page .matrix-scroll::-webkit-scrollbar-track {
+  background: #F3F4F6;
+  border-radius: 4px;
+}
+.it-admin-page .matrix-scroll::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 4px;
+}
+.it-admin-page .matrix-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* ==================================================================
+   PERMISSION MATRIX TABLE
+================================================================== */
+.it-admin-page .permission-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 720px;
+}
+
+.it-admin-page .permission-matrix thead {
+  background: #FFFFFF;
+}
+
+.it-admin-page .permission-matrix th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+  padding: 14px 16px;
+  border-bottom: 1px solid #E5E7EB;
+  white-space: nowrap;
+}
+
+.it-admin-page .permission-matrix .col-module {
+  width: 40%;
+  min-width: 220px;
+}
+
+.it-admin-page .permission-matrix .col-role {
+  width: 7.5%;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: #111827;
+}
+
+.it-admin-page .permission-matrix td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #F3F4F6;
+  vertical-align: middle;
+}
+
+.it-admin-page .permission-matrix tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.it-admin-page .permission-matrix tbody tr:hover {
+  background: #FAFAFA;
+}
+
+.it-admin-page .cell-module {
+  font-weight: 500;
+  color: #111827;
+}
+
+.it-admin-page .cell-permission {
+  text-align: center;
+}
+
+/* ==================================================================
+   PERMISSION ICONS — FIXED
+================================================================== */
+
+/* Base icon wrapper */
+.it-admin-page .perm-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+/* ✅ ALLOWED — Solid green box with white checkmark */
+.it-admin-page .perm-allowed {
+  background: #16A34A;
+  border: 1.5px solid #16A34A;
+  color: #FFFFFF;
+}
+
+.it-admin-page .perm-allowed svg {
+  stroke: #FFFFFF;
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ✅ LOCKED — Yellow outlined box with yellow padlock */
+.it-admin-page .perm-locked {
+  background: #FFFBEB;
+  border: 1.5px solid #F59E0B;
+  color: #D97706;
+}
+
+.it-admin-page .perm-locked svg {
+  stroke: #D97706;
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ==================================================================
+   RESPONSIVE
+================================================================== */
+@media (max-width: 1024px) {
+  .it-admin-page .roles-content {
+    padding: 20px 24px 24px;
+  }
+
+  .it-admin-page .permission-matrix th,
+  .it-admin-page .permission-matrix td {
+    padding: 12px 12px;
+  }
+
+  .it-admin-page .permission-matrix .col-module {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .it-admin-page .roles-content {
+    padding: 16px 16px 20px;
+  }
+
+  .it-admin-page .permission-matrix {
+    font-size: 12px;
+  }
+
+  .it-admin-page .permission-matrix th,
+  .it-admin-page .permission-matrix td {
+    padding: 10px 8px;
+  }
+
+  .it-admin-page .perm-icon {
+    width: 24px;
+    height: 24px;
+  }
+}
