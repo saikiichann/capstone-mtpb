@@ -190,3 +190,68 @@ describe('impound fee', () => {
     assert.equal(v.amountDue, 750)
   })
 })
+
+describe('overdue clamp fee (₱2,000 after 24 hours)', () => {
+  const H = 3600000
+  const now = Date.parse('2026-11-02T12:00:00Z')
+  const clamp = (extra) => ({ cin: 'CLMP-9', enforcementType: 'clamped', fineAmount: 900, paymentStatus: 'Unpaid', ...extra })
+
+  it('charges the fine within 24 hours', () => {
+    const v = normalizeViolation('c1', clamp({ recordedAt: new Date(now - 23 * H) }), now)
+    assert.equal(v.overdue, false)
+    assert.equal(v.overdueFee, 0)
+    assert.equal(v.amountDue, 900)
+  })
+
+  it('replaces the fine with a fixed ₱2,000 after 24 hours', () => {
+    const v = normalizeViolation('c2', clamp({ recordedAt: new Date(now - 25 * H) }), now)
+    assert.equal(v.overdue, true)
+    assert.equal(v.overdueFee, 2000)
+    assert.equal(v.amountDue, 2000)
+    assert.equal(v.fineAmount, 900)
+    assert.equal(v.status, 'clamped')
+  })
+
+  it('stays ₱2,000 at 48+ hours and for several violations', () => {
+    const v = normalizeViolation('c3', clamp({ fineAmount: 1800, recordedAt: new Date(now - 60 * H) }), now)
+    assert.equal(v.amountDue, 2000)
+  })
+
+  it("uses the enforcer app's gracePeriodEnd when saved", () => {
+    const v = normalizeViolation(
+      'c4',
+      clamp({ recordedAt: new Date(now - 30 * H), gracePeriodEnd: { seconds: (now + H) / 1000 } }),
+      now,
+    )
+    assert.equal(v.overdue, false)
+    assert.equal(v.amountDue, 900)
+  })
+
+  it('is not overdue once paid; a payment at the overdue rate still shows ₱2,000', () => {
+    const paidFine = normalizeViolation(
+      'c5',
+      clamp({ recordedAt: new Date(now - 30 * H), paymentStatus: 'Pending Verification', totalPaid: 925 }),
+      now,
+    )
+    assert.equal(paidFine.overdue, false)
+    assert.equal(paidFine.amountDue, 900)
+    const paidOverdue = normalizeViolation(
+      'c6',
+      clamp({ recordedAt: new Date(now - 30 * H), paymentStatus: 'Verified', overdueFeePaid: 2000 }),
+      now,
+    )
+    assert.equal(paidOverdue.overdue, false)
+    assert.equal(paidOverdue.amountDue, 2000)
+  })
+
+  it('never applies to impounds: the impound fee is charged instead', () => {
+    const v = normalizeViolation(
+      'i1',
+      { cin: 'IMP-1', enforcementType: 'impounded', impoundStatus: 'Impounded', impoundFee: 4100, fineAmount: 0, recordedAt: new Date(now - 50 * H) },
+      now,
+    )
+    assert.equal(v.overdue, false)
+    assert.equal(v.overdueFee, 0)
+    assert.equal(v.amountDue, 4100)
+  })
+})

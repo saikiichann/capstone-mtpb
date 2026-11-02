@@ -124,6 +124,7 @@ describe('online impound payment', () => {
     assert.equal(record.paymentStatus, 'Verified')
     assert.equal(record.releaseOrderId, 'ORD-2026-00010')
     assert.equal(record.releasedBy, 'PayMongo (online)')
+    assert.equal(record.amountPaid, 2100, 'impound fee only, not the GCash fee')
     assert.equal('orNumber' in record, false)
 
     assert.equal(db.data.get('counters/paymentReference').lastValue, 42)

@@ -99,7 +99,10 @@ function ViolationCard({ violation, showPayment = false, onPayNow }) {
       : []),
     violation.impoundFee > 0
       ? ['Impound Fee', formatPeso(violation.impoundFee), 'danger']
-      : ['Fine Amount', formatPeso(violation.fineAmount), 'danger'],
+      : // Past 24 hours unpaid: a fixed ₱2,000 replaces the fine.
+        violation.overdueFee > 0
+        ? ['Overdue Clamp Fee', formatPeso(violation.overdueFee), 'danger']
+        : ['Fine Amount', formatPeso(violation.fineAmount), 'danger'],
     // Left out for impounds recorded at the desk (server/violation-access.js).
     ...(violation.officerName ? [['Officer', violation.officerName]] : []),
   ]
@@ -169,11 +172,11 @@ function ViolationCard({ violation, showPayment = false, onPayNow }) {
                 <br />
                 {t('violation.payImpound', { fee: formatPeso(violation.impoundFee) })}
               </>
-            ) : violation.impoundStatus === 'subject_to_impound' || violation.impoundStatus === 'scheduled' ? (
+            ) : violation.overdue ? (
               <>
-                {t('violation.subjectToImpound')}
+                {t('violation.overdue', { fee: formatPeso(violation.overdueFee) })}
                 <br />
-                {t('violation.payBeforeImpound')}
+                {t('violation.payOverdue', { fee: formatPeso(violation.overdueFee) })}
               </>
             ) : (
               <>

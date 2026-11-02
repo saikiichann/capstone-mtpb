@@ -84,11 +84,18 @@ export default function PayConfirm() {
         <p className="confirm-body__amount">{formatPeso(charges.total)}</p>
         {charges.fee > 0 && (
           <p className="confirm-body__breakdown">
-            {t(violation.impoundFee > 0 ? 'pay.confirm.breakdownImpound' : 'pay.confirm.breakdown', {
-              fine: formatPeso(charges.fine),
-              method: method.label,
-              fee: formatPeso(charges.fee),
-            })}
+            {t(
+              violation.impoundFee > 0
+                ? 'pay.confirm.breakdownImpound'
+                : violation.overdueFee > 0
+                  ? 'pay.confirm.breakdownOverdue'
+                  : 'pay.confirm.breakdown',
+              {
+                fine: formatPeso(charges.fine),
+                method: method.label,
+                fee: formatPeso(charges.fee),
+              },
+            )}
           </p>
         )}
 

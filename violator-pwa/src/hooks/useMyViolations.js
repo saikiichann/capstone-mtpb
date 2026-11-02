@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
+import { AuthContext } from '../auth/auth-context'
 import { isActiveVehicle, listVehicles } from '../firebase/vehicles'
 import { listMyViolations } from '../firebase/violations'
 import { withLocalPaymentStatus } from '../payments'
@@ -13,6 +14,8 @@ import { toMillis } from '../utils/format'
 const EMPTY = { violations: [], unverifiedPlates: [] }
 
 export default function useMyViolations(uid) {
+  // Loads again after guest payments are linked to this account.
+  const linkVersion = useContext(AuthContext)?.guestLinkVersion ?? 0
   const [result, setResult] = useState({ uid: null, status: 'loading', ...EMPTY })
 
   useEffect(() => {
@@ -43,7 +46,7 @@ export default function useMyViolations(uid) {
     return () => {
       cancelled = true
     }
-  }, [uid])
+  }, [uid, linkVersion])
 
   if (result.uid !== uid) return { status: 'loading', ...EMPTY }
   return result

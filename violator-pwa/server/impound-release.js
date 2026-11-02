@@ -104,7 +104,8 @@ export function impoundReleaseWrites({ attempt, attemptId, violation, patch, ref
       paymentStatus: 'Verified',
       referenceNumber,
       releaseOrderId,
-      amountPaid: attempt.totalAmount,
+      // The impound fee only; the GCash convenience fee is on the payment.
+      amountPaid: impoundFee,
       paidAt: patch.paidAt,
       releasedAt: serverTime,
       releasedBy: ONLINE_STAFF,

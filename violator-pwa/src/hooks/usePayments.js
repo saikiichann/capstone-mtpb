@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
+import { AuthContext } from '../auth/auth-context'
 import { listPayments } from '../payments'
 import { toMillis } from '../utils/format'
 
 // Loads this owner's payments once.
 export default function usePayments(uid) {
+  // Loads again after guest payments are linked to this account.
+  const linkVersion = useContext(AuthContext)?.guestLinkVersion ?? 0
   const [result, setResult] = useState({ uid: null, status: 'loading', payments: [] })
 
   useEffect(() => {
@@ -26,7 +29,7 @@ export default function usePayments(uid) {
     return () => {
       cancelled = true
     }
-  }, [uid])
+  }, [uid, linkVersion])
 
   if (result.uid !== uid) return { status: 'loading', payments: [] }
   return result
