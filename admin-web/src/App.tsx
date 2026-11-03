@@ -1,5 +1,6 @@
   import "./allStyles";
-  import { lazy, Suspense } from "react";
+  import { Suspense } from "react";
+  import { lazyPage } from "./lib/lazyPage";
   import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
   import { ProtectedRoute } from "./components/ProtectedRoute";
 
@@ -11,77 +12,77 @@
   // downloaded on the login page.
 
   // OIC Dashboard
-  const Homepage = lazy(() => import("./pages/oic/Homepage"));
-  const SectorAnalytics = lazy(() => import("./pages/oic/SectorAnalytics"));
-  const OICReleaseRequests = lazy(() => import("./pages/oic/ReleaseRequests"));
-  const GeospatialHeatmap = lazy(() => import("./pages/oic/Geospatialheatmap"));
-  const OICClampingLog = lazy(() => import("./pages/oic/ClampingLog"));
-  const OICImpoundingLog = lazy(() => import("./pages/oic/ImpoundingLog"));
-  const OICVehicleHistory = lazy(() => import("./pages/oic/VehicleHistory"));
-  const OICPendingPayments = lazy(() => import("./pages/oic/PendingPayments"));
-  const OICPaymentVerification = lazy(() => import("./pages/oic/PaymentVerification"));
-  const OICTransactionHistory = lazy(() => import("./pages/oic/TransactionHistory"));
-  const OICRevenueReports = lazy(() => import("./pages/oic/RevenueReports"));
-  const OICReleaseQueue = lazy(() => import("./pages/oic/ReleaseQueue"));
-  const OICReleaseLog = lazy(() => import("./pages/oic/ReleaseLog"));
-  const OICFieldUpdates = lazy(() => import("./pages/oic/FieldUpdates"));
-  const OICOperationScheduler = lazy(() => import("./pages/oic/OperationScheduler"));
+  const Homepage = lazyPage(() => import("./pages/oic/Homepage"));
+  const SectorAnalytics = lazyPage(() => import("./pages/oic/SectorAnalytics"));
+  const OICReleaseRequests = lazyPage(() => import("./pages/oic/ReleaseRequests"));
+  const GeospatialHeatmap = lazyPage(() => import("./pages/oic/Geospatialheatmap"));
+  const OICClampingLog = lazyPage(() => import("./pages/oic/ClampingLog"));
+  const OICImpoundingLog = lazyPage(() => import("./pages/oic/ImpoundingLog"));
+  const OICVehicleHistory = lazyPage(() => import("./pages/oic/VehicleHistory"));
+  const OICPendingPayments = lazyPage(() => import("./pages/oic/PendingPayments"));
+  const OICPaymentVerification = lazyPage(() => import("./pages/oic/PaymentVerification"));
+  const OICTransactionHistory = lazyPage(() => import("./pages/oic/TransactionHistory"));
+  const OICRevenueReports = lazyPage(() => import("./pages/oic/RevenueReports"));
+  const OICReleaseQueue = lazyPage(() => import("./pages/oic/ReleaseQueue"));
+  const OICReleaseLog = lazyPage(() => import("./pages/oic/ReleaseLog"));
+  const OICFieldUpdates = lazyPage(() => import("./pages/oic/FieldUpdates"));
+  const OICOperationScheduler = lazyPage(() => import("./pages/oic/OperationScheduler"));
 
   // Supervisor — its own pages (pages/supervisor/), own routes (/supervisor/...)
-  const SupervisorHomepage = lazy(() => import("./pages/supervisor/Homepage"));
-  const SupervisorSectorAnalytics = lazy(() => import("./pages/supervisor/SectorAnalytics"));
-  const SupervisorGeospatialHeatmap = lazy(() => import("./pages/supervisor/GeospatialHeatmap"));
-  const SupervisorClampingLog = lazy(() => import("./pages/supervisor/ClampingLog"));
-  const SupervisorImpoundingLog = lazy(() => import("./pages/supervisor/ImpoundingLog"));
-  const SupervisorVehicleHistory = lazy(() => import("./pages/supervisor/VehicleHistory"));
-  const SupervisorReleaseRequests = lazy(() => import("./pages/supervisor/ReleaseRequests"));
-  const SupervisorReleaseQueue = lazy(() => import("./pages/supervisor/ReleaseQueue"));
-  const SupervisorReleaseLog = lazy(() => import("./pages/supervisor/ReleaseLog"));
-  const SupervisorFieldUpdates = lazy(() => import("./pages/supervisor/FieldUpdates"));
-  const SupervisorOperationScheduler = lazy(() => import("./pages/supervisor/OperationScheduler"));
+  const SupervisorHomepage = lazyPage(() => import("./pages/supervisor/Homepage"));
+  const SupervisorSectorAnalytics = lazyPage(() => import("./pages/supervisor/SectorAnalytics"));
+  const SupervisorGeospatialHeatmap = lazyPage(() => import("./pages/supervisor/GeospatialHeatmap"));
+  const SupervisorClampingLog = lazyPage(() => import("./pages/supervisor/ClampingLog"));
+  const SupervisorImpoundingLog = lazyPage(() => import("./pages/supervisor/ImpoundingLog"));
+  const SupervisorVehicleHistory = lazyPage(() => import("./pages/supervisor/VehicleHistory"));
+  const SupervisorReleaseRequests = lazyPage(() => import("./pages/supervisor/ReleaseRequests"));
+  const SupervisorReleaseQueue = lazyPage(() => import("./pages/supervisor/ReleaseQueue"));
+  const SupervisorReleaseLog = lazyPage(() => import("./pages/supervisor/ReleaseLog"));
+  const SupervisorFieldUpdates = lazyPage(() => import("./pages/supervisor/FieldUpdates"));
+  const SupervisorOperationScheduler = lazyPage(() => import("./pages/supervisor/OperationScheduler"));
 
   // Impounding Staff
-  const ImpoundingStaffHomepage = lazy(() => import("./pages/impounding-staff/Homepage"));
-  const ImpoundingLog = lazy(() => import("./pages/impounding-staff/ImpoundingLog"));
-  const ActiveImpounding = lazy(() => import("./pages/impounding-staff/ActiveImpounding"));
+  const ImpoundingStaffHomepage = lazyPage(() => import("./pages/impounding-staff/Homepage"));
+  const ImpoundingLog = lazyPage(() => import("./pages/impounding-staff/ImpoundingLog"));
+  const ActiveImpounding = lazyPage(() => import("./pages/impounding-staff/ActiveImpounding"));
 
   // Release Officer
-  const ReleaseOfficerHomepage = lazy(() => import("./pages/release-officer/Homepage"));
-  const QueueMonitor = lazy(() => import("./pages/release-officer/QueueMonitor"));
-  const ReleaseLog = lazy(() => import("./pages/release-officer/ReleaseLog"));
+  const ReleaseOfficerHomepage = lazyPage(() => import("./pages/release-officer/Homepage"));
+  const QueueMonitor = lazyPage(() => import("./pages/release-officer/QueueMonitor"));
+  const ReleaseLog = lazyPage(() => import("./pages/release-officer/ReleaseLog"));
 
   // Finance Staff
-  const FinanceHomepage = lazy(() => import("./pages/finance/Homepage"));
-  const PendingPayments = lazy(() => import("./pages/finance/PendingPayments"));
-  const PaymentVerification = lazy(() => import("./pages/finance/PaymentVerification"));
-  const TransactionHistory = lazy(() => import("./pages/finance/TransactionHistory"));
-  const RevenueReports = lazy(() => import("./pages/finance/RevenueReports"));
-  const FinanceAllReports = lazy(() => import("./pages/finance/AllReports"));
-  const FinanceExportCenter = lazy(() => import("./pages/finance/ExportCenter"));
+  const FinanceHomepage = lazyPage(() => import("./pages/finance/Homepage"));
+  const PendingPayments = lazyPage(() => import("./pages/finance/PendingPayments"));
+  const PaymentVerification = lazyPage(() => import("./pages/finance/PaymentVerification"));
+  const TransactionHistory = lazyPage(() => import("./pages/finance/TransactionHistory"));
+  const RevenueReports = lazyPage(() => import("./pages/finance/RevenueReports"));
+  const FinanceAllReports = lazyPage(() => import("./pages/finance/AllReports"));
+  const FinanceExportCenter = lazyPage(() => import("./pages/finance/ExportCenter"));
 
   // Record Officer — trimmed to match the new sidebar design.
   // Queue Monitor, Vehicle History, Release Requests, and Release Orders
   // have been removed from the sidebar and their routes removed here so
   // navigating directly to those URLs now falls through to the fallback.
-  const RecordOfficerHomepage = lazy(() => import("./pages/record-officer/Homepage"));
-  const RecordOfficerAllViolations = lazy(() => import("./pages/record-officer/AllViolations"));
-  const RecordOfficerClampingLog = lazy(() => import("./pages/record-officer/ClampingLog"));
-  const RecordOfficerImpoundingLog = lazy(() => import("./pages/record-officer/ImpoundingLog"));
-  const RecordOfficerReleaseLog = lazy(() => import("./pages/record-officer/ReleaseLog"));
-  const RecordOfficerAllReports = lazy(() => import("./pages/record-officer/AllReports"));
-  const RecordOfficerExportCenter = lazy(() => import("./pages/record-officer/ExportCenter"));
+  const RecordOfficerHomepage = lazyPage(() => import("./pages/record-officer/Homepage"));
+  const RecordOfficerAllViolations = lazyPage(() => import("./pages/record-officer/AllViolations"));
+  const RecordOfficerClampingLog = lazyPage(() => import("./pages/record-officer/ClampingLog"));
+  const RecordOfficerImpoundingLog = lazyPage(() => import("./pages/record-officer/ImpoundingLog"));
+  const RecordOfficerReleaseLog = lazyPage(() => import("./pages/record-officer/ReleaseLog"));
+  const RecordOfficerAllReports = lazyPage(() => import("./pages/record-officer/AllReports"));
+  const RecordOfficerExportCenter = lazyPage(() => import("./pages/record-officer/ExportCenter"));
 
   // IT Admin
-  const ITAdminHomePage = lazy(() => import("./pages/it-admin/ITAdminHomepage"));
-  const UserManagement = lazy(() => import("./pages/it-admin/UserManagement"));
-  const QRManagement = lazy(() => import("./pages/it-admin/QRManagement"));
-  const SystemHealth = lazy(() => import("./pages/it-admin/SystemHealth"));
-  const BackupRestore = lazy(() => import("./pages/it-admin/BackupRestore"));
-  const RolesPermission = lazy(() => import("./pages/it-admin/RolesPermission"));
-  const SessionMonitor = lazy(() => import("./pages/it-admin/SessionMonitor"));
-  const AuditLog = lazy(() => import("./pages/it-admin/AuditLog"));
-  const DataPrivacyLog = lazy(() => import("./pages/it-admin/DataPrivacyLog"));
-  const Settings = lazy(() => import("./pages/it-admin/Settings"));
+  const ITAdminHomePage = lazyPage(() => import("./pages/it-admin/ITAdminHomepage"));
+  const UserManagement = lazyPage(() => import("./pages/it-admin/UserManagement"));
+  const QRManagement = lazyPage(() => import("./pages/it-admin/QRManagement"));
+  const SystemHealth = lazyPage(() => import("./pages/it-admin/SystemHealth"));
+  const BackupRestore = lazyPage(() => import("./pages/it-admin/BackupRestore"));
+  const RolesPermission = lazyPage(() => import("./pages/it-admin/RolesPermission"));
+  const SessionMonitor = lazyPage(() => import("./pages/it-admin/SessionMonitor"));
+  const AuditLog = lazyPage(() => import("./pages/it-admin/AuditLog"));
+  const DataPrivacyLog = lazyPage(() => import("./pages/it-admin/DataPrivacyLog"));
+  const Settings = lazyPage(() => import("./pages/it-admin/Settings"));
 
   /** Shown for a moment while a page's code downloads. */
   function PageLoading() {

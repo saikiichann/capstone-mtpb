@@ -18,6 +18,11 @@
 
    Tumatakbo ito mula sa bawat naka-login na staff (kada 5 minuto, kasabay
    ng session heartbeat), pero isang beses lang kada 5 minuto bawat browser.
+
+   Hindi binibilang ang check kapag ang BROWSER ang walang koneksyon (tab
+   na naka-background, laptop na naka-sleep, walang WiFi). Dati, nagiging
+   "Cloud Firestore did not respond · Critical" ito buong magdamag kahit
+   gumagana naman ang Firestore — problema ng browser, hindi ng service.
 ------------------------------------------------------------------ */
 import {
   addDoc,
@@ -39,6 +44,8 @@ export type CheckResult = {
   ok: boolean;
   /** Response time in ms (0 when it failed). */
   ms: number;
+  /** This browser was offline / asleep: not counted as the service being down. */
+  skipped?: boolean;
 };
 
 export const SERVICES: { id: ServiceId; name: string; order: number }[] = [
@@ -57,12 +64,25 @@ const LAST_RECORD_KEY = "mtpb:lastHealthRecord";
 
 const nameOf = (id: ServiceId) => SERVICES.find((s) => s.id === id)?.name ?? id;
 
+/** The browser itself can't reach the internet (not the service's fault). */
+export const browserOffline = (): boolean =>
+  typeof navigator !== "undefined" && navigator.onLine === false;
+
+/** Firestore's "client is offline" error: this browser lost its connection. */
+const isClientOffline = (err: unknown): boolean => {
+  const e = err as { message?: string };
+  return /client is offline/i.test(String(e?.message ?? ""));
+};
+
 async function timed(id: ServiceId, run: () => Promise<boolean>): Promise<CheckResult> {
   const start = performance.now();
   try {
     const ok = await run();
     return { id, name: nameOf(id), ok, ms: ok ? Math.round(performance.now() - start) : 0 };
-  } catch {
+  } catch (err) {
+    if (browserOffline() || isClientOffline(err)) {
+      return { id, name: nameOf(id), ok: false, ms: 0, skipped: true };
+    }
     return { id, name: nameOf(id), ok: false, ms: 0 };
   }
 }
@@ -112,6 +132,8 @@ const apiAvailable = () => !/^(localhost|127\.0\.0\.1)$/.test(window.location.ho
  */
 export async function recordChecks(results: CheckResult[], force = false): Promise<void> {
   if (!auth.currentUser) return;
+  // This browser was offline or asleep: nothing true to record.
+  if (browserOffline() || results.some((r) => r.skipped)) return;
   try {
     const last = Number(localStorage.getItem(LAST_RECORD_KEY) ?? 0);
     if (!force && Date.now() - last < RECORD_EVERY_MS) return;
@@ -185,6 +207,11 @@ export async function logPerformance(
 
 /** Runs the checks and saves them (throttled). For the session heartbeat. */
 export async function checkAndRecord(): Promise<void> {
+  // Background heartbeat: only from a tab someone is looking at, online.
+  // Hidden tabs are throttled and lose their connection, which used to be
+  // logged as the database being down.
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+  if (browserOffline()) return;
   const results = await runChecks();
   await recordChecks(results);
 }
