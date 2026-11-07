@@ -26,6 +26,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { encodedAt } from "../../lib/impoundOrder";
 import { useWithDirectImpounds, violationAsImpoundRecord } from "../../lib/directImpounds";
 import "./ImpoundingLog.css";
 
@@ -68,6 +69,8 @@ type ImpoundLogRow = {
   location: string;
   officer: string;
   recordedAt: Timestamp | null;
+  /** Order in the list: when the record was saved (lib/impoundOrder.ts). */
+  sortKey: number;
   impoundFee: number;
   status: LogStatus;
   /** Enforcer-issued impound (violations), no impound record */
@@ -158,13 +161,6 @@ const formatDateTime = (ts: Timestamp | null): string => {
   }
 };
 
-const millis = (ts: Timestamp | null): number => {
-  try {
-    return ts ? ts.toMillis() : 0;
-  } catch {
-    return 0;
-  }
-};
 
 const formatCurrency = (n: number): string =>
   `₱${n.toLocaleString("en-PH", {
@@ -253,11 +249,12 @@ export default function RecordOfficerImpoundingLog() {
                 data.impoundedBy ??
                 "—",
               recordedAt: ((data.clampedAt ?? data.ticketDate ?? data.createdAt) as Timestamp) ?? null,
+              sortKey: encodedAt(d),
               impoundFee: Number(data.impoundFee ?? 0),
               status: normalizeStatus(data.status),
             };
           })
-          .sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
+          .sort((a, b) => b.sortKey - a.sortKey);
 
         setLogs(rows);
         setLoading(false);

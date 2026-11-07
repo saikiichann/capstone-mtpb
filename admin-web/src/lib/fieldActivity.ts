@@ -11,11 +11,13 @@
      operationSchedules    → scheduled / started / completed / cancelled
 
    Every staff role can read these collections (firestore.rules), and the
-   feed only reads — it never writes.
+   feed only reads — it never writes. The same events feed the
+   notification bell and the sidebar badges (lib/staffAlerts.ts); all of
+   them share one listener per collection (lib/liveCollections.ts).
 ------------------------------------------------------------------ */
-import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, type DocumentData } from "firebase/firestore";
-import { db } from "../firebase";
+import { useMemo } from "react";
+import type { DocumentData } from "firebase/firestore";
+import { useLiveCollection, type LiveDoc } from "./liveCollections";
 
 export type ActivityKind = "clamp" | "impound" | "payment" | "release" | "operation";
 
@@ -33,9 +35,11 @@ export type ActivityEvent = {
   time: Date;
   title: string;
   detail: string;
+  /** The record it came from (e.g. a payment's status, for the bell). */
+  raw: DocumentData;
 };
 
-type Source = "violations" | "impoundRecords" | "payments" | "releaseLog" | "operationSchedules";
+export type Source = "violations" | "impoundRecords" | "payments" | "releaseLog" | "operationSchedules";
 const SOURCES: Source[] = [
   "violations",
   "impoundRecords",
@@ -44,7 +48,7 @@ const SOURCES: Source[] = [
   "operationSchedules",
 ];
 
-type Rows = { id: string; data: DocumentData }[];
+type Rows = LiveDoc[];
 
 /* ---------------- helpers ---------------- */
 const toDate = (v: unknown): Date | null => {
@@ -73,10 +77,25 @@ const isClampViolation = (d: DocumentData) =>
 
 /* ---------------- record → events ---------------- */
 const fromViolation = (id: string, d: DocumentData): ActivityEvent[] => {
+  const officer = str(d.officer ?? d.officerName ?? d.enforcerName) || "Enforcer";
+  // Impounded straight from the enforcer app (no Add Impound record).
+  if (d.enforcementType === "impounded") {
+    const time = toDate(d.recordedAt ?? d.createdAt);
+    if (d.impoundRecordId || !time) return [];
+    return [
+      {
+        id: `vi-${id}`,
+        kind: "impound",
+        time,
+        title: `${officer} impounded ${str(d.plateNo) || "a vehicle"}`,
+        detail: join(d.cin, d.violationType, d.location, d.barangay),
+        raw: d,
+      },
+    ];
+  }
   if (!isClampViolation(d)) return [];
   const time = toDate(d.recordedAt ?? d.createdAt);
   if (!time) return [];
-  const officer = str(d.officer ?? d.officerName ?? d.enforcerName) || "Enforcer";
   return [
     {
       id: `v-${id}`,
@@ -84,6 +103,7 @@ const fromViolation = (id: string, d: DocumentData): ActivityEvent[] => {
       time,
       title: `${officer} clamped ${str(d.plateNo) || "a vehicle"}`,
       detail: join(d.cin, d.violationType, d.location, d.barangay),
+      raw: d,
     },
   ];
 };
@@ -104,6 +124,7 @@ const fromImpound = (id: string, d: DocumentData): ActivityEvent[] => {
         d.impoundFee ? `Fee ${peso(d.impoundFee)}` : "",
         d.receivedBy ? `Received by ${d.receivedBy}` : ""
       ),
+      raw: d,
     },
   ];
 };
@@ -127,6 +148,7 @@ const fromPayment = (id: string, d: DocumentData): ActivityEvent[] => {
         d.referenceNumber ?? d.paymentReference,
         pending ? "Pending verification" : ""
       ),
+      raw: d,
     },
   ];
 };
@@ -145,6 +167,7 @@ const fromRelease = (id: string, d: DocumentData): ActivityEvent[] => {
         d.orderId ? `Order ${d.orderId}` : "",
         d.releasedBy ? `by ${d.releasedBy}` : ""
       ),
+      raw: d,
     },
   ];
 };
@@ -156,7 +179,7 @@ const fromOperation = (id: string, d: DocumentData): ActivityEvent[] => {
   const out: ActivityEvent[] = [];
   const push = (key: string, at: unknown, title: string, detail: string) => {
     const time = toDate(at);
-    if (time) out.push({ id: `o-${id}-${key}`, kind: "operation", time, title, detail });
+    if (time) out.push({ id: `o-${id}-${key}`, kind: "operation", time, title, detail, raw: d });
   };
   push(
     "new",
@@ -188,45 +211,42 @@ const BUILDERS: Record<Source, (id: string, d: DocumentData) => ActivityEvent[]>
   operationSchedules: fromOperation,
 };
 
-/* ---------------- hook ---------------- */
+/* ---------------- events + hooks ---------------- */
+/** Every event from the loaded records, newest first. */
+export function buildActivity(rows: Partial<Record<Source, Rows>>): ActivityEvent[] {
+  const all: ActivityEvent[] = [];
+  SOURCES.forEach((source) =>
+    (rows[source] ?? []).forEach(({ id, data }) => all.push(...BUILDERS[source](id, data)))
+  );
+  return all.sort((a, b) => b.time.getTime() - a.time.getTime());
+}
+
+/** The live records behind the events. Pass false to load nothing (roles without a feed). */
+export function useActivityRows(enabled = true): {
+  rows: Partial<Record<Source, Rows>>;
+  loading: boolean;
+} {
+  const violations = useLiveCollection(enabled ? "violations" : null);
+  const impoundRecords = useLiveCollection(enabled ? "impoundRecords" : null);
+  const payments = useLiveCollection(enabled ? "payments" : null);
+  const releaseLog = useLiveCollection(enabled ? "releaseLog" : null);
+  const operationSchedules = useLiveCollection(enabled ? "operationSchedules" : null);
+  return useMemo(() => {
+    const rows = { violations, impoundRecords, payments, releaseLog, operationSchedules };
+    return { rows, loading: SOURCES.some((s) => rows[s] === undefined) };
+  }, [violations, impoundRecords, payments, releaseLog, operationSchedules]);
+}
+
 /** Live field activity since `since`, newest first. */
 export function useFieldActivity(since: Date): {
   events: ActivityEvent[];
   loading: boolean;
 } {
-  const [rows, setRows] = useState<Partial<Record<Source, Rows>>>({});
-
-  useEffect(() => {
-    const unsubs = SOURCES.map((source) =>
-      onSnapshot(
-        collection(db, source),
-        (snap) =>
-          setRows((prev) => ({
-            ...prev,
-            [source]: snap.docs.map((d) => ({ id: d.id, data: d.data() })),
-          })),
-        (err) => {
-          console.warn(`Field activity: ${source} fetch failed:`, err.code);
-          setRows((prev) => ({ ...prev, [source]: [] }));
-        }
-      )
-    );
-    return () => unsubs.forEach((u) => u());
-  }, []);
-
+  const { rows, loading } = useActivityRows();
   const sinceMs = since.getTime();
-  const events = useMemo(() => {
-    const all: ActivityEvent[] = [];
-    SOURCES.forEach((source) =>
-      (rows[source] ?? []).forEach(({ id, data }) =>
-        all.push(...BUILDERS[source](id, data))
-      )
-    );
-    return all
-      .filter((e) => e.time.getTime() >= sinceMs)
-      .sort((a, b) => b.time.getTime() - a.time.getTime());
-  }, [rows, sinceMs]);
-
-  const loading = SOURCES.some((s) => rows[s] === undefined);
+  const events = useMemo(
+    () => buildActivity(rows).filter((e) => e.time.getTime() >= sinceMs),
+    [rows, sinceMs]
+  );
   return { events, loading };
 }

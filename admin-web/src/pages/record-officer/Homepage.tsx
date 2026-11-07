@@ -33,6 +33,7 @@ import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
 import AppTopbar from "../../components/AppTopbar";
 import AppSidebar from "../../components/AppSidebar";
+import ChartPurpose from "../../components/ChartPurpose";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -414,6 +415,9 @@ export default function RecordOfficerHomepage() {
             <div className="card">
               <p className="card-eyebrow">Sector 3</p>
               <h2 className="card-title">Top Violations</h2>
+              <ChartPurpose>
+                The most common violations recorded. Use it to decide which violations operations and information drives should focus on.
+              </ChartPurpose>
 
               {loading ? (
                 <div className="table-loading">

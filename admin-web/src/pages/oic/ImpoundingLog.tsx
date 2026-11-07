@@ -15,6 +15,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { encodedAt } from "../../lib/impoundOrder";
 import "./ImpoundingLog.css";
 
 
@@ -66,6 +67,8 @@ type ImpoundLogRow = {
   location: string;
   officer: string;
   recordedAt: Timestamp | null;
+  /** Order in the list: when the record was saved (lib/impoundOrder.ts). */
+  sortKey: number;
   status: LogStatus;
 };
 
@@ -310,7 +313,7 @@ export default function ImpoundingLog() {
             delete row.linkedViolationId;
             return row as ImpoundLogRow;
           }),
-      ].sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt));
+      ].sort((a, b) => b.sortKey - a.sortKey);
 
       setRows(merged);
       if (pending <= 0) setLoading(false);
@@ -350,6 +353,7 @@ export default function ImpoundingLog() {
             location: data.location ?? "—",
             officer: data.officer ?? "—",
             recordedAt: (data.recordedAt as Timestamp) ?? null,
+            sortKey: millis((data.recordedAt as Timestamp) ?? null),
             status: deriveLogStatus(data.releaseStatus),
           };
         });
@@ -379,6 +383,7 @@ export default function ImpoundingLog() {
             location: data.location ?? "—",
             officer: data.clampedBy ?? data.towedBy ?? data.impoundedBy ?? "—",
             recordedAt: ((data.clampedAt ?? data.ticketDate ?? data.createdAt) as Timestamp) ?? null,
+            sortKey: encodedAt(d),
             status: normalizeImpoundStatus(data.status),
           };
         });

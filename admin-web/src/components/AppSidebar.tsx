@@ -39,6 +39,7 @@ import { auth } from "../firebase";
 import { useStaffProfile } from "../lib/useStaffProfile";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { endSession } from "../lib/staffSession";
+import { useStaffAlerts } from "../lib/staffAlerts";
 import mtpbLogo from "../assets/mtpb-logo.png";
 import "./AppSidebar.css";
 
@@ -146,6 +147,16 @@ export default function AppSidebar({ groups, role }: Props) {
   const userRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  // Red badges: new clamps / impounds / operations, payments to verify (lib/staffAlerts.ts).
+  const { badges, markPageSeen } = useStaffAlerts();
+  const badgeOf = (item: SidebarItem) => item.badge ?? badges[item.path] ?? 0;
+
+  // On a page with a badge: what's there now counts as seen.
+  const currentBadge = badges[pathname.replace(/\/$/, "")] ?? 0;
+  useEffect(() => {
+    const path = pathname.replace(/\/$/, "");
+    if (currentBadge > 0 && path in badges) markPageSeen(path);
+  }, [pathname, currentBadge, badges, markPageSeen]);
 
   // Account menu: close on a click outside it or on Escape.
   useEffect(() => {
@@ -226,7 +237,7 @@ export default function AppSidebar({ groups, role }: Props) {
         {groups.map((g, i) => {
           const label = clean(g.label ?? g.title ?? "");
           const open = isOpen(g, i);
-          const badge = g.items.reduce((n, it) => n + (it.badge ?? 0), 0);
+          const badge = g.items.reduce((n, it) => n + badgeOf(it), 0);
           const canToggle = collapsible && i !== 0 && !g.items.some(isActive);
           return (
             <div className="mt-nav-group" key={label || i}>
@@ -261,7 +272,11 @@ export default function AppSidebar({ groups, role }: Props) {
                         >
                           <ItemIcon item={item} />
                           <span className="mt-nav-label">{clean(item.label)}</span>
-                          {!!item.badge && <span className="mt-badge">{item.badge}</span>}
+                          {badgeOf(item) > 0 && (
+                            <span className="mt-badge" aria-label={`${badgeOf(item)} new`}>
+                              {badgeOf(item) > 99 ? "99+" : badgeOf(item)}
+                            </span>
+                          )}
                         </button>
                       </li>
                     );

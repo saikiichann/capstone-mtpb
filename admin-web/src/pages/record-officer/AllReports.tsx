@@ -71,6 +71,7 @@ import exportCenterIcon from "../../assets/export.png";
 import AppTopbar from "../../components/AppTopbar";
 import AppSidebar from "../../components/AppSidebar";
 import { clientIp } from "../../lib/staffSession";
+import ChartPurpose from "../../components/ChartPurpose";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -167,10 +168,13 @@ function TopBars({
   title,
   rows,
   limit = 6,
+  purpose,
 }: {
   title: string;
   rows: CountRow[];
   limit?: number;
+  /** What the chart is for (ChartPurpose). */
+  purpose?: string;
 }) {
   const shown = rows.slice(0, limit).map((r) => ({
     ...r,
@@ -179,7 +183,10 @@ function TopBars({
   return (
     <div className="card rp-chart-card">
       <div className="rp-section-head">
-        <h3 className="rp-section-title">{title}</h3>
+        <div>
+          <h3 className="rp-section-title">{title}</h3>
+          {purpose && <ChartPurpose>{purpose}</ChartPurpose>}
+        </div>
       </div>
       {shown.length === 0 ? (
         <p className="rp-muted">No records for this period.</p>
@@ -595,6 +602,9 @@ export default function AllReports() {
                     <div>
                       <h3 className="rp-section-title">{trendTitle}</h3>
                       <p className="rp-chart-sub">Violations recorded vs vehicles released</p>
+                      <ChartPurpose>
+                        Shows whether releases keep up with new violations in this period.
+                      </ChartPurpose>
                     </div>
                   </div>
 
@@ -633,10 +643,10 @@ export default function AllReports() {
                 </div>
 
                 <div className="rp-chart-grid">
-                  <TopBars title="Violations by type" rows={report.byViolation} />
-                  <TopBars title="Top locations" rows={report.byLocation} limit={8} />
-                  <TopBars title="By enforcer" rows={report.byOfficer} />
-                  <TopBars title="By vehicle type" rows={report.byVehicleType} />
+                  <TopBars title="Violations by type" purpose="The most common violations in this period." rows={report.byViolation} />
+                  <TopBars title="Top locations" purpose="Where violations are recorded most, to plan where operations go." rows={report.byLocation} limit={8} />
+                  <TopBars title="By enforcer" purpose="Records per enforcer, to see the workload across the team." rows={report.byOfficer} />
+                  <TopBars title="By vehicle type" purpose="Which vehicle types are apprehended most." rows={report.byVehicleType} />
                 </div>
 
                 {/* KEY FIGURES */}

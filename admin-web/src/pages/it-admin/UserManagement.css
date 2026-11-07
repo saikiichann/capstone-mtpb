@@ -945,3 +945,80 @@
   color: #6B7280;
   line-height: 1.4;
 }
+
+/* ---------- Temporary password (Add User) ---------- */
+.temp-pass-row {
+  display: flex;
+  gap: 8px;
+}
+
+.form-field .temp-pass-input {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.04em;
+  background: #f9fafb;
+}
+
+.temp-pass-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  min-height: 38px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.temp-pass-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.temp-pass-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.temp-pass-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.temp-pass-note {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #374151;
+}
+
+.temp-pass-muted {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.temp-pass-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px dashed #93c5fd;
+  border-radius: 10px;
+  background: #eff6ff;
+}
+
+.temp-pass-box code {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #1e3a8a;
+  word-break: break-all;
+}

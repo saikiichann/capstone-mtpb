@@ -36,6 +36,7 @@ import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
 import AppTopbar from "../../components/AppTopbar";
 import AppSidebar from "../../components/AppSidebar";
+import ChartPurpose from "../../components/ChartPurpose";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -448,6 +449,9 @@ export default function SectorAnalytics() {
                 <h2 className="page-title">
                   Violations by classification
                 </h2>
+                <ChartPurpose>
+                  Share of each violation type in the last 7 days, to show which violations happen most in the area.
+                </ChartPurpose>
 
                 {loading ? (
                   <div className="table-loading">
