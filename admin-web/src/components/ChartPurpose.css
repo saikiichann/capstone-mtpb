@@ -1,0 +1,15 @@
+.chart-purpose {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 4px 0 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #6b7280;
+}
+
+.chart-purpose svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #9ca3af;
+}

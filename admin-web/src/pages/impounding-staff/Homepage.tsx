@@ -7,6 +7,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "../../firebase";
+import { encodedAt } from "../../lib/impoundOrder";
 import "./Homepage.css";
 
 // ---------------------------------------------------------------------------
@@ -35,6 +36,8 @@ type ImpoundRow = {
   location: string;
   officer: string;
   impoundedAt: Timestamp | null;
+  /** Order in the list: when the record was saved (lib/impoundOrder.ts). */
+  sortKey: number;
   hoursSinceImpound: number;
   impoundFee: number;
   status: ImpoundStatus;
@@ -259,20 +262,14 @@ export default function ImpoundingStaffHomepage() {
             officer:
               data.clampedBy ?? data.towedBy ?? data.impoundedBy ?? "—",
             impoundedAt,
+            sortKey: encodedAt(d),
             hoursSinceImpound: computeHoursSince(impoundedAt),
             impoundFee: Number(data.impoundFee ?? 0),
             status: (data.status ?? "Impounded") as ImpoundStatus,
           };
         });
 
-        const millis = (t: Timestamp | null) => {
-          try {
-            return t ? t.toMillis() : 0;
-          } catch {
-            return 0;
-          }
-        };
-        rows.sort((a, b) => millis(b.impoundedAt) - millis(a.impoundedAt));
+        rows.sort((a, b) => b.sortKey - a.sortKey);
 
         setImpoundRows(rows);
 

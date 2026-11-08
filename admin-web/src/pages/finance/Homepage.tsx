@@ -38,6 +38,7 @@ import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
 import AppTopbar from "../../components/AppTopbar";
 import AppSidebar from "../../components/AppSidebar";
+import ChartPurpose from "../../components/ChartPurpose";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -354,6 +355,9 @@ export default function FinanceHomepage() {
             <div className="card">
               <p className="card-eyebrow">Sector 3 · Last 7 days</p>
               <h2 className="card-title">Revenue by day</h2>
+              <ChartPurpose>
+                Verified payments per day. Use it to spot busy collection days and compare this week's revenue.
+              </ChartPurpose>
 
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={revenueData}>

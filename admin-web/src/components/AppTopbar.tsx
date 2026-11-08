@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as Reac
 import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronRight, Search } from "lucide-react";
 import type { SidebarGroup, SidebarItem } from "./AppSidebar";
+import ActivityBell from "./ActivityBell";
 import "./AppTopbar.css";
 
 /* ------------------------------------------------------------------
@@ -143,6 +144,8 @@ export default function AppTopbar({ groups }: Props) {
           </ul>
         )}
       </div>
+
+      <ActivityBell />
     </div>
   );
 }

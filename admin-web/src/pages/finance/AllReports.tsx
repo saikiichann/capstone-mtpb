@@ -79,6 +79,7 @@ import exportCenterIcon from "../../assets/export.png";
 import AppTopbar from "../../components/AppTopbar";
 import AppSidebar from "../../components/AppSidebar";
 import { clientIp } from "../../lib/staffSession";
+import ChartPurpose from "../../components/ChartPurpose";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -159,7 +160,18 @@ const statusClass = (status: string): string => {
 // SMALL PIECES
 // ---------------------------------------------------------------------------
 /** Horizontal bars of an amount breakdown (₱ + number of payments). */
-function AmountBars({ title, rows, limit = 6 }: { title: string; rows: AmountRow[]; limit?: number }) {
+function AmountBars({
+  title,
+  rows,
+  limit = 6,
+  purpose,
+}: {
+  title: string;
+  rows: AmountRow[];
+  limit?: number;
+  /** What the chart is for (ChartPurpose). */
+  purpose?: string;
+}) {
   const shown = rows.slice(0, limit).map((r) => ({
     ...r,
     label: `${pesoShort(r.amount)} · ${r.count}`,
@@ -170,6 +182,7 @@ function AmountBars({ title, rows, limit = 6 }: { title: string; rows: AmountRow
         <div>
           <h3 className="rp-section-title">{title}</h3>
           <p className="rp-chart-sub">Amount received · number of payments</p>
+          {purpose && <ChartPurpose>{purpose}</ChartPurpose>}
         </div>
       </div>
       {shown.length === 0 ? (
@@ -580,6 +593,9 @@ export default function AllReports() {
                     <div>
                       <h3 className="rp-section-title">{trendTitle}</h3>
                       <p className="rp-chart-sub">Amount received — verified vs awaiting verification</p>
+                      <ChartPurpose>
+                        Shows when payments come in, and how many still need to be verified.
+                      </ChartPurpose>
                     </div>
                   </div>
                   <div className="rp-chart">
@@ -636,10 +652,10 @@ export default function AllReports() {
                 </div>
 
                 <div className="rp-chart-grid">
-                  <AmountBars title="By location" rows={report.byLocation} />
-                  <AmountBars title="By payment method" rows={report.byMethod} />
-                  <AmountBars title="By charge type" rows={report.byCharge} />
-                  <AmountBars title="By staff (received by)" rows={report.byStaff} />
+                  <AmountBars title="By location" purpose="Which payment location collects the most." rows={report.byLocation} />
+                  <AmountBars title="By payment method" purpose="How people pay: cash at the office or online." rows={report.byMethod} />
+                  <AmountBars title="By charge type" purpose="Revenue from clamp fines compared with impound fees." rows={report.byCharge} />
+                  <AmountBars title="By staff (received by)" purpose="Payments received by each staff member, for accountability." rows={report.byStaff} />
                 </div>
 
                 {/* KEY FIGURES */}

@@ -31,6 +31,7 @@ import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
 import AppTopbar from "../../components/AppTopbar";
 import AppSidebar from "../../components/AppSidebar";
+import ChartPurpose from "../../components/ChartPurpose";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -434,6 +435,9 @@ export default function RevenueReports() {
             <div className="card">
               <p className="card-eyebrow">Sector 3 · Last 7 days</p>
               <h2 className="card-title">Revenue by day</h2>
+              <ChartPurpose>
+                Verified payments per day. Use it to check daily collections against the OR range summary.
+              </ChartPurpose>
 
               {loading ? (
                 <div className="chart-loading">

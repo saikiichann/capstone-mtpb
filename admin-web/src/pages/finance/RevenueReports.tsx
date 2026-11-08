@@ -33,6 +33,7 @@ import allReportsIcon from "../../assets/reports.png";
 import exportCenterIcon from "../../assets/export.png";
 import AppTopbar from "../../components/AppTopbar";
 import AppSidebar from "../../components/AppSidebar";
+import ChartPurpose from "../../components/ChartPurpose";
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -382,6 +383,9 @@ export default function RevenueReports() {
                 Sector 3{locationLabel ? ` · ${locationLabel}` : ""} · Last 7 days
               </p>
               <h2 className="card-title">Revenue by day</h2>
+              <ChartPurpose>
+                Verified payments per day. Use it to check daily collections against the OR range summary.
+              </ChartPurpose>
 
               {loading || !userReady ? (
                 <div className="table-loading">

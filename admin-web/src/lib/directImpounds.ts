@@ -32,13 +32,23 @@ export type DirectImpoundRow = {
   location: string;
   officer: string;
   recordedAt: Timestamp | null;
+  /** Order in the list: when it was recorded (see lib/impoundOrder.ts). */
+  sortKey: number;
   impoundFee: number;
   status: "Impounded" | "Released";
   /** True for rows from `violations` (no impound record to edit). */
   fromViolation: true;
 };
 
-const toRow = (id: string, data: DocumentData): DirectImpoundRow => ({
+const millis = (t: Timestamp | null) => {
+  try {
+    return t ? t.toMillis() : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const toRow = (id: string, data: DocumentData, pending: boolean): DirectImpoundRow => ({
   id,
   recordId: id,
   uovrNo: data.uovrNo ?? "—",
@@ -49,21 +59,16 @@ const toRow = (id: string, data: DocumentData): DirectImpoundRow => ({
   location: data.location ?? "—",
   officer: data.officer ?? "—",
   recordedAt: (data.recordedAt as Timestamp) ?? null,
+  // recordedAt is the save time here; still empty right after this device saved it.
+  sortKey: data.recordedAt ? millis(data.recordedAt as Timestamp) : pending ? Date.now() : 0,
   impoundFee: Number(data.impoundFee ?? data.totalPaid ?? data.fineAmount ?? 0),
   status: data.releaseStatus === "Released" ? "Released" : "Impounded",
   fromViolation: true,
 });
 
-const millis = (t: Timestamp | null) => {
-  try {
-    return t ? t.toMillis() : 0;
-  } catch {
-    return 0;
-  }
-};
 
 /** A page's impound rows plus the enforcer's direct impounds, newest first. */
-export function useWithDirectImpounds<T extends { recordedAt: Timestamp | null }>(
+export function useWithDirectImpounds<T extends { sortKey: number }>(
   rows: T[]
 ): (T | DirectImpoundRow)[] {
   const [direct, setDirect] = useState<DirectImpoundRow[]>([]);
@@ -75,7 +80,7 @@ export function useWithDirectImpounds<T extends { recordedAt: Timestamp | null }
         setDirect(
           snap.docs
             .filter((d) => !d.data().impoundRecordId)
-            .map((d) => toRow(d.id, d.data()))
+            .map((d) => toRow(d.id, d.data(), d.metadata.hasPendingWrites))
         ),
       (err) => console.warn("Direct impounds not loaded:", err.code)
     );
@@ -83,7 +88,7 @@ export function useWithDirectImpounds<T extends { recordedAt: Timestamp | null }
   }, []);
 
   return useMemo(
-    () => [...rows, ...direct].sort((a, b) => millis(b.recordedAt) - millis(a.recordedAt)),
+    () => [...rows, ...direct].sort((a, b) => b.sortKey - a.sortKey),
     [rows, direct]
   );
 }

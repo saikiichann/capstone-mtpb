@@ -189,8 +189,8 @@ export default function ChangePasswordModal({
         >
           {forced && (
             <p className="cp-hint" style={{ marginTop: 0 }}>
-              Your password was reset by the IT Admin. Enter the temporary password they gave
-              you, then choose your own.
+              You're signed in with a temporary password from the IT Admin. Enter it, then
+              choose your own password to continue.
             </p>
           )}
           <PasswordField

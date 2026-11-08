@@ -17,6 +17,9 @@ import {
   Pencil,
   KeyRound,
   Star,
+  RefreshCw,
+  Copy,
+  Check,
 } from "lucide-react";
 import {
   collection,
@@ -40,6 +43,7 @@ import {
   createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db, firebaseConfig } from "../../firebase";
 import { ResetPasswordDialog, ResetRequestsPanel, type ResetTarget } from "./PasswordReset";
+import { generateTempPassword } from "../../lib/tempPassword";
 import "./ITAdminHomepage.css";
 import "./UserManagement.css";
 
@@ -304,7 +308,11 @@ function AddUserModal({ onClose, onSave, currentUserId, users }: AddUserModalPro
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<RoleSlug | "">("");
-  const [password, setPassword] = useState("");
+  // Random temporary password (lib/tempPassword.ts); the person sets their own at first login.
+  const [password, setPassword] = useState(generateTempPassword);
+  /** After saving: the account that was made, to show its password once. */
+  const [created, setCreated] = useState<{ name: string; username: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   const [assignedLocation, setAssignedLocation] = useState<AssignedLocation | "">("");
   const assignedDistrict = CLAMPING_DISTRICT;
   const [isTeamLeader, setIsTeamLeader] = useState(false);
@@ -315,10 +323,6 @@ function AddUserModal({ onClose, onSave, currentUserId, users }: AddUserModalPro
     setError("");
     if (!name || !username || !role || !password) {
       setError("Please fill in all fields.");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
       return;
     }
     if (!/^[a-z0-9.]+$/.test(username)) {
@@ -350,6 +354,8 @@ function AddUserModal({ onClose, onSave, currentUserId, users }: AddUserModalPro
         role,
         status: "active",
         lastLogin: null,
+        // Temporary password: they must set their own at the first login.
+        mustChangePassword: true,
         ...(role === "finance" ? { assignedLocation } : {}),
         ...(role === "clamping-staff" ? { assignedDistrict, isTeamLeader } : {}),
         createdAt: serverTimestamp(),
@@ -395,12 +401,13 @@ function AddUserModal({ onClose, onSave, currentUserId, users }: AddUserModalPro
         console.warn("Audit log not written:", auditErr);
       }
 
-      onSave();
+      setCreated({ name: name.trim(), username: username.trim() });
     } catch (err) {
       if ((err as { code?: string })?.code === "auth/email-already-in-use") {
         setError("Username already exists. Please choose another.");
       } else if ((err as { code?: string })?.code === "auth/weak-password") {
-        setError("Password is too weak. Use at least 6 characters.");
+        setPassword(generateTempPassword());
+        setError("Password was rejected. A new one was generated; please try again.");
       } else if ((err as { code?: string })?.code === "permission-denied") {
         setError("Permission denied. Please check your Firestore rules.");
       } else {
@@ -410,6 +417,49 @@ function AddUserModal({ onClose, onSave, currentUserId, users }: AddUserModalPro
       setSaving(false);
     }
   };
+
+  const copyPassword = async () => {
+    try {
+      await navigator.clipboard.writeText(password);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard blocked: the password is on screen to read out.
+    }
+  };
+
+  if (created) {
+    return (
+      <div className="modal-backdrop">
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="created-title">
+          <div className="modal-header">
+            <h2 id="created-title" className="modal-title">Account created</h2>
+          </div>
+          <div className="modal-body">
+            <p className="temp-pass-note">
+              Give this temporary password to <strong>{created.name}</strong> ({created.username}) in
+              person or by phone. It is shown only once.
+            </p>
+            <div className="temp-pass-box">
+              <code>{password}</code>
+              <button type="button" className="temp-pass-btn" onClick={() => void copyPassword()}>
+                {copied ? <Check size={15} /> : <Copy size={15} />}
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+            <p className="temp-pass-note temp-pass-muted">
+              They'll log in with it and must set their own password right away.
+            </p>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn-save" onClick={onSave}>
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
@@ -507,14 +557,29 @@ function AddUserModal({ onClose, onSave, currentUserId, users }: AddUserModalPro
 
           <div className="form-field">
             <label htmlFor="add-password">Temporary Password</label>
-            <input
-              id="add-password"
-              type="text"
-              placeholder="Must be change on first login"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={saving}
-            />
+            <div className="temp-pass-row">
+              <input
+                id="add-password"
+                type="text"
+                value={password}
+                readOnly
+                aria-describedby="add-password-hint"
+                className="temp-pass-input"
+              />
+              <button
+                type="button"
+                className="temp-pass-btn"
+                onClick={() => setPassword(generateTempPassword())}
+                disabled={saving}
+                title="Generate another"
+                aria-label="Generate another temporary password"
+              >
+                <RefreshCw size={15} />
+              </button>
+            </div>
+            <small id="add-password-hint" className="temp-pass-hint">
+              Generated automatically. They must change it at the first login.
+            </small>
           </div>
 
           {error && <p className="modal-error">{error}</p>}

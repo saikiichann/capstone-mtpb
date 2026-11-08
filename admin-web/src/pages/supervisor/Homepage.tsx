@@ -50,6 +50,7 @@ import fieldUpdateIcon from "../../assets/fieldupdate.png";
 import operationSchedulerIcon from "../../assets/scheduler.png";
 import AppTopbar from "../../components/AppTopbar";
 import AppSidebar from "../../components/AppSidebar";
+import ChartPurpose from "../../components/ChartPurpose";
 
 /* ------------------------------------------------------------------
    TYPES
@@ -503,6 +504,9 @@ function SupervisorHomepage() {
                 <h2 className="card-title">
                   Violations recorded — Sector 3
                 </h2>
+                <ChartPurpose>
+                  Violations recorded each day this week. Use it to see which days are busiest and plan field deployment.
+                </ChartPurpose>
                 <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={weekData}>
                     <CartesianGrid
@@ -574,6 +578,9 @@ function SupervisorHomepage() {
             <div className="card">
               <p className="card-eyebrow">Sector 3</p>
               <h2 className="card-title">Top Violations</h2>
+              <ChartPurpose>
+                The most common violations recorded. Use it to decide which violations operations and information drives should focus on.
+              </ChartPurpose>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart
                   data={topViolations}
